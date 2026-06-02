@@ -1,81 +1,70 @@
 services:
-  # 1. Database SQL Server (Đã đổi sang Azure SQL Edge cho Mac M1)
-  sql-server:
-    image: mcr.microsoft.com/azure-sql-edge
-    container_name: shop-sql-server
-    user: root 
+  postgres:
+    image: postgres:16-alpine
+    container_name: mingano-postgres
     environment:
-      - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=Password123!
+      - POSTGRES_DB=mingano_identity
+      - POSTGRES_USER=mingano
+      - POSTGRES_PASSWORD=mingano_password
     ports:
-      - "1433:1433"
+      - "5432:5432"
     volumes:
-      - sqlvolume:/var/opt/mssql
+      - postgres_data:/var/lib/postgresql/data
     networks:
-      - shop-network
+      - mingano-network
 
   redis:
     image: redis:7-alpine
-    container_name: shop-redis
+    container_name: mingano-redis
     ports:
       - "6370:6379"
     networks:
-      - shop-network
+      - mingano-network
 
   identity-api:
     build:
       context: .
       dockerfile: src/Services/Identity/Identity.API/Dockerfile
-    container_name: identity-api
+    container_name: mingano-identity-api
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5127
-      - ConnectionStrings__DefaultConnection=${IDENTITY_DB_CONNECTION_STRING:-Server=sql-server,1433;Database=IdentityDb;User Id=sa;Password=Password123!;TrustServerCertificate=True;MultipleActiveResultSets=true}
+      - ConnectionStrings__DefaultConnection=${IDENTITY_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=mingano_identity;Username=mingano;Password=mingano_password}
+      - Jwt__Key=${JWT_SIGNING_KEY:-Mingano_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
+      - Jwt__Issuer=MinganoIdentityService
+      - Jwt__Audience=MinganoClients
       - Redis__ConnectionString=redis:6379
+      - Firebase__ServiceAccountPath=${FIREBASE_SERVICE_ACCOUNT_PATH:-}
+      - Firebase__ProjectId=${FIREBASE_PROJECT_ID:-}
     depends_on:
-      - sql-server
+      - postgres
       - redis
     ports:
       - "5127:5127"
     networks:
-      - shop-network
-
-  # Flutter Mobile
-
-  # 4. Frontend React Application
-  # web-frontend:
-  #   build:
-  #     context: ./src/Client/web
-  #     dockerfile: Dockerfile
-  #   container_name: web-frontend
-  #   environment:
-  #     - CHOKIDAR_USEPOLLING=true 
-  #     - API_INTERNAL_BASE_URL=http://web-gateway:8080
-  #   ports:
-  #     - "3000:3000"
-  #   depends_on:
-  #     - identity-api
-  #   networks:
-  #     - shop-network
+      - mingano-network
 
   web-gateway:
     build:
       context: .
       dockerfile: src/ApiGateways/Web.Gateway/Dockerfile
-    container_name: web-gateway
+    container_name: mingano-web-gateway
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
+      - Jwt__Key=${JWT_SIGNING_KEY:-Mingano_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
+      - Jwt__Issuer=MinganoIdentityService
+      - Jwt__Audience=MinganoClients
     ports:
       - "5000:8080"
     depends_on:
       - identity-api
     networks:
-      - shop-network
+      - mingano-network
 
 volumes:
-  sqlvolume:
+  postgres_data:
 
 networks:
-  shop-network:
+  mingano-network:
     driver: bridge
