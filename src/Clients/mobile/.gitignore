@@ -1,0 +1,50 @@
+# ── Flutter / Dart core ─────────────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Generated source files (build_runner output)
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+lib/generated_plugin_registrant.dart
+
+# Symbolication / obfuscation artifacts
+app.*.symbols
+app.*.map.json
+
+# ── Platform directories (auto-generated, re-generable via `flutter create`) ─
+# Commit these only if you have custom native code changes.
+# For a pure Dart/Flutter project, exclude them.
+/android/
+/ios/
+/linux/
+/macos/
+/windows/
+/web/
+
+# ── IDE & Editor ─────────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+
+# ── OS artifacts ─────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── Agent / AI Tool files ─────────────────────────────────────────────────────
+.agents/
+skills-lock.json
+
+# ── Flutter project metadata (machine-specific) ───────────────────────────────
+.metadata
