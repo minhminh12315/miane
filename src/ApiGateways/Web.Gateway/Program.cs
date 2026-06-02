@@ -54,6 +54,6 @@ app.UseAuthorization();
 // 2. Enable YARP Middleware to start navigation
 app.MapReverseProxy();
 
-app.MapGet("/", () => "Mingano Web Gateway");
+app.MapGet("/", () => "Miane Web Gateway");
 
 app.Run();

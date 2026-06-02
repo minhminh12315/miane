@@ -1,38 +1,38 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: mingano-postgres
+    container_name: Miane-postgres
     environment:
-      - POSTGRES_DB=mingano_identity
-      - POSTGRES_USER=mingano
-      - POSTGRES_PASSWORD=mingano_password
+      - POSTGRES_DB=Miane_identity
+      - POSTGRES_USER=Miane
+      - POSTGRES_PASSWORD=Miane_password
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - mingano-network
+      - Miane-network
 
   redis:
     image: redis:7-alpine
-    container_name: mingano-redis
+    container_name: Miane-redis
     ports:
       - "6370:6379"
     networks:
-      - mingano-network
+      - Miane-network
 
   identity-api:
     build:
       context: .
       dockerfile: src/Services/Identity/Identity.API/Dockerfile
-    container_name: mingano-identity-api
+    container_name: Miane-identity-api
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5127
-      - ConnectionStrings__DefaultConnection=${IDENTITY_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=mingano_identity;Username=mingano;Password=mingano_password}
-      - Jwt__Key=${JWT_SIGNING_KEY:-Mingano_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
-      - Jwt__Issuer=MinganoIdentityService
-      - Jwt__Audience=MinganoClients
+      - ConnectionStrings__DefaultConnection=${IDENTITY_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=Miane_identity;Username=Miane;Password=Miane_password}
+      - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
+      - Jwt__Issuer=MianeIdentityService
+      - Jwt__Audience=MianeClients
       - Redis__ConnectionString=redis:6379
       - Firebase__ServiceAccountPath=${FIREBASE_SERVICE_ACCOUNT_PATH:-}
       - Firebase__ProjectId=${FIREBASE_PROJECT_ID:-}
@@ -42,29 +42,29 @@ services:
     ports:
       - "5127:5127"
     networks:
-      - mingano-network
+      - Miane-network
 
   web-gateway:
     build:
       context: .
       dockerfile: src/ApiGateways/Web.Gateway/Dockerfile
-    container_name: mingano-web-gateway
+    container_name: Miane-web-gateway
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
-      - Jwt__Key=${JWT_SIGNING_KEY:-Mingano_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
-      - Jwt__Issuer=MinganoIdentityService
-      - Jwt__Audience=MinganoClients
+      - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
+      - Jwt__Issuer=MianeIdentityService
+      - Jwt__Audience=MianeClients
     ports:
       - "5000:8080"
     depends_on:
       - identity-api
     networks:
-      - mingano-network
+      - Miane-network
 
 volumes:
   postgres_data:
 
 networks:
-  mingano-network:
+  Miane-network:
     driver: bridge

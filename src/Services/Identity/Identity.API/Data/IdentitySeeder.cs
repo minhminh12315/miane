@@ -19,8 +19,8 @@ public static class IdentitySeeder
             }
         }
 
-        var adminEmail = "admin@mingano.local";
-        var employeeEmail = "staff@mingano.local";
+        var adminEmail = "admin@Miane.local";
+        var employeeEmail = "staff@Miane.local";
 
         if (await userManager.FindByEmailAsync(adminEmail) is null)
         {
