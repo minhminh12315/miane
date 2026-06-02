@@ -1,0 +1,81 @@
+services:
+  # 1. Database SQL Server (Đã đổi sang Azure SQL Edge cho Mac M1)
+  sql-server:
+    image: mcr.microsoft.com/azure-sql-edge
+    container_name: shop-sql-server
+    user: root 
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Password123!
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlvolume:/var/opt/mssql
+    networks:
+      - shop-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: shop-redis
+    ports:
+      - "6370:6379"
+    networks:
+      - shop-network
+
+  identity-api:
+    build:
+      context: .
+      dockerfile: src/Services/Identity/Identity.API/Dockerfile
+    container_name: identity-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5127
+      - ConnectionStrings__DefaultConnection=${IDENTITY_DB_CONNECTION_STRING:-Server=sql-server,1433;Database=IdentityDb;User Id=sa;Password=Password123!;TrustServerCertificate=True;MultipleActiveResultSets=true}
+      - Redis__ConnectionString=redis:6379
+    depends_on:
+      - sql-server
+      - redis
+    ports:
+      - "5127:5127"
+    networks:
+      - shop-network
+
+  # Flutter Mobile
+
+  # 4. Frontend React Application
+  # web-frontend:
+  #   build:
+  #     context: ./src/Client/web
+  #     dockerfile: Dockerfile
+  #   container_name: web-frontend
+  #   environment:
+  #     - CHOKIDAR_USEPOLLING=true 
+  #     - API_INTERNAL_BASE_URL=http://web-gateway:8080
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - identity-api
+  #   networks:
+  #     - shop-network
+
+  web-gateway:
+    build:
+      context: .
+      dockerfile: src/ApiGateways/Web.Gateway/Dockerfile
+    container_name: web-gateway
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    ports:
+      - "5000:8080"
+    depends_on:
+      - identity-api
+    networks:
+      - shop-network
+
+volumes:
+  sqlvolume:
+
+networks:
+  shop-network:
+    driver: bridge
