@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../controllers/app_auth_provider.dart';
-
 import '../../../../core/theme/app_theme.dart';
 
 part 'welcome_flow_screen.g.dart';
@@ -18,7 +17,6 @@ const Color _kGold = AppTheme.iosGold;       // iOS Amber/Gold
 const Color _kLight = AppTheme.iosLight;      // iOS System Light
 
 // ── STATE MANAGEMENT ────────────────────────────────────────────────────────
-// Manage onboarding active step index (0 to 2) using Riverpod Notifier Generator
 @riverpod
 class WelcomeFlowPageIndex extends _$WelcomeFlowPageIndex {
   @override
@@ -48,6 +46,7 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
 
   // Page controller for onboarding steps
   late final PageController _pageController;
+  int _currentPage = 0;
 
   // Staggered timeline animations
   late final Animation<double> _glowFade;
@@ -56,10 +55,8 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
   late final Animation<double> _cardsFadeIn;
   late final Animation<double> _cardsScaleIn;
   late final Animation<double> _cardsCollapse;
-  late final Animation<double> _logoGlide;
-  late final Animation<double> _headerFadeIn;
   late final Animation<double> _sloganFadeIn;
-  late final Animation<double> _sheetSlideIn;
+  late final Animation<double> _onboardingFadeIn;
 
   @override
   void initState() {
@@ -89,7 +86,6 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
       parent: _timelineController,
       curve: const Interval(0.05, 0.26, curve: Curves.easeIn),
     );
-    // Custom spring-like curve for logo entrance
     _logoScaleIn = CurvedAnimation(
       parent: _timelineController,
       curve: const Interval(0.05, 0.26, curve: Curves.easeOutBack),
@@ -110,21 +106,13 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
       parent: _timelineController,
       curve: const Interval(0.65, 0.74, curve: Curves.easeInCubic),
     );
-    _logoGlide = CurvedAnimation(
-      parent: _timelineController,
-      curve: const Interval(0.65, 0.82, curve: Curves.easeInOutCubic),
-    );
-    _headerFadeIn = CurvedAnimation(
-      parent: _timelineController,
-      curve: const Interval(0.70, 0.82, curve: Curves.easeInOutCubic),
-    );
     _sloganFadeIn = CurvedAnimation(
       parent: _timelineController,
       curve: const Interval(0.74, 0.87, curve: Curves.easeOut),
     );
 
     // Phase 4 (3000ms - 3800ms) -> Interval [0.79, 1.0]
-    _sheetSlideIn = CurvedAnimation(
+    _onboardingFadeIn = CurvedAnimation(
       parent: _timelineController,
       curve: const Interval(0.79, 1.0, curve: Curves.easeOutCubic),
     );
@@ -145,25 +133,20 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
   Widget build(BuildContext context) {
     final Size size = MediaQuery.of(context).size;
     final double topPadding = MediaQuery.of(context).padding.top;
-    final double bottomPadding = MediaQuery.of(context).padding.bottom;
 
-    // Define coordinates for logo gliding animation
+    // Center position for introductory logo
     final Offset centerLogoPos = Offset(size.width / 2, size.height / 2 - 40);
-    // Left-aligned in the Floating Header layout
-    final Offset headerLogoPos = Offset(50.0, topPadding + 48.0);
 
     return Scaffold(
       backgroundColor: _kDark,
       body: Stack(
         children: [
-          // ── BACKGROUND GLOW (Phase 1 & Continuous Pulsing) ──
+          // ── BACKGROUND GLOW (Intro phase radial animation) ──
           Positioned.fill(
             child: AnimatedBuilder(
               animation: Listenable.merge([_timelineController, _loopController]),
               builder: (context, child) {
-                // Pulse value between 0.0 and 1.0
                 final double pulse = math.sin(_loopController.value * 2 * math.pi) * 0.5 + 0.5;
-                // Intro fade value
                 final double introOpacity = _glowFade.value;
                 return CustomPaint(
                   painter: _GlowPainter(
@@ -175,122 +158,75 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
             ),
           ),
 
-          // ── LAYERED 3D GLASSMORPHISM CARDS (Phase 2) ──
-          _buildGlassCards(size),
-
-          // ── FLOATING HEADER (Phase 3 & 4) ──
-          Positioned(
-            top: topPadding + 16,
-            left: 16,
-            right: 16,
+          // ── BRAND BLUE & GOLD CORNER GLOWS (Fades in with onboarding) ──
+          Positioned.fill(
             child: AnimatedBuilder(
-              animation: _headerFadeIn,
+              animation: _onboardingFadeIn,
               builder: (context, child) {
-                final double opacity = _headerFadeIn.value.clamp(0.0, 1.0);
-                final double yTranslate = (1.0 - opacity) * -20.0;
-                return Transform.translate(
-                  offset: Offset(0, yTranslate),
-                  child: Opacity(
-                    opacity: opacity,
-                    child: child,
-                  ),
+                final double opacity = _onboardingFadeIn.value.clamp(0.0, 1.0);
+                if (opacity <= 0.0) return const SizedBox.shrink();
+                return Opacity(
+                  opacity: opacity,
+                  child: child,
                 );
               },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    height: 64,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _kNavy.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        width: 1,
+              child: Stack(
+                children: [
+                  Positioned(
+                    top: -120,
+                    right: -120,
+                    child: Container(
+                      width: 320,
+                      height: 320,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _kAzure.withValues(alpha: 0.12),
+                      ),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+                        child: Container(color: Colors.transparent),
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Space reserved for the logo to glide into
-                        const SizedBox(width: 36, height: 36),
-                        
-                        // Theme Morphing / Active state indicator capsule
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _kDark.withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: _kAzure.withValues(alpha: 0.2),
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.wb_sunny_rounded, color: _kGold, size: 14),
-                              const SizedBox(width: 6),
-                              Text(
-                                'DARK MODE',
-                                style: GoogleFonts.beVietnamPro(
-                                  color: _kLight,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Rounded Premium User Avatar
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [_kAzure, _kNavy],
-                            ),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: _kGold.withValues(alpha: 0.4),
-                              width: 1.5,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _kAzure.withValues(alpha: 0.2),
-                                blurRadius: 6,
-                              )
-                            ],
-                          ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.person_rounded,
-                              color: _kLight,
-                              size: 18,
-                            ),
-                          ),
-                        ),
-                      ],
+                  ),
+                  Positioned(
+                    bottom: -100,
+                    left: -100,
+                    child: Container(
+                      width: 280,
+                      height: 280,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _kGold.withValues(alpha: 0.08),
+                      ),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+                        child: Container(color: Colors.transparent),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
 
-          // ── SLOGAN TEXT (Phase 3) ──
+          // ── 3D GLASS CARDS INTRO DECORATIONS (Collapses at Phase 3) ──
+          _buildGlassCards(size),
+
+          // ── INTRO SLOGAN TEXT (Fades out when onboarding reveals) ──
           Positioned(
-            top: topPadding + 16 + 64 + 18,
+            top: topPadding + 80.0,
             left: 24,
             right: 24,
             child: AnimatedBuilder(
-              animation: _sloganFadeIn,
+              animation: Listenable.merge([_sloganFadeIn, _onboardingFadeIn]),
               builder: (context, child) {
-                final double opacity = _sloganFadeIn.value.clamp(0.0, 1.0);
-                final double yTranslate = (1.0 - opacity) * 12.0;
+                final double introOpacity = _sloganFadeIn.value.clamp(0.0, 1.0);
+                final double fadeOut = 1.0 - _onboardingFadeIn.value.clamp(0.0, 1.0);
+                final double opacity = introOpacity * fadeOut;
+
+                if (opacity <= 0.0) return const SizedBox.shrink();
+
+                final double yTranslate = (1.0 - introOpacity) * 12.0;
                 return Transform.translate(
                   offset: Offset(0, yTranslate),
                   child: Opacity(
@@ -311,56 +247,49 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
             ),
           ),
 
-          // ── LOGO (Phase 1, 2, 3 & 4) ──
+          // ── LOGO INTRO ANIMATION (Stays centered, fades out when onboarding shows) ──
           Positioned.fill(
             child: AnimatedBuilder(
               animation: Listenable.merge([_timelineController, _loopController]),
               builder: (context, child) {
-                // Smooth morph between center and top-left header coordinates
-                final double glideProgress = _logoGlide.value;
-                final Offset currentLogoPos = Offset.lerp(
-                  centerLogoPos,
-                  headerLogoPos,
-                  glideProgress,
-                )!;
-
-                final double currentLogoSize = lerpDouble(130.0, 36.0, glideProgress)!;
-
-                // Scale and Opacity adjustments for entry/fade-in
                 final double introOpacity = _logoFadeIn.value.clamp(0.0, 1.0);
-                final double introScale = 0.8 + 0.2 * _logoScaleIn.value;
+                final double fadeOut = 1.0 - _onboardingFadeIn.value.clamp(0.0, 1.0);
+                final double opacity = introOpacity * fadeOut;
 
-                // Compute slight 3D float offset to match parallax feeling
-                final double tiltY = math.cos(_loopController.value * 2 * math.pi) * 4.0;
-                final double floatOffset = (1.0 - glideProgress) * tiltY;
+                if (opacity <= 0.0) return const SizedBox.shrink();
+
+                final double introScale = 0.8 + 0.2 * _logoScaleIn.value;
+                final double tiltY = math.sin(_loopController.value * 2 * math.pi) * 4.0;
+                final double floatOffset = tiltY;
+
+                const double logoSize = 130.0;
 
                 return Stack(
                   children: [
                     Positioned(
-                      left: currentLogoPos.dx - currentLogoSize / 2,
-                      top: currentLogoPos.dy - currentLogoSize / 2 + floatOffset,
+                      left: centerLogoPos.dx - logoSize / 2,
+                      top: centerLogoPos.dy - logoSize / 2 + floatOffset,
                       child: Opacity(
-                        opacity: introOpacity,
+                        opacity: opacity,
                         child: Transform.scale(
                           scale: introScale,
                           child: Hero(
                             tag: 'app-logo',
                             child: Container(
-                              width: currentLogoSize,
-                              height: currentLogoSize,
+                              width: logoSize,
+                              height: logoSize,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 boxShadow: [
-                                  if (glideProgress < 0.8)
-                                    BoxShadow(
-                                      color: _kAzure.withValues(alpha: 0.15),
-                                      blurRadius: 20,
-                                      spreadRadius: 2,
-                                    ),
+                                  BoxShadow(
+                                    color: _kAzure.withValues(alpha: 0.15),
+                                    blurRadius: 20,
+                                    spreadRadius: 2,
+                                  ),
                                 ],
                               ),
                               child: ClipRRect(
-                                borderRadius: BorderRadius.circular(currentLogoSize * 0.2),
+                                borderRadius: BorderRadius.circular(logoSize * 0.2),
                                 child: Image.asset(
                                   'assets/images/miane-logo.png',
                                   fit: BoxFit.contain,
@@ -377,87 +306,126 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
             ),
           ),
 
-          // ── ONBOARDING DETACHED SHEET (Phase 4) ──
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: bottomPadding + 16,
+          // ── MAIN ONBOARDING INTERFACE (Revealed via fade-and-slide) ──
+          Positioned.fill(
             child: AnimatedBuilder(
-              animation: _sheetSlideIn,
+              animation: _onboardingFadeIn,
               builder: (context, child) {
-                final double slideProgress = _sheetSlideIn.value.clamp(0.0, 1.0);
-                final double yTranslation = (1.0 - slideProgress) * size.height * 0.7;
+                final double opacity = _onboardingFadeIn.value.clamp(0.0, 1.0);
+                if (opacity <= 0.0) return const SizedBox.shrink();
+                final double yTranslate = (1.0 - opacity) * 32.0;
 
-                return Transform.translate(
-                  offset: Offset(0, yTranslation),
-                  child: Opacity(
-                    opacity: slideProgress,
+                return Opacity(
+                  opacity: opacity,
+                  child: Transform.translate(
+                    offset: Offset(0, yTranslate),
                     child: child,
                   ),
                 );
               },
-              child: SizedBox(
-                height: size.height * 0.58,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: _kNavy.withValues(alpha: 0.65),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.08),
-                          width: 1,
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    // Navigation row (Back + Skip)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                      child: SizedBox(
+                        height: 48,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Back Button
+                            AnimatedOpacity(
+                              opacity: _currentPage > 0 ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 250),
+                              child: IgnorePointer(
+                                ignoring: _currentPage == 0,
+                                child: IconButton(
+                                  onPressed: () {
+                                    _pageController.previousPage(
+                                      duration: const Duration(milliseconds: 400),
+                                      curve: Curves.easeOutCubic,
+                                    );
+                                  },
+                                  icon: const Icon(
+                                    Icons.arrow_back_ios_new_rounded,
+                                    color: Colors.white70,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // Skip Button
+                            GestureDetector(
+                              onTap: () {
+                                ref.read(appAuthProvider.notifier).completeWelcome();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.05),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Text(
+                                  'Bỏ qua',
+                                  style: GoogleFonts.beVietnamPro(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: Column(
+                    ),
+
+                    // Full-screen PageView Step Layout
+                    Expanded(
+                      child: PageView(
+                        controller: _pageController,
+                        onPageChanged: (index) {
+                          setState(() {
+                            _currentPage = index;
+                          });
+                          ref.read(welcomeFlowPageIndexProvider.notifier).setPage(index);
+                        },
+                        children: const [
+                          _StepTimelinePage(),
+                          _StepExpensePage(),
+                          _StepPaymentPage(),
+                        ],
+                      ),
+                    ),
+
+                    // Bottom navigation controls row
+                    Padding(
+                      padding: EdgeInsets.only(
+                        left: 24,
+                        right: 24,
+                        bottom: MediaQuery.of(context).padding.bottom + 16,
+                        top: 12,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const SizedBox(height: 12),
-                          // Drag handle visualizer
-                          Container(
-                            width: 40,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: Colors.white24,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
+                          _LocalDotsIndicator(
+                            currentPage: _currentPage,
+                            pageController: _pageController,
                           ),
-                          const SizedBox(height: 16),
-                          
-                          // Active Step Presentation Pages
-                          Expanded(
-                            child: PageView(
-                              controller: _pageController,
-                              onPageChanged: (index) {
-                                ref.read(welcomeFlowPageIndexProvider.notifier).setPage(index);
-                              },
-                              children: const [
-                                _StepTimelinePage(),
-                                _StepExpensePage(),
-                                _StepPaymentPage(),
-                              ],
-                            ),
-                          ),
-                          
-                          // Bottom Navigation row
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                // Dots indicator
-                                _DotsIndicator(pageController: _pageController),
-                                
-                                // CTA action trigger
-                                _CtaButton(pageController: _pageController),
-                              ],
-                            ),
+                          _LocalCtaButton(
+                            currentPage: _currentPage,
+                            pageController: _pageController,
+                            onComplete: () {
+                              ref.read(appAuthProvider.notifier).completeWelcome();
+                            },
                           ),
                         ],
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -467,7 +435,7 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
     );
   }
 
-  // Helper builder for 3D Layered Glassmorphism Cards (Phase 2)
+  // 3D Glass cards layout (matches exact coordinates from initial view)
   Widget _buildGlassCards(Size size) {
     return Positioned.fill(
       child: AnimatedBuilder(
@@ -477,11 +445,9 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
           final double introScale = 0.8 + 0.2 * _cardsScaleIn.value;
           final double collapseProgress = _cardsCollapse.value;
 
-          // Compute absolute card status visibility
           final double opacity = (introProgress * (1.0 - collapseProgress)).clamp(0.0, 1.0);
           if (opacity <= 0.0) return const SizedBox.shrink();
 
-          // Continuous micro-oscillations driven by the loop controller
           final double time = _loopController.value * 2 * math.pi;
 
           return Stack(
@@ -494,9 +460,7 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
               double cardH = 100.0;
               Color cardBorderColor = _kAzure.withValues(alpha: 0.4);
 
-              // Stagger card phases for out-of-sync 3D parallax offsets
               if (index == 0) {
-                // Card 1: Background Glass Card (Behind center logo)
                 angleX = math.sin(time) * 0.08;
                 angleY = math.cos(time) * 0.08;
                 dx = -70.0 + (angleY * 20.0);
@@ -505,7 +469,6 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
                 cardH = 100.0;
                 cardBorderColor = _kAzure.withValues(alpha: 0.3);
               } else if (index == 1) {
-                // Card 2: Foreground Card Left (In front of logo)
                 angleX = math.cos(time + 1.2) * 0.1;
                 angleY = math.sin(time + 1.2) * 0.1;
                 dx = -50.0 + (angleY * 35.0);
@@ -514,7 +477,6 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
                 cardH = 70.0;
                 cardBorderColor = _kGold.withValues(alpha: 0.3);
               } else {
-                // Card 3: Foreground Card Right (In front of logo)
                 angleX = math.sin(time + 2.4) * 0.12;
                 angleY = math.cos(time + 2.4) * 0.06;
                 dx = 70.0 + (angleY * 30.0);
@@ -524,7 +486,6 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
                 cardBorderColor = _kLight.withValues(alpha: 0.3);
               }
 
-              // Shimmer linear sweep progress matching loop value
               final double shimmerVal = (_loopController.value * 2.0) % 1.0;
 
               return Positioned(
@@ -536,7 +497,7 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
                     scale: introScale * (1.0 - collapseProgress * 0.2),
                     child: Transform(
                       transform: Matrix4.identity()
-                        ..setEntry(3, 2, 0.002) // 3D Perspective entry distortion
+                        ..setEntry(3, 2, 0.002)
                         ..rotateX(angleX)
                         ..rotateY(angleY),
                       alignment: Alignment.center,
@@ -603,13 +564,11 @@ class GlassCardPainter extends CustomPainter {
     final rect = Offset.zero & size;
     final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(16));
 
-    // 1. Draw solid color background overlay
     final fillPaint = Paint()
       ..color = fillColor
       ..style = PaintingStyle.fill;
     canvas.drawRRect(rrect, fillPaint);
 
-    // 2. Draw luxury glass shimmer light sweep
     final double shimmerWidth = size.width * 1.5;
     final double currentPos = -shimmerWidth / 2 + (size.width + shimmerWidth) * shimmerProgress;
 
@@ -620,7 +579,7 @@ class GlassCardPainter extends CustomPainter {
         colors: [
           Colors.white.withValues(alpha: 0.0),
           Colors.white.withValues(alpha: 0.03),
-          Colors.white.withValues(alpha: 0.24), // central peak brightness
+          Colors.white.withValues(alpha: 0.24),
           Colors.white.withValues(alpha: 0.03),
           Colors.white.withValues(alpha: 0.0),
         ],
@@ -632,7 +591,6 @@ class GlassCardPainter extends CustomPainter {
 
     canvas.drawRRect(rrect, shimmerPaint);
 
-    // 3. Draw premium 1px border with a soft gradient
     final borderPaint = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
@@ -666,11 +624,8 @@ class _GlowPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    
-    // Draw raw dark background
     canvas.drawRect(rect, Paint()..color = _kDark);
 
-    // Draw azure radial pulsing aura
     final double maxOpacity = 0.15 * opacityMultiplier;
     final double opacity = 0.07 * opacityMultiplier + (0.08 * opacityMultiplier * pulseValue);
 
@@ -702,8 +657,8 @@ class _StepTimelinePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _StepShell(
-      visual: const _AnimatedTimelineMockup(),
+    return const _StepShell(
+      visual: _AnimatedTimelineMockup(),
       title: 'Đồng bộ lịch trình',
       body: 'Công cụ lập kế hoạch hành trình thông minh. Chia sẻ và chỉnh sửa lộ trình cùng bạn bè theo thời gian thực tế.',
     );
@@ -726,7 +681,7 @@ class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 1000),
     );
     _controller.forward();
   }
@@ -767,13 +722,12 @@ class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
             ),
           ),
         ),
-        // Timeline elements
         Column(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: List.generate(nodes.length, (index) {
             final node = nodes[index];
-            final double start = index * 0.18;
-            final double end = (start + 0.45).clamp(0.0, 1.0);
+            final double start = index * 0.15;
+            final double end = (start + 0.5).clamp(0.0, 1.0);
             
             final anim = CurvedAnimation(
               parent: _controller,
@@ -785,12 +739,11 @@ class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
               builder: (context, child) {
                 final double val = anim.value;
                 return Transform.translate(
-                  offset: Offset(0, (1.0 - val) * 16.0),
+                  offset: Offset(0, (1.0 - val) * 12.0),
                   child: Opacity(
                     opacity: val.clamp(0.0, 1.0),
                     child: Row(
                       children: [
-                        // Node circle indicator
                         Container(
                           width: 40,
                           height: 40,
@@ -801,13 +754,6 @@ class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
                               color: node.$4 ? _kAzure : _kAzure.withValues(alpha: 0.3),
                               width: 1.5,
                             ),
-                            boxShadow: [
-                              if (node.$4)
-                                BoxShadow(
-                                  color: _kAzure.withValues(alpha: 0.2),
-                                  blurRadius: 6,
-                                )
-                            ],
                           ),
                           child: Icon(
                             node.$3,
@@ -815,16 +761,15 @@ class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
                             size: 18,
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        // Content card
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             decoration: BoxDecoration(
-                              color: _kNavy.withValues(alpha: 0.25),
+                              color: _kNavy.withValues(alpha: 0.35),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.04),
+                                color: Colors.white.withValues(alpha: 0.05),
                                 width: 1,
                               ),
                             ),
@@ -841,7 +786,7 @@ class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
                                         overflow: TextOverflow.ellipsis,
                                         style: GoogleFonts.beVietnamPro(
                                           color: _kLight,
-                                          fontSize: 12,
+                                          fontSize: 13,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -850,7 +795,7 @@ class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
                                         node.$1,
                                         style: GoogleFonts.beVietnamPro(
                                           color: _kAzure,
-                                          fontSize: 10,
+                                          fontSize: 11,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -861,7 +806,7 @@ class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
                                   const Icon(
                                     Icons.check_circle_rounded,
                                     color: _kGold,
-                                    size: 16,
+                                    size: 18,
                                   ),
                               ],
                             ),
@@ -886,8 +831,8 @@ class _StepExpensePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _StepShell(
-      visual: const _AnimatedExpenseMockup(),
+    return const _StepShell(
+      visual: _AnimatedExpenseMockup(),
       title: 'Đơn giản chi tiêu',
       body: 'Giải pháp tính toán thu chi thông minh. Tự động quy đổi, tổng hợp và chia đều hóa đơn nhóm, tránh mọi sự sai lệch.',
     );
@@ -910,7 +855,7 @@ class _AnimatedExpenseMockupState extends State<_AnimatedExpenseMockup>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 1200),
     );
     _controller.forward();
   }
@@ -930,9 +875,8 @@ class _AnimatedExpenseMockupState extends State<_AnimatedExpenseMockup>
     ];
 
     return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const SizedBox(height: 12),
-        // Donut visualization block
         SizedBox(
           height: 120,
           width: 120,
@@ -979,94 +923,86 @@ class _AnimatedExpenseMockupState extends State<_AnimatedExpenseMockup>
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        // Breakdown cards
-        Expanded(
-          child: ListView.builder(
-            padding: EdgeInsets.zero,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: segments.length,
-            itemBuilder: (context, index) {
-              final seg = segments[index];
-              final double start = 0.35 + index * 0.15;
-              final double end = (start + 0.45).clamp(0.0, 1.0);
-              
-              final anim = CurvedAnimation(
-                parent: _controller,
-                curve: Interval(start, end, curve: Curves.easeOutBack),
-              );
+        const SizedBox(height: 12),
+        Column(
+          children: List.generate(segments.length, (index) {
+            final seg = segments[index];
+            final double start = 0.3 + index * 0.15;
+            final double end = (start + 0.5).clamp(0.0, 1.0);
+            final anim = CurvedAnimation(
+              parent: _controller,
+              curve: Interval(start, end, curve: Curves.easeOutBack),
+            );
 
-              return AnimatedBuilder(
-                animation: anim,
-                builder: (context, child) {
-                  final double val = anim.value;
-                  return Transform.scale(
-                    scale: val,
-                    child: Opacity(
-                      opacity: val.clamp(0.0, 1.0),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: _kNavy.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.04),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: seg.$2,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              seg.$3,
-                              style: GoogleFonts.beVietnamPro(
-                                color: _kLight.withValues(alpha: 0.8),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              '${(seg.$1 * 8.5).toStringAsFixed(1)}M đ',
-                              style: GoogleFonts.beVietnamPro(
-                                color: _kLight,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '(${(seg.$1 * 100).toStringAsFixed(0)}%)',
-                              style: GoogleFonts.beVietnamPro(
-                                color: Colors.white38,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
+            return AnimatedBuilder(
+              animation: anim,
+              builder: (context, child) {
+                final double val = anim.value;
+                return Transform.scale(
+                  scale: val,
+                  child: Opacity(
+                    opacity: val.clamp(0.0, 1.0),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _kNavy.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.05),
+                          width: 1,
                         ),
                       ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: seg.$2,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            seg.$3,
+                            style: GoogleFonts.beVietnamPro(
+                              color: _kLight.withValues(alpha: 0.8),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${(seg.$1 * 8.5).toStringAsFixed(1)}M đ',
+                            style: GoogleFonts.beVietnamPro(
+                              color: _kLight,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '(${(seg.$1 * 100).toStringAsFixed(0)}%)',
+                            style: GoogleFonts.beVietnamPro(
+                              color: Colors.white38,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  );
-                },
-              );
-            },
-          ),
+                  ),
+                );
+              },
+            );
+          }),
         ),
       ],
     );
   }
 }
 
-// Donut custom painter drawing segments with smooth transitions
 class _DonutChartPainter extends CustomPainter {
   final double progress;
   final List<(double, Color, String)> segments;
@@ -1087,7 +1023,6 @@ class _DonutChartPainter extends CustomPainter {
       final sweepAngle = seg.$1 * 2 * math.pi * progress;
       paint.color = seg.$2;
       
-      // Arc with space gap
       canvas.drawArc(rect, startAngle + 0.04, sweepAngle - 0.08, false, paint);
       startAngle += seg.$1 * 2 * math.pi;
     }
@@ -1105,8 +1040,8 @@ class _StepPaymentPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _StepShell(
-      visual: const _AnimatedPaymentMockup(),
+    return const _StepShell(
+      visual: _AnimatedPaymentMockup(),
       title: 'Quyết toán 1 chạm',
       body: 'Tích hợp thanh toán QR và Ví điện tử. Quét mã - tự động chia hóa đơn lẻ và giải quyết số dư nợ tức thì.',
     );
@@ -1130,7 +1065,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
     super.initState();
     _entryController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1000),
     );
     _laserController = AnimationController(
       vsync: this,
@@ -1150,7 +1085,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
   @override
   Widget build(BuildContext context) {
     return Column(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         // VietQR visual glass container
         ScaleTransition(
@@ -1159,10 +1094,10 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
             curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack),
           ),
           child: Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _kNavy.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
+              color: _kNavy.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: _kAzure.withValues(alpha: 0.3),
                 width: 1,
@@ -1170,7 +1105,6 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
             ),
             child: Row(
               children: [
-                // Simulated QR Box with animated scanning laser
                 Stack(
                   children: [
                     Container(
@@ -1182,7 +1116,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
                       ),
                       padding: const EdgeInsets.all(4),
                       child: Image.asset(
-                        'assets/images/logo.png', // QR dummy visual
+                        'assets/images/logo.png',
                         color: _kNavy,
                         fit: BoxFit.contain,
                       ),
@@ -1195,12 +1129,11 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
                         painter: _QrMarkerPainter(),
                       ),
                     ),
-                    // Active scanning laser
                     AnimatedBuilder(
                       animation: _laserController,
                       builder: (context, child) {
                         return Positioned(
-                          top: _laserController.value * (56 - 2),
+                          top: _laserController.value * 54,
                           left: 2,
                           right: 2,
                           child: Container(
@@ -1221,7 +1154,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
                     ),
                   ],
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1232,13 +1165,13 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
                             'Liên kết VietQR',
                             style: GoogleFonts.beVietnamPro(
                               color: _kLight,
-                              fontSize: 12,
+                              fontSize: 13,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                             decoration: BoxDecoration(
                               color: _kGold.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(4),
@@ -1247,7 +1180,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
                               'FREE',
                               style: GoogleFonts.beVietnamPro(
                                 color: _kGold,
-                                fontSize: 8,
+                                fontSize: 9,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -1259,7 +1192,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
                         'Thanh toán chuyển khoản liên ngân hàng nhận diện tức thì.',
                         style: GoogleFonts.beVietnamPro(
                           color: Colors.white38,
-                          fontSize: 10,
+                          fontSize: 11,
                           height: 1.3,
                         ),
                       ),
@@ -1270,7 +1203,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
             ),
           ),
         ),
-
+        const SizedBox(height: 16),
         // MoMo payment visual container
         ScaleTransition(
           scale: CurvedAnimation(
@@ -1278,12 +1211,12 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
             curve: const Interval(0.3, 0.9, curve: Curves.easeOutBack),
           ),
           child: Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _kNavy.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
+              color: _kNavy.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.04),
+                color: Colors.white.withValues(alpha: 0.05),
                 width: 1,
               ),
             ),
@@ -1294,20 +1227,20 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
                   height: 56,
                   decoration: BoxDecoration(
                     color: const Color(0xFFA50064),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Center(
                     child: Text(
                       'mơ',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 26,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1316,7 +1249,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
                         'Liên kết ví MoMo',
                         style: GoogleFonts.beVietnamPro(
                           color: _kLight,
-                          fontSize: 12,
+                          fontSize: 13,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1325,7 +1258,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
                         'Thanh toán tiện lợi, chia sẻ số tiền dư chuyển thẳng vào ví.',
                         style: GoogleFonts.beVietnamPro(
                           color: Colors.white38,
-                          fontSize: 10,
+                          fontSize: 11,
                           height: 1.3,
                         ),
                       ),
@@ -1348,17 +1281,14 @@ class _QrMarkerPainter extends CustomPainter {
       ..color = _kNavy
       ..style = PaintingStyle.fill;
     
-    // Top-left QR corner marker
     canvas.drawRect(const Rect.fromLTWH(3, 3, 14, 14), p);
     canvas.drawRect(const Rect.fromLTWH(5, 5, 10, 10), Paint()..color = Colors.white);
     canvas.drawRect(const Rect.fromLTWH(7, 7, 6, 6), p);
     
-    // Top-right
     canvas.drawRect(Rect.fromLTWH(size.width - 17, 3, 14, 14), p);
     canvas.drawRect(Rect.fromLTWH(size.width - 15, 5, 10, 10), Paint()..color = Colors.white);
     canvas.drawRect(Rect.fromLTWH(size.width - 13, 7, 6, 6), p);
     
-    // Bottom-left
     canvas.drawRect(Rect.fromLTWH(3, size.height - 17, 14, 14), p);
     canvas.drawRect(Rect.fromLTWH(5, size.height - 15, 10, 10), Paint()..color = Colors.white);
     canvas.drawRect(Rect.fromLTWH(7, size.height - 13, 6, 6), p);
@@ -1382,12 +1312,13 @@ class _StepShell extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Center(
-              child: visual,
-            ),
+          const Spacer(flex: 3),
+          SizedBox(
+            height: 300,
+            child: Center(child: visual),
           ),
-          const SizedBox(height: 12),
+          const Spacer(flex: 2),
+          // Title
           Text(
             title,
             style: GoogleFonts.inter(
@@ -1398,6 +1329,7 @@ class _StepShell extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
+          // Body Description
           Text(
             body,
             style: GoogleFonts.beVietnamPro(
@@ -1407,26 +1339,25 @@ class _StepShell extends StatelessWidget {
               height: 1.5,
             ),
           ),
-          const SizedBox(height: 12),
+          const Spacer(flex: 4),
         ],
       ),
     );
   }
 }
 
-// ── DOTS INDICATOR COMPONENT ────────────────────────────────────────────────
-class _DotsIndicator extends ConsumerWidget {
+// ── LOCAL DOTS INDICATOR ─────────────────────────────────────────────────────
+class _LocalDotsIndicator extends StatelessWidget {
+  final int currentPage;
   final PageController pageController;
 
-  const _DotsIndicator({required this.pageController});
+  const _LocalDotsIndicator({required this.currentPage, required this.pageController});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final activeIndex = ref.watch(welcomeFlowPageIndexProvider);
-
+  Widget build(BuildContext context) {
     return Row(
       children: List.generate(3, (index) {
-        final bool isActive = activeIndex == index;
+        final bool isActive = currentPage == index;
         return GestureDetector(
           onTap: () {
             pageController.animateToPage(
@@ -1451,16 +1382,21 @@ class _DotsIndicator extends ConsumerWidget {
   }
 }
 
-// ── CTA BUTTON COMPONENT ────────────────────────────────────────────────────
-class _CtaButton extends ConsumerWidget {
+// ── LOCAL CTA BUTTON ─────────────────────────────────────────────────────────
+class _LocalCtaButton extends StatelessWidget {
+  final int currentPage;
   final PageController pageController;
+  final VoidCallback onComplete;
 
-  const _CtaButton({required this.pageController});
+  const _LocalCtaButton({
+    required this.currentPage,
+    required this.pageController,
+    required this.onComplete,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final activeIndex = ref.watch(welcomeFlowPageIndexProvider);
-    final bool isLastPage = activeIndex == 2;
+  Widget build(BuildContext context) {
+    final bool isLastPage = currentPage == 2;
 
     return GestureDetector(
       onTap: () {
@@ -1470,7 +1406,7 @@ class _CtaButton extends ConsumerWidget {
             curve: Curves.easeOutCubic,
           );
         } else {
-          ref.read(appAuthProvider.notifier).completeWelcome();
+          onComplete();
         }
       },
       child: Container(
@@ -1482,7 +1418,7 @@ class _CtaButton extends ConsumerWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: _kAzure.withValues(alpha: 0.3),
+              color: _kGold.withValues(alpha: 0.2),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -1500,8 +1436,8 @@ class _CtaButton extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 6),
-            const Icon(
-              Icons.arrow_forward_rounded,
+            Icon(
+              isLastPage ? Icons.done_rounded : Icons.arrow_forward_rounded,
               color: _kDark,
               size: 14,
             ),
