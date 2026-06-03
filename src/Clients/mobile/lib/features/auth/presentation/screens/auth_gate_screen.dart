@@ -102,7 +102,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: kAzure.withValues(alpha: 0.1),
+                    color: kAzure.withOpacity(0.1),
                     blurRadius: 100,
                     spreadRadius: 50,
                   ),
@@ -120,7 +120,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: kNavy.withValues(alpha: 0.2),
+                    color: kNavy.withOpacity(0.2),
                     blurRadius: 80,
                     spreadRadius: 40,
                   ),
@@ -151,7 +151,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                               colors: [kNavy, kAzure],
                             ),
                             border: Border.all(
-                              color: kAzure.withValues(alpha: 0.3),
+                              color: kAzure.withOpacity(0.3),
                               width: 2,
                             ),
                           ),
@@ -191,7 +191,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                         'Đồng hành cùng chuyến đi của bạn',
                         textAlign: TextAlign.center,
                         style: GoogleFonts.beVietnamPro(
-                          color: kAzure.withValues(alpha: 0.8),
+                          color: kAzure.withOpacity(0.8),
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
                         ),
@@ -222,7 +222,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                     onTap: () => ref.read(appAuthProvider.notifier).loginFake(),
                     color: Colors.transparent,
                     textColor: kLight,
-                    borderColor: kAzure.withValues(alpha: 0.4),
+                    borderColor: kAzure.withOpacity(0.4),
                   ),
 
 
@@ -232,7 +232,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                     children: [
                       Expanded(
                         child: Divider(
-                          color: kLight.withValues(alpha: 0.1),
+                          color: kLight.withOpacity(0.1),
                           thickness: 0.5,
                         ),
                       ),
@@ -241,7 +241,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                         child: Text(
                           'HOẶC',
                           style: GoogleFonts.beVietnamPro(
-                            color: kLight.withValues(alpha: 0.3),
+                            color: kLight.withOpacity(0.3),
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),
@@ -249,7 +249,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                       ),
                       Expanded(
                         child: Divider(
-                          color: kLight.withValues(alpha: 0.1),
+                          color: kLight.withOpacity(0.1),
                           thickness: 0.5,
                         ),
                       ),
@@ -269,7 +269,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                     },
                     color: Colors.transparent,
                     textColor: kLight,
-                    borderColor: kAzure.withValues(alpha: 0.4),
+                    borderColor: kAzure.withOpacity(0.4),
                   ),
                   const Spacer(flex: 1),
                   // Register redirect
@@ -279,7 +279,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                       Text(
                         'Chưa có tài khoản? ',
                         style: GoogleFonts.beVietnamPro(
-                          color: kLight.withValues(alpha: 0.6),
+                          color: kLight.withOpacity(0.6),
                           fontSize: 13,
                         ),
                       ),
@@ -333,7 +333,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
               : null,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
+              color: Colors.black.withOpacity(0.15),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),

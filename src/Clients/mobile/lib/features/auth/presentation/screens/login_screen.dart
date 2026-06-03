@@ -14,6 +14,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -58,7 +59,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Text(
                 'Đăng nhập để tiếp tục quản lý các chuyến đi của bạn',
                 style: GoogleFonts.beVietnamPro(
-                  color: kAzure.withValues(alpha: 0.8),
+                  color: kAzure.withOpacity(0.8),
                   fontSize: 14,
                 ),
               ),
@@ -98,9 +99,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: 24),
               // Login Button
               GestureDetector(
-                onTap: () {
-                  ref.read(appAuthProvider.notifier).loginFake();
-                },
+                onTap: _isLoading
+                    ? null
+                    : () async {
+                        final email = _emailController.text.trim();
+                        final password = _passwordController.text.trim();
+
+                        if (email.isEmpty || password.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Vui lòng điền đầy đủ email và mật khẩu'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        setState(() => _isLoading = true);
+                        try {
+                          await ref.read(appAuthProvider.notifier).login(email, password);
+                        } catch (e) {
+                          setState(() => _isLoading = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Đăng nhập thất bại: ${e.toString().replaceAll('ApiException: ', '')}'),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
+                          }
+                        }
+                      },
                 child: Container(
                   height: 56,
                   width: double.infinity,
@@ -109,21 +138,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     borderRadius: BorderRadius.circular(12), // rounded: md
                     boxShadow: [
                       BoxShadow(
-                        color: kAzure.withValues(alpha: 0.25),
+                        color: kAzure.withOpacity(0.25),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
                     ],
                   ),
                   child: Center(
-                    child: Text(
-                      'Đăng nhập',
-                      style: GoogleFonts.beVietnamPro(
-                        color: kLight,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: kLight,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            'Đăng nhập',
+                            style: GoogleFonts.beVietnamPro(
+                              color: kLight,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -152,7 +190,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         Text(
           label,
           style: GoogleFonts.beVietnamPro(
-            color: kLight.withValues(alpha: 0.7),
+            color: kLight.withOpacity(0.7),
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
@@ -163,7 +201,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             color: kNavy,
             borderRadius: BorderRadius.circular(12), // rounded: md
             border: Border.all(
-              color: kAzure.withValues(alpha: 0.25),
+              color: kAzure.withOpacity(0.25),
               width: 1.0,
             ),
           ),
@@ -174,9 +212,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: GoogleFonts.beVietnamPro(
-                color: kLight.withValues(alpha: 0.3),
+                color: kLight.withOpacity(0.3),
               ),
-              prefixIcon: Icon(icon, color: kAzure.withValues(alpha: 0.6), size: 20),
+              prefixIcon: Icon(icon, color: kAzure.withOpacity(0.6), size: 20),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 16),
             ),

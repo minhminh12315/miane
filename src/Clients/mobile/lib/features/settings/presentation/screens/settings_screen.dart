@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/controllers/app_auth_provider.dart';
+import '../../../notification/presentation/screens/notification_history_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -90,7 +91,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           Text(
                             'traveler@example.com',
                             style: GoogleFonts.beVietnamPro(
-                              color: kLight.withValues(alpha: 0.4),
+                              color: kLight.withOpacity(0.4),
                               fontSize: 12,
                             ),
                           ),
@@ -100,7 +101,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: kAzure.withValues(alpha: 0.15),
+                        color: kAzure.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(99), // capsule pill
                       ),
                       child: Text(
@@ -126,7 +127,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     color: kNavy,
                     borderRadius: BorderRadius.circular(16), // rounded: lg
                     border: Border.all(
-                      color: kGold.withValues(alpha: 0.3),
+                      color: kGold.withOpacity(0.3),
                       width: 0.5,
                     ),
                   ),
@@ -135,7 +136,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: kGold.withValues(alpha: 0.15),
+                          color: kGold.withOpacity(0.15),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -161,7 +162,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             Text(
                               'Mở khóa AI Plan, AI OCR & Unlimited Trips',
                               style: GoogleFonts.beVietnamPro(
-                                color: kLight.withValues(alpha: 0.7),
+                                color: kLight.withOpacity(0.7),
                                 fontSize: 11,
                               ),
                             ),
@@ -233,6 +234,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 title: 'Thông báo đẩy',
                 kAzure: kAzure,
                 kLight: kLight,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationHistoryScreen(),
+                    ),
+                  );
+                },
               ),
               _buildSettingItem(
                 icon: Icons.security_rounded,
@@ -256,10 +265,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Container(
                   height: 56,
                   decoration: BoxDecoration(
-                    color: Colors.redAccent.withValues(alpha: 0.1),
+                    color: Colors.redAccent.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12), // rounded: md
                     border: Border.all(
-                      color: Colors.redAccent.withValues(alpha: 0.3),
+                      color: Colors.redAccent.withOpacity(0.3),
                       width: 0.5,
                     ),
                   ),
@@ -325,7 +334,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               Text(
                 trailing,
                 style: GoogleFonts.beVietnamPro(
-                  color: kLight.withValues(alpha: 0.4),
+                  color: kLight.withOpacity(0.4),
                   fontSize: 12,
                 ),
               ),
@@ -333,7 +342,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
             Icon(
               Icons.chevron_right_rounded,
-              color: kLight.withValues(alpha: 0.3),
+              color: kLight.withOpacity(0.3),
               size: 20,
             ),
           ],
@@ -465,7 +474,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 style: GoogleFonts.beVietnamPro(color: kLight, fontSize: 14),
                 decoration: InputDecoration(
                   labelText: 'Ngân hàng / Ví',
-                  labelStyle: GoogleFonts.beVietnamPro(color: kLight.withValues(alpha: 0.6), fontSize: 13),
+                  labelStyle: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.6), fontSize: 13),
                   filled: true,
                   fillColor: kNavy,
                   border: OutlineInputBorder(
@@ -481,7 +490,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 style: GoogleFonts.beVietnamPro(color: kLight, fontSize: 14),
                 decoration: InputDecoration(
                   labelText: 'Số tài khoản / Số điện thoại',
-                  labelStyle: GoogleFonts.beVietnamPro(color: kLight.withValues(alpha: 0.6), fontSize: 13),
+                  labelStyle: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.6), fontSize: 13),
                   filled: true,
                   fillColor: kNavy,
                   border: OutlineInputBorder(
@@ -496,7 +505,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Hủy', style: GoogleFonts.beVietnamPro(color: kLight.withValues(alpha: 0.5))),
+              child: Text('Hủy', style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.5))),
             ),
             TextButton(
               onPressed: () {
@@ -522,7 +531,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.8),
+      barrierColor: Colors.black.withOpacity(0.8),
       isScrollControlled: true,
       builder: (context) {
         return Container(
@@ -545,7 +554,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: kLight.withValues(alpha: 0.2),
+                  color: kLight.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -554,7 +563,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: kGold.withValues(alpha: 0.15),
+                  color: kGold.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -578,7 +587,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 'Mở khóa không giới hạn số lượng chuyến đi, số thành viên nhóm, tự động quy đổi ngoại tệ cùng với AI bóc tách hóa đơn & AI trợ lý du lịch.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.beVietnamPro(
-                  color: kLight.withValues(alpha: 0.7),
+                  color: kLight.withOpacity(0.7),
                   fontSize: 14,
                   height: 1.5,
                 ),
@@ -600,7 +609,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: kGold.withValues(alpha: 0.25),
+                        color: kGold.withOpacity(0.25),
                         blurRadius: 16,
                         offset: const Offset(0, 6),
                       ),
@@ -624,7 +633,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Text(
                   'Để sau',
                   style: GoogleFonts.beVietnamPro(
-                    color: kLight.withValues(alpha: 0.5),
+                    color: kLight.withOpacity(0.5),
                     fontSize: 13,
                   ),
                 ),
@@ -645,7 +654,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           child: Text(
             text,
             style: GoogleFonts.beVietnamPro(
-              color: kLight.withValues(alpha: 0.8),
+              color: kLight.withOpacity(0.8),
               fontSize: 13,
             ),
           ),
