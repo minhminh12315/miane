@@ -5,7 +5,6 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../home/presentation/controllers/trips_provider.dart';
 import '../../../home/presentation/screens/trip_workspace_screen.dart';
 
-
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
@@ -39,11 +38,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final trips = ref.watch(tripsProvider);
+    final tripsState = ref.watch(tripsProvider);
+    final trips = tripsState.value ?? [];
     final filteredTrips = trips.where((trip) {
       if (_query.isEmpty) return true;
-      return trip.tripName.toLowerCase().contains(_query) ||
-             trip.destination.toLowerCase().contains(_query);
+      return trip.name.toLowerCase().contains(_query) ||
+             (trip.description?.toLowerCase().contains(_query) ?? false);
     }).toList();
 
     const Color kDark = AppTheme.canvasDark;
@@ -74,7 +74,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: kNavy.withValues(alpha: 0.6),
+                      color: kNavy.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                       border: AppTheme.thinBorder,
                     ),
@@ -83,7 +83,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       style: AppTheme.bodyMd(color: kLight),
                       decoration: InputDecoration(
                         hintText: 'Tìm chuyến đi, điểm đến...',
-                        hintStyle: AppTheme.bodyMd(color: kLight.withValues(alpha: 0.4)),
+                        hintStyle: AppTheme.bodyMd(color: kLight.withOpacity(0.4)),
                         prefixIcon: const Icon(Icons.search_rounded, color: kAzure, size: 20),
                         suffixIcon: _query.isNotEmpty
                             ? IconButton(
@@ -135,11 +135,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.search_off_rounded, color: kGray.withValues(alpha: 0.5), size: 48),
+                        Icon(Icons.search_off_rounded, color: kGray.withOpacity(0.5), size: 48),
                         const SizedBox(height: 12),
                         Text(
                           'Không tìm thấy chuyến đi nào',
-                          style: AppTheme.bodyMd(color: kLight.withValues(alpha: 0.5)),
+                          style: AppTheme.bodyMd(color: kLight.withOpacity(0.5)),
                         ),
                       ],
                     ),
@@ -158,12 +158,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => TripWorkspaceScreen(
-                              tripName: trip.tripName,
-                              destination: trip.destination,
-                              budgetText: trip.budgetText,
-                              budgetProgress: trip.budgetProgress,
-                              spentText: trip.spentText,
-                              remainingText: trip.remainingText,
+                              tripId: trip.id,
+                              tripName: trip.name,
+                              destination: trip.description ?? 'Không có mô tả',
+                              baseCurrency: trip.baseCurrency,
                             ),
                           ),
                         );
@@ -184,7 +182,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    trip.tripName,
+                                    trip.name,
                                     style: AppTheme.titleSm(color: kLight),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -193,15 +191,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: trip.status == 'active'
-                                        ? AppTheme.iosGreen.withValues(alpha: 0.15)
-                                        : kAzure.withValues(alpha: 0.1),
+                                    color: trip.status == 0
+                                        ? AppTheme.iosGreen.withOpacity(0.15)
+                                        : kAzure.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(99),
                                   ),
                                   child: Text(
-                                    trip.status == 'active' ? 'Đang đi' : 'Sắp đi',
+                                    trip.status == 0 ? 'Đang đi' : 'Đã kết thúc',
                                     style: AppTheme.labelXs(
-                                      color: trip.status == 'active'
+                                      color: trip.status == 0
                                           ? AppTheme.iosGreen
                                           : kAzure,
                                     ),
@@ -215,13 +213,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                 const Icon(Icons.location_on_rounded, color: kGray, size: 14),
                                 const SizedBox(width: 4),
                                 Text(
-                                  trip.destination,
-                                  style: AppTheme.bodySm(color: kLight.withValues(alpha: 0.6)),
+                                  trip.description ?? 'Không có mô tả',
+                                  style: AppTheme.bodySm(color: kLight.withOpacity(0.6)),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 12),
-                            Divider(color: kLight.withValues(alpha: 0.08), height: 1),
+                            Divider(color: kLight.withOpacity(0.08), height: 1),
                             const SizedBox(height: 12),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -230,12 +228,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Ngân sách',
-                                      style: AppTheme.labelSm(color: kLight.withValues(alpha: 0.4)),
+                                      'Mã mời',
+                                      style: AppTheme.labelSm(color: kLight.withOpacity(0.4)),
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      trip.budgetText,
+                                      trip.inviteCode,
                                       style: AppTheme.bodySm(color: kLight),
                                     ),
                                   ],
@@ -245,7 +243,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                   children: [
                                     Text(
                                       'Thành viên',
-                                      style: AppTheme.labelSm(color: kLight.withValues(alpha: 0.4)),
+                                      style: AppTheme.labelSm(color: kLight.withOpacity(0.4)),
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
@@ -281,7 +279,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ),
         child: Text(
           text,
-          style: AppTheme.bodySm(color: textCol.withValues(alpha: 0.8)),
+          style: AppTheme.bodySm(color: textCol.withOpacity(0.8)),
         ),
       ),
     );

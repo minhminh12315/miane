@@ -99,7 +99,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                 child: _buildFloatingStatsButton(
                   isSelected: _currentIndex == 2,
                   onTap: () => _onTabSelected(2),
-                  tripCount: trips.length,
+                  tripCount: trips.value?.length ?? 0,
                   kAzure: kAzure,
                   kNavy: kNavy,
                   kLight: kLight,
@@ -150,15 +150,15 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                 color: isPrimary
                     ? kAzure
                     : (isSelected
-                        ? kAzure.withValues(alpha: 0.15)
-                        : kNavy.withValues(alpha: 0.7)),
+                        ? kAzure.withOpacity(0.15)
+                        : kNavy.withOpacity(0.7)),
                 borderRadius: BorderRadius.circular(27),
                 border: Border.all(
                   color: isPrimary
                       ? kAzure
                       : (isSelected
-                          ? kAzure.withValues(alpha: 0.5)
-                          : kBorder.withValues(alpha: 0.4)),
+                          ? kAzure.withOpacity(0.5)
+                          : kBorder.withOpacity(0.4)),
                   width: 0.5,
                 ),
               ),
@@ -166,7 +166,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                 icon,
                 color: isPrimary
                     ? Colors.white
-                    : (isSelected ? kAzure : kLight.withValues(alpha: 0.4)),
+                    : (isSelected ? kAzure : kLight.withOpacity(0.4)),
                 size: isPrimary ? 26 : 22,
               ),
             ),
@@ -197,13 +197,13 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: isSelected
-                    ? kAzure.withValues(alpha: 0.15)
-                    : kNavy.withValues(alpha: 0.7),
+                    ? kAzure.withOpacity(0.15)
+                    : kNavy.withOpacity(0.7),
                 borderRadius: BorderRadius.circular(27),
                 border: Border.all(
                   color: isSelected
-                      ? kAzure.withValues(alpha: 0.5)
-                      : kBorder.withValues(alpha: 0.4),
+                      ? kAzure.withOpacity(0.5)
+                      : kBorder.withOpacity(0.4),
                   width: 0.5,
                 ),
               ),
@@ -212,14 +212,14 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                 children: [
                   Icon(
                     Icons.bar_chart_rounded,
-                    color: isSelected ? kAzure : kLight.withValues(alpha: 0.4),
+                    color: isSelected ? kAzure : kLight.withOpacity(0.4),
                     size: 20,
                   ),
                   const SizedBox(width: 8),
                   Text(
                     'Thống kê ($tripCount)',
                     style: GoogleFonts.beVietnamPro(
-                      color: isSelected ? kAzure : kLight.withValues(alpha: 0.6),
+                      color: isSelected ? kAzure : kLight.withOpacity(0.6),
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                     ),
@@ -234,15 +234,15 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
   }
 
   void _handleAddNewTrip(BuildContext context) {
-    final trips = ref.read(tripsProvider);
-    if (trips.length >= 2) {
+    final tripsState = ref.read(tripsProvider);
+    final tripsList = tripsState.value ?? [];
+    if (tripsList.length >= 2) {
       _showProPaywall(context);
       return;
     }
 
     final nameController = TextEditingController();
     final destController = TextEditingController();
-    final budgetController = TextEditingController();
 
     const Color kDark = Color(0xFF1C1C1E);
     const Color kNavy = Color(0xFF2C2C2E);
@@ -267,7 +267,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                 style: GoogleFonts.beVietnamPro(color: kLight, fontSize: 14),
                 decoration: InputDecoration(
                   labelText: 'Tên chuyến đi',
-                  labelStyle: GoogleFonts.beVietnamPro(color: kLight.withValues(alpha: 0.6), fontSize: 13),
+                  labelStyle: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.6), fontSize: 13),
                   filled: true,
                   fillColor: kNavy,
                   border: OutlineInputBorder(
@@ -283,7 +283,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                 style: GoogleFonts.beVietnamPro(color: kLight, fontSize: 14),
                 decoration: InputDecoration(
                   labelText: 'Điểm đến',
-                  labelStyle: GoogleFonts.beVietnamPro(color: kLight.withValues(alpha: 0.6), fontSize: 13),
+                  labelStyle: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.6), fontSize: 13),
                   filled: true,
                   fillColor: kNavy,
                   border: OutlineInputBorder(
@@ -293,52 +293,39 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: budgetController,
-                keyboardType: TextInputType.number,
-                style: GoogleFonts.beVietnamPro(color: kLight, fontSize: 14),
-                decoration: InputDecoration(
-                  labelText: 'Ngân sách (đ)',
-                  labelStyle: GoogleFonts.beVietnamPro(color: kLight.withValues(alpha: 0.6), fontSize: 13),
-                  filled: true,
-                  fillColor: kNavy,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-              ),
+
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Hủy', style: GoogleFonts.beVietnamPro(color: kLight.withValues(alpha: 0.5))),
+              child: Text('Hủy', style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.5))),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 final name = nameController.text.trim();
                 final dest = destController.text.trim();
-                final budgetVal = budgetController.text.trim();
-                if (name.isNotEmpty && dest.isNotEmpty && budgetVal.isNotEmpty) {
-                  final formattedBudget = '${_formatValue(budgetVal)} đ';
-                  ref.read(tripsProvider.notifier).addTrip(
-                    TripItem(
-                      tripName: name,
-                      destination: dest,
-                      budgetText: formattedBudget,
-                      budgetProgress: 0.0,
-                      spentText: '0 đ',
-                      remainingText: formattedBudget,
-                      status: 'upcoming',
-                      timeText: 'Sắp diễn ra',
-                      memberCount: 1,
-                    ),
-                  );
+                if (name.isNotEmpty) {
+                  try {
+                    await ref.read(tripsProvider.notifier).createTrip(
+                      name,
+                      dest.isEmpty ? null : 'Điểm đến: $dest',
+                      'VND',
+                    );
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Không thể tạo chuyến đi: ${e.toString().replaceAll('ApiException: ', '')}'),
+                          backgroundColor: Colors.redAccent,
+                        ),
+                      );
+                    }
+                  }
                 }
-                Navigator.pop(context);
               },
               child: Text('Tạo', style: GoogleFonts.beVietnamPro(color: kAzure, fontWeight: FontWeight.bold)),
             ),
@@ -348,15 +335,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
     );
   }
 
-  String _formatValue(String val) {
-    try {
-      final numVal = int.parse(val);
-      final RegExp reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
-      return numVal.toString().replaceAllMapped(reg, (Match match) => '${match[1]}.');
-    } catch (_) {
-      return val;
-    }
-  }
+
 
   void _showProPaywall(BuildContext context) {
     const Color kDark = AppTheme.surfaceDark;
@@ -366,7 +345,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.8),
+      barrierColor: Colors.black.withOpacity(0.8),
       isScrollControlled: true,
       builder: (context) {
         return Container(
@@ -389,7 +368,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: kLight.withValues(alpha: 0.2),
+                  color: kLight.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -398,7 +377,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: kGold.withValues(alpha: 0.15),
+                  color: kGold.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -422,7 +401,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                 'Bạn đang dùng gói Basic (Giới hạn tối đa 2 chuyến đi). Nâng cấp MIANE Pro để tạo không giới hạn chuyến đi & quản lý mọi dự án du lịch!',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.beVietnamPro(
-                  color: kLight.withValues(alpha: 0.7),
+                  color: kLight.withOpacity(0.7),
                   fontSize: 14,
                   height: 1.5,
                 ),
@@ -436,7 +415,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                     child: Text(
                       'Không giới hạn chuyến đi & thành viên',
                       style: GoogleFonts.beVietnamPro(
-                        color: kLight.withValues(alpha: 0.8),
+                        color: kLight.withOpacity(0.8),
                         fontSize: 13,
                       ),
                     ),
@@ -452,7 +431,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                     child: Text(
                       'Đa tiền tệ & Quy đổi tỷ giá thời gian thực',
                       style: GoogleFonts.beVietnamPro(
-                        color: kLight.withValues(alpha: 0.8),
+                        color: kLight.withOpacity(0.8),
                         fontSize: 13,
                       ),
                     ),
@@ -468,7 +447,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                     child: Text(
                       'AI OCR Quét hóa đơn & AI Lên lịch trình',
                       style: GoogleFonts.beVietnamPro(
-                        color: kLight.withValues(alpha: 0.8),
+                        color: kLight.withOpacity(0.8),
                         fontSize: 13,
                       ),
                     ),
@@ -486,7 +465,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: kGold.withValues(alpha: 0.25),
+                        color: kGold.withOpacity(0.25),
                         blurRadius: 16,
                         offset: const Offset(0, 6),
                       ),
@@ -510,7 +489,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                 child: Text(
                   'Để sau',
                   style: GoogleFonts.beVietnamPro(
-                    color: kLight.withValues(alpha: 0.5),
+                    color: kLight.withOpacity(0.5),
                     fontSize: 13,
                   ),
                 ),

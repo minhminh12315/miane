@@ -16,6 +16,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -63,7 +64,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 'Bắt đầu hành trình quản lý tài chính và du lịch cùng Miane',
 
                 style: GoogleFonts.beVietnamPro(
-                  color: kAzure.withValues(alpha: 0.8),
+                  color: kAzure.withOpacity(0.8),
                   fontSize: 14,
                 ),
               ),
@@ -104,9 +105,49 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               const SizedBox(height: 32),
               // Register Button
               GestureDetector(
-                onTap: () {
-                  ref.read(appAuthProvider.notifier).registerFake();
-                },
+                onTap: _isLoading
+                    ? null
+                    : () async {
+                        final fullName = _nameController.text.trim();
+                        final email = _emailController.text.trim();
+                        final password = _passwordController.text.trim();
+                        final confirmPassword = _confirmPasswordController.text.trim();
+
+                        if (fullName.isEmpty || email.isEmpty || password.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Vui lòng điền đầy đủ thông tin'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        if (password != confirmPassword) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Mật khẩu xác nhận không khớp'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        setState(() => _isLoading = true);
+                        try {
+                          await ref.read(appAuthProvider.notifier).register(email, password, fullName);
+                        } catch (e) {
+                          setState(() => _isLoading = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Đăng ký thất bại: ${e.toString().replaceAll('ApiException: ', '')}'),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
+                          }
+                        }
+                      },
                 child: Container(
                   height: 56,
                   width: double.infinity,
@@ -115,21 +156,30 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     borderRadius: BorderRadius.circular(12), // rounded: md
                     boxShadow: [
                       BoxShadow(
-                        color: kAzure.withValues(alpha: 0.25),
+                        color: kAzure.withOpacity(0.25),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
                     ],
                   ),
                   child: Center(
-                    child: Text(
-                      'Đăng ký',
-                      style: GoogleFonts.beVietnamPro(
-                        color: kLight,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: kLight,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            'Đăng ký',
+                            style: GoogleFonts.beVietnamPro(
+                              color: kLight,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -158,7 +208,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         Text(
           label,
           style: GoogleFonts.beVietnamPro(
-            color: kLight.withValues(alpha: 0.7),
+            color: kLight.withOpacity(0.7),
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
@@ -169,7 +219,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             color: kNavy,
             borderRadius: BorderRadius.circular(12), // rounded: md
             border: Border.all(
-              color: kAzure.withValues(alpha: 0.25),
+              color: kAzure.withOpacity(0.25),
               width: 1.0,
             ),
           ),
@@ -180,9 +230,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: GoogleFonts.beVietnamPro(
-                color: kLight.withValues(alpha: 0.3),
+                color: kLight.withOpacity(0.3),
               ),
-              prefixIcon: Icon(icon, color: kAzure.withValues(alpha: 0.6), size: 20),
+              prefixIcon: Icon(icon, color: kAzure.withOpacity(0.6), size: 20),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 16),
             ),

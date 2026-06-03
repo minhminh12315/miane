@@ -10,7 +10,8 @@ class AnalyticsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final trips = ref.watch(tripsProvider);
+    final tripsState = ref.watch(tripsProvider);
+    final tripsList = tripsState.value ?? [];
 
     const Color kDark = AppTheme.canvasDark;
     const Color kNavy = AppTheme.surfaceDark;
@@ -120,18 +121,18 @@ class AnalyticsScreen extends ConsumerWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildStatCol('Tổng số', '${trips.length} chuyến', kAzure, kLight),
-                    Container(width: 0.5, height: 32, color: kLight.withValues(alpha: 0.1)),
+                    _buildStatCol('Tổng số', '${tripsList.length} chuyến', kAzure, kLight),
+                    Container(width: 0.5, height: 32, color: kLight.withOpacity(0.1)),
                     _buildStatCol(
                       'Đang đi',
-                      '${trips.where((t) => t.status == 'active').length} chuyến',
+                      '${tripsList.where((t) => t.status == 0).length} chuyến',
                       AppTheme.iosGreen,
                       kLight,
                     ),
-                    Container(width: 0.5, height: 32, color: kLight.withValues(alpha: 0.1)),
+                    Container(width: 0.5, height: 32, color: kLight.withOpacity(0.1)),
                     _buildStatCol(
                       'Sắp đi',
-                      '${trips.where((t) => t.status == 'upcoming').length} chuyến',
+                      '${tripsList.where((t) => t.status == 2).length} chuyến',
                       kGold,
                       kLight,
                     ),
@@ -160,7 +161,7 @@ class AnalyticsScreen extends ConsumerWidget {
                             Text(
                               'Tổng chi tiêu',
                               style: GoogleFonts.beVietnamPro(
-                                color: kLight.withValues(alpha: 0.5),
+                                color: kLight.withOpacity(0.5),
                                 fontSize: 12,
                               ),
                             ),
@@ -248,7 +249,7 @@ class AnalyticsScreen extends ConsumerWidget {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: cat.color.withValues(alpha: 0.15),
+                            color: cat.color.withOpacity(0.15),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -300,7 +301,7 @@ class AnalyticsScreen extends ConsumerWidget {
                             Text(
                               '${_formatAmount(cat.amount)} đ',
                               style: GoogleFonts.beVietnamPro(
-                                color: kLight.withValues(alpha: 0.6),
+                                color: kLight.withOpacity(0.6),
                                 fontSize: 12,
                               ),
                             ),
@@ -365,7 +366,7 @@ class AnalyticsScreen extends ConsumerWidget {
           color: kNavy,
           borderRadius: BorderRadius.circular(16), // rounded: lg
           border: Border.all(
-            color: isPro ? kGold.withValues(alpha: 0.2) : const Color(0xFF38383A),
+            color: isPro ? kGold.withOpacity(0.2) : const Color(0xFF38383A),
             width: 0.5,
           ),
         ),
@@ -387,7 +388,7 @@ class AnalyticsScreen extends ConsumerWidget {
                 Text(
                   subtitle,
                   style: GoogleFonts.beVietnamPro(
-                    color: isPro ? kGold : kLight.withValues(alpha: 0.4),
+                    color: isPro ? kGold : kLight.withOpacity(0.4),
                     fontSize: 11,
                   ),
                 ),
@@ -411,7 +412,7 @@ class AnalyticsScreen extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.8),
+      barrierColor: Colors.black.withOpacity(0.8),
       isScrollControlled: true,
       builder: (context) {
         return Container(
@@ -434,7 +435,7 @@ class AnalyticsScreen extends ConsumerWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: kLight.withValues(alpha: 0.2),
+                  color: kLight.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -443,7 +444,7 @@ class AnalyticsScreen extends ConsumerWidget {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: kGold.withValues(alpha: 0.15),
+                  color: kGold.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -467,7 +468,7 @@ class AnalyticsScreen extends ConsumerWidget {
                 'Để sử dụng tính năng "$featureName" và mở khóa không giới hạn thành viên, chuyến đi, tự động quy đổi ngoại tệ cùng với AI Trí Tuệ Nhân Tạo.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.beVietnamPro(
-                  color: kLight.withValues(alpha: 0.7),
+                  color: kLight.withOpacity(0.7),
                   fontSize: 14,
                   height: 1.5,
                 ),
@@ -489,7 +490,7 @@ class AnalyticsScreen extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: kGold.withValues(alpha: 0.25),
+                        color: kGold.withOpacity(0.25),
                         blurRadius: 16,
                         offset: const Offset(0, 6),
                       ),
@@ -513,7 +514,7 @@ class AnalyticsScreen extends ConsumerWidget {
                 child: Text(
                   'Để sau',
                   style: GoogleFonts.beVietnamPro(
-                    color: kLight.withValues(alpha: 0.5),
+                    color: kLight.withOpacity(0.5),
                     fontSize: 13,
                   ),
                 ),
@@ -534,7 +535,7 @@ class AnalyticsScreen extends ConsumerWidget {
           child: Text(
             text,
             style: GoogleFonts.beVietnamPro(
-              color: kLight.withValues(alpha: 0.8),
+              color: kLight.withOpacity(0.8),
               fontSize: 13,
             ),
           ),
@@ -558,7 +559,7 @@ class AnalyticsScreen extends ConsumerWidget {
         Text(
           label,
           style: GoogleFonts.beVietnamPro(
-            color: textCol.withValues(alpha: 0.5),
+            color: textCol.withOpacity(0.5),
             fontSize: 11,
           ),
         ),

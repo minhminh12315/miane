@@ -50,7 +50,7 @@ class _InitialSetupScreenState extends ConsumerState<InitialSetupScreen> {
               Text(
                 'Vùng quốc gia được chọn sẽ tự động thiết lập đơn vị tiền tệ mặc định cho chuyến đi và định dạng số hiển thị.',
                 style: GoogleFonts.beVietnamPro(
-                  color: kAzure.withValues(alpha: 0.8),
+                  color: kAzure.withOpacity(0.8),
                   fontSize: 13,
                   height: 1.4,
                 ),
@@ -60,7 +60,7 @@ class _InitialSetupScreenState extends ConsumerState<InitialSetupScreen> {
               Text(
                 'Tiền tệ mặc định',
                 style: GoogleFonts.beVietnamPro(
-                  color: kLight.withValues(alpha: 0.7),
+                  color: kLight.withOpacity(0.7),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -91,7 +91,7 @@ class _InitialSetupScreenState extends ConsumerState<InitialSetupScreen> {
               Text(
                 'Số dư ban đầu',
                 style: GoogleFonts.beVietnamPro(
-                  color: kLight.withValues(alpha: 0.7),
+                  color: kLight.withOpacity(0.7),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -103,7 +103,7 @@ class _InitialSetupScreenState extends ConsumerState<InitialSetupScreen> {
                   color: kNavy,
                   borderRadius: BorderRadius.circular(12), // rounded: md
                   border: Border.all(
-                    color: kAzure.withValues(alpha: 0.25),
+                    color: kAzure.withOpacity(0.25),
                     width: 1.0,
                   ),
                 ),
@@ -118,7 +118,7 @@ class _InitialSetupScreenState extends ConsumerState<InitialSetupScreen> {
                   decoration: InputDecoration(
                     hintText: '0',
                     hintStyle: GoogleFonts.beVietnamPro(
-                      color: kLight.withValues(alpha: 0.3),
+                      color: kLight.withOpacity(0.3),
                     ),
                     prefixIcon: Container(
                       width: 48,
@@ -151,7 +151,7 @@ class _InitialSetupScreenState extends ConsumerState<InitialSetupScreen> {
                     borderRadius: BorderRadius.circular(12), // rounded: md
                     boxShadow: [
                       BoxShadow(
-                        color: kAzure.withValues(alpha: 0.25),
+                        color: kAzure.withOpacity(0.25),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -192,10 +192,10 @@ class _InitialSetupScreenState extends ConsumerState<InitialSetupScreen> {
         duration: const Duration(milliseconds: 300),
         height: 70,
         decoration: BoxDecoration(
-          color: isSelected ? kNavy : kNavy.withValues(alpha: 0.4),
+          color: isSelected ? kNavy : kNavy.withOpacity(0.4),
           borderRadius: BorderRadius.circular(12), // rounded: md
           border: Border.all(
-            color: isSelected ? kGold : kAzure.withValues(alpha: 0.15),
+            color: isSelected ? kGold : kAzure.withOpacity(0.15),
             width: isSelected ? 2.0 : 1.0,
           ),
         ),
@@ -203,7 +203,7 @@ class _InitialSetupScreenState extends ConsumerState<InitialSetupScreen> {
           child: Text(
             label,
             style: GoogleFonts.beVietnamPro(
-              color: isSelected ? kGold : kLight.withValues(alpha: 0.7),
+              color: isSelected ? kGold : kLight.withOpacity(0.7),
               fontSize: 15,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
             ),

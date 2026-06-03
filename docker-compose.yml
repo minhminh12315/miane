@@ -139,6 +139,20 @@ services:
     networks:
       - Miane-network
 
+  mobile-client:
+    build:
+      context: ./src/Clients/mobile
+      dockerfile: Dockerfile
+      args:
+        - API_URL=http://localhost:5000
+    container_name: Miane-mobile-client
+    ports:
+      - "3000:80"
+    depends_on:
+      - web-gateway
+    networks:
+      - Miane-network
+
 volumes:
   postgres_data:
 

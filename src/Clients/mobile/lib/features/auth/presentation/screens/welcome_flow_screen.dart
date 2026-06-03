@@ -458,7 +458,7 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
               double dy = 0.0;
               double cardW = 100.0;
               double cardH = 100.0;
-              Color cardBorderColor = _kAzure.withValues(alpha: 0.4);
+              Color cardBorderColor = _kAzure.withOpacity(0.4);
 
               if (index == 0) {
                 angleX = math.sin(time) * 0.08;
@@ -467,7 +467,7 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
                 dy = -80.0 + (angleX * 20.0);
                 cardW = 160.0;
                 cardH = 100.0;
-                cardBorderColor = _kAzure.withValues(alpha: 0.3);
+                cardBorderColor = _kAzure.withOpacity(0.3);
               } else if (index == 1) {
                 angleX = math.cos(time + 1.2) * 0.1;
                 angleY = math.sin(time + 1.2) * 0.1;
@@ -475,7 +475,7 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
                 dy = 70.0 + (angleX * 35.0);
                 cardW = 110.0;
                 cardH = 70.0;
-                cardBorderColor = _kGold.withValues(alpha: 0.3);
+                cardBorderColor = _kGold.withOpacity(0.3);
               } else {
                 angleX = math.sin(time + 2.4) * 0.12;
                 angleY = math.cos(time + 2.4) * 0.06;
@@ -483,7 +483,7 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
                 dy = -20.0 + (angleX * 30.0);
                 cardW = 90.0;
                 cardH = 90.0;
-                cardBorderColor = _kLight.withValues(alpha: 0.3);
+                cardBorderColor = _kLight.withOpacity(0.3);
               }
 
               final double shimmerVal = (_loopController.value * 2.0) % 1.0;
@@ -509,7 +509,7 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
                             painter: GlassCardPainter(
                               shimmerProgress: shimmerVal,
                               borderColor: cardBorderColor,
-                              fillColor: _kNavy.withValues(alpha: 0.25),
+                              fillColor: _kNavy.withOpacity(0.25),
                             ),
                             child: SizedBox(
                               width: cardW,
@@ -597,7 +597,7 @@ class GlassCardPainter extends CustomPainter {
         end: Alignment.bottomRight,
         colors: [
           borderColor,
-          borderColor.withValues(alpha: 0.2),
+          borderColor.withOpacity(0.2),
           borderColor,
         ],
       ).createShader(rect)
@@ -634,8 +634,8 @@ class _GlowPainter extends CustomPainter {
         center: const Alignment(0.0, -0.2),
         radius: 0.9,
         colors: [
-          _kAzure.withValues(alpha: opacity.clamp(0.0, maxOpacity)),
-          _kNavy.withValues(alpha: (opacity * 0.35).clamp(0.0, maxOpacity)),
+          _kAzure.withOpacity(opacity.clamp(0.0, maxOpacity)),
+          _kNavy.withOpacity((opacity * 0.35).clamp(0.0, maxOpacity)),
           Colors.transparent,
         ],
         stops: const [0.0, 0.6, 1.0],
@@ -716,7 +716,7 @@ class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
                 end: Alignment.bottomCenter,
                 colors: [
                   _kAzure,
-                  _kGold.withValues(alpha: 0.15),
+                  _kGold.withOpacity(0.15),
                 ],
               ),
             ),
@@ -751,7 +751,7 @@ class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
                             color: node.$4 ? _kNavy : _kDark,
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: node.$4 ? _kAzure : _kAzure.withValues(alpha: 0.3),
+                              color: node.$4 ? _kAzure : _kAzure.withOpacity(0.3),
                               width: 1.5,
                             ),
                           ),
@@ -1099,7 +1099,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
               color: _kNavy.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: _kAzure.withValues(alpha: 0.3),
+                color: _kAzure.withOpacity(0.3),
                 width: 1,
               ),
             ),
@@ -1142,7 +1142,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
                               color: _kAzure,
                               boxShadow: [
                                 BoxShadow(
-                                  color: _kAzure.withValues(alpha: 0.8),
+                                  color: _kAzure.withOpacity(0.8),
                                   blurRadius: 4,
                                   spreadRadius: 1,
                                 )
@@ -1173,7 +1173,7 @@ class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: _kGold.withValues(alpha: 0.2),
+                              color: _kGold.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -1372,7 +1372,7 @@ class _LocalDotsIndicator extends StatelessWidget {
             height: 6,
             width: isActive ? 24 : 6,
             decoration: BoxDecoration(
-              color: isActive ? _kGold : _kGold.withValues(alpha: 0.3),
+              color: isActive ? _kGold : _kGold.withOpacity(0.3),
               borderRadius: BorderRadius.circular(3),
             ),
           ),
