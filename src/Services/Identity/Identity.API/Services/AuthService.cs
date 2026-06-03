@@ -111,7 +111,8 @@ namespace Identity.API.Services
 
                 // Custom informations for Frontend (make Next.js doesn't need to recall API get name)
                 new Claim("FullName", user.FullName),
-                new Claim("IsEmployee", user.IsEmployee.ToString())
+                new Claim("IsEmployee", user.IsEmployee.ToString()),
+                new Claim("UserTier", user.UserTier.ToString())
             };
 
             foreach (var permission in permissions)

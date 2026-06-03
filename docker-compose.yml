@@ -10,8 +10,14 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - Miane-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U Miane"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -20,6 +26,11 @@ services:
       - "6370:6379"
     networks:
       - Miane-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   identity-api:
     build:
@@ -37,10 +48,73 @@ services:
       - Firebase__ServiceAccountPath=${FIREBASE_SERVICE_ACCOUNT_PATH:-}
       - Firebase__ProjectId=${FIREBASE_PROJECT_ID:-}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "5127:5127"
+    networks:
+      - Miane-network
+
+  trip-api:
+    build:
+      context: .
+      dockerfile: src/Services/Trip/Trip.API/Dockerfile
+    container_name: Miane-trip-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5128
+      - ConnectionStrings__DefaultConnection=${TRIP_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=Miane_trip;Username=Miane;Password=Miane_password}
+      - Redis__ConnectionString=redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "5128:5128"
+    networks:
+      - Miane-network
+
+  expense-api:
+    build:
+      context: .
+      dockerfile: src/Services/Expense/Expense.API/Dockerfile
+    container_name: Miane-expense-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5129
+      - ConnectionStrings__DefaultConnection=${EXPENSE_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=Miane_expense;Username=Miane;Password=Miane_password}
+      - Redis__ConnectionString=redis:6379
+      - AiServices__BaseUrl=${AI_SERVICE_URL:-http://localhost:8000}
+      - AiServices__ApiKey=${AI_SERVICE_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "5129:5129"
+    networks:
+      - Miane-network
+
+  notification-api:
+    build:
+      context: .
+      dockerfile: src/Services/Notification/Notification.API/Dockerfile
+    container_name: Miane-notification-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5130
+      - ConnectionStrings__DefaultConnection=${NOTIFICATION_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=Miane_notification;Username=Miane;Password=Miane_password}
+      - Firebase__ServiceAccountPath=${FIREBASE_SERVICE_ACCOUNT_PATH:-}
+      - Firebase__ProjectId=${FIREBASE_PROJECT_ID:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5130:5130"
     networks:
       - Miane-network
 
@@ -59,6 +133,9 @@ services:
       - "5000:8080"
     depends_on:
       - identity-api
+      - trip-api
+      - expense-api
+      - notification-api
     networks:
       - Miane-network
 
