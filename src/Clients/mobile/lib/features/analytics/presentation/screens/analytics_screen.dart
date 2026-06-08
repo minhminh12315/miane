@@ -11,7 +11,7 @@ class AnalyticsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tripsState = ref.watch(tripsProvider);
-    final tripsList = tripsState.value ?? [];
+    final tripsList = tripsState.valueOrNull ?? [];
 
     const Color kDark = AppTheme.canvasDark;
     const Color kNavy = AppTheme.surfaceDark;

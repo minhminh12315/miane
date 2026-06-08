@@ -5,6 +5,8 @@ class ApiEndpoints {
   ); // Web gateway
 
   static const String register = '/auth/register';
+  static const String sendRegistrationOtp = '/auth/register/send-otp';
+  static const String verifyRegistrationOtp = '/auth/register/verify-otp';
   static const String login = '/auth/login';
   static const String logout = '/auth/logout';
   

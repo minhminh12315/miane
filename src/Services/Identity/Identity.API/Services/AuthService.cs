@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -11,6 +13,8 @@ using Identity.API.Data;
 using Identity.API.Models;
 using Identity.API.Models.Auth;
 using BuildingBlocks.Caching;
+using Microsoft.Extensions.Logging;
+
 
 namespace Identity.API.Services
 {
@@ -18,13 +22,18 @@ namespace Identity.API.Services
     {
         private readonly UserManager<User> _userManager;
         private readonly ICacheService _cacheService;
-        private readonly IConfiguration _config; 
+        private readonly IConfiguration _config;
+        private readonly IEmailService _emailService;
 
-        public AuthService(UserManager<User> userManager, ICacheService cacheService, IConfiguration config)
+        private readonly ILogger<AuthService> _logger;
+
+        public AuthService(UserManager<User> userManager, ICacheService cacheService, IConfiguration config, IEmailService emailService, ILogger<AuthService> logger)
         {
             _userManager = userManager;
             _cacheService = cacheService;
             _config = config;
+            _emailService = emailService;
+            _logger = logger;
         }
 
         public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
@@ -51,6 +60,117 @@ namespace Identity.API.Services
             {
                 throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => e.Description)));
             }
+
+            return await CreateAuthResponseAsync(user);
+        }
+
+        public async Task SendRegistrationOtpAsync(RegisterRequest request)
+        {
+            _logger.LogInformation("[SendOtp] Started OTP process for email: {Email}", request.Email);
+
+            // Validate: email must not already exist
+            var existingUser = await _userManager.FindByEmailAsync(request.Email);
+            if (existingUser is not null)
+            {
+                _logger.LogWarning("[SendOtp] Registration failed: Email {Email} is already registered.", request.Email);
+                throw new InvalidOperationException("Email này đã được đăng ký.");
+            }
+
+            // Validate password using Identity's password validator
+            var tempUser = new User { UserName = request.Email, Email = request.Email };
+            foreach (var validator in _userManager.PasswordValidators)
+            {
+                var passwordResult = await validator.ValidateAsync(_userManager, tempUser, request.Password);
+                if (!passwordResult.Succeeded)
+                {
+                    var errors = string.Join("; ", passwordResult.Errors.Select(e => e.Description));
+                    _logger.LogWarning("[SendOtp] Password validation failed for {Email}: {Errors}", request.Email, errors);
+                    throw new InvalidOperationException(errors);
+                }
+            }
+
+            // Generate 6-digit OTP
+            var otpCode = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
+            _logger.LogInformation("[SendOtp] Generated OTP {OtpCode} for {Email}", otpCode, request.Email);
+
+            // Store OTP + registration data in Redis with 5-minute TTL
+            var cacheKey = $"reg_otp_{request.Email.ToLowerInvariant()}";
+            var cacheData = new RegistrationOtpData
+            {
+                OtpCode = otpCode,
+                Email = request.Email,
+                Password = request.Password,
+                FullName = request.FullName,
+                AvatarUrl = request.AvatarUrl,
+                CreatedAt = DateTime.UtcNow
+            };
+            
+            try
+            {
+                await _cacheService.SetAsync(cacheKey, cacheData, TimeSpan.FromMinutes(5));
+                _logger.LogInformation("[SendOtp] Successfully saved OTP to Redis for {Email}", request.Email);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[SendOtp] Failed to save OTP to Redis for {Email}", request.Email);
+                throw;
+            }
+
+            // Send OTP email
+            try
+            {
+                _logger.LogInformation("[SendOtp] Attempting to send OTP email to {Email}...", request.Email);
+                await _emailService.SendOtpAsync(request.Email, otpCode);
+                _logger.LogInformation("[SendOtp] OTP email process completed for {Email}", request.Email);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[SendOtp] Error occurred while sending email to {Email}", request.Email);
+                throw;
+            }
+        }
+
+        public async Task<AuthResponse> VerifyRegistrationOtpAsync(string email, string otpCode)
+        {
+            var cacheKey = $"reg_otp_{email.ToLowerInvariant()}";
+            var cachedData = await _cacheService.GetAsync<RegistrationOtpData>(cacheKey);
+
+            if (cachedData is null)
+            {
+                throw new InvalidOperationException("Mã OTP đã hết hạn hoặc không tồn tại. Vui lòng yêu cầu mã mới.");
+            }
+
+            if (cachedData.OtpCode != otpCode)
+            {
+                throw new InvalidOperationException("Mã OTP không chính xác.");
+            }
+
+            // OTP is valid — create the user
+            var existingUser = await _userManager.FindByEmailAsync(cachedData.Email);
+            if (existingUser is not null)
+            {
+                throw new InvalidOperationException("Email này đã được đăng ký.");
+            }
+
+            var user = new User
+            {
+                UserName = cachedData.Email,
+                Email = cachedData.Email,
+                FullName = cachedData.FullName,
+                AvatarUrl = cachedData.AvatarUrl,
+                EmailConfirmed = true,
+                IsActive = true,
+                IsEmployee = false
+            };
+
+            var result = await _userManager.CreateAsync(user, cachedData.Password);
+            if (!result.Succeeded)
+            {
+                throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => e.Description)));
+            }
+
+            // Remove OTP from cache
+            await _cacheService.RemoveAsync(cacheKey);
 
             return await CreateAuthResponseAsync(user);
         }
@@ -146,5 +266,18 @@ namespace Identity.API.Services
         {
             await _cacheService.RemoveAsync($"session_{userId}");
         }
+    }
+
+    /// <summary>
+    /// Internal data structure for storing registration + OTP in Redis cache.
+    /// </summary>
+    internal class RegistrationOtpData
+    {
+        public string OtpCode { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string? AvatarUrl { get; set; }
+        public DateTime CreatedAt { get; set; }
     }
 }

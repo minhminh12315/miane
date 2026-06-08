@@ -115,7 +115,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> with 
       error: (err, stack) => Center(child: Text('Lỗi: $err', style: TextStyle(color: AppTheme.iosRed))),
       data: (expenses) {
         final totalSpent = expenses.fold<double>(0, (sum, e) => sum + e.amount);
-        final poolBalance = poolState.value?.balance ?? 0.0;
+        final poolBalance = poolState.valueOrNull?.balance ?? 0.0;
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -342,7 +342,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> with 
         final unsettled = balances.unsettledDebts;
         final settled = balances.settledDebts;
 
-        final currentUserId = userIdState.value;
+        final currentUserId = userIdState.valueOrNull;
 
         return RefreshIndicator(
           onRefresh: () async {

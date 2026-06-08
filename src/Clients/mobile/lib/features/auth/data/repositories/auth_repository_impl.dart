@@ -39,6 +39,34 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<void> sendRegistrationOtp(String email, String password, String fullName) async {
+    await _apiClient.post(
+      ApiEndpoints.sendRegistrationOtp,
+      body: {
+        'email': email,
+        'password': password,
+        'fullName': fullName,
+      },
+      authenticated: false,
+    );
+  }
+
+  @override
+  Future<AuthResponseModel> verifyRegistrationOtp(String email, String otpCode) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.verifyRegistrationOtp,
+      body: {
+        'email': email,
+        'otpCode': otpCode,
+      },
+      authenticated: false,
+    );
+    final authResponse = AuthResponseModel.fromJson(response);
+    await saveToken(authResponse.accessToken, authResponse.refreshToken);
+    return authResponse;
+  }
+
+  @override
   Future<void> logout() async {
     try {
       await _apiClient.post(ApiEndpoints.logout);

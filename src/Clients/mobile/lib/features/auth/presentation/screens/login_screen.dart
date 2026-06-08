@@ -118,9 +118,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         setState(() => _isLoading = true);
                         try {
                           await ref.read(appAuthProvider.notifier).login(email, password);
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
                         } catch (e) {
                           setState(() => _isLoading = false);
-                          if (mounted) {
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text('Đăng nhập thất bại: ${e.toString().replaceAll('ApiException: ', '')}'),

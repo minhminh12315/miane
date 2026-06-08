@@ -45,6 +45,19 @@ class AppAuth extends _$AppAuth {
     state = AppAuthStatus.authenticated;
   }
 
+  /// Phase 1: Send OTP to email. Does NOT create the account yet.
+  Future<void> sendRegistrationOtp(String email, String password, String fullName) async {
+    final repo = ref.read(authRepositoryProvider);
+    await repo.sendRegistrationOtp(email, password, fullName);
+  }
+
+  /// Phase 2: Verify OTP and create the account.
+  Future<void> verifyRegistrationOtp(String email, String otpCode) async {
+    final repo = ref.read(authRepositoryProvider);
+    await repo.verifyRegistrationOtp(email, otpCode);
+    state = AppAuthStatus.authenticated;
+  }
+
   void completeSetup() {
     state = AppAuthStatus.authenticated;
   }
@@ -55,9 +68,14 @@ class AppAuth extends _$AppAuth {
   }
 
   Future<void> logout() async {
-    final repo = ref.read(authRepositoryProvider);
-    await repo.logout();
-    state = AppAuthStatus.unauthenticated;
+    try {
+      final repo = ref.read(authRepositoryProvider);
+      await repo.logout();
+    } catch (_) {
+      // Ignore errors on logout to ensure user can still sign out locally
+    } finally {
+      state = AppAuthStatus.unauthenticated;
+    }
   }
 }
 

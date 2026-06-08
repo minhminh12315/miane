@@ -33,6 +33,12 @@ class MianeApp extends StatelessWidget {
         ),
         home: Consumer(
           builder: (context, ref, child) {
+            ref.listen<AppAuthStatus>(appAuthProvider, (previous, next) {
+              if (next == AppAuthStatus.unauthenticated || next == AppAuthStatus.welcome) {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+            });
+            
             final authStatus = ref.watch(appAuthProvider);
             switch (authStatus) {
               case AppAuthStatus.welcome:

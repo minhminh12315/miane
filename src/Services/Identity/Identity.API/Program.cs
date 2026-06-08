@@ -16,6 +16,7 @@ var jwtSettings = builder.Configuration.GetSection("Jwt");
 var key = jwtSettings["Key"] ?? throw new InvalidOperationException("Jwt:Key is not configured");
 
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddSingleton<IEmailService, EmailService>();
 
 // Add services to the container.
 builder.Services.AddControllers();

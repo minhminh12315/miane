@@ -39,7 +39,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final tripsState = ref.watch(tripsProvider);
-    final trips = tripsState.value ?? [];
+    final trips = tripsState.valueOrNull ?? [];
     final filteredTrips = trips.where((trip) {
       if (_query.isEmpty) return true;
       return trip.name.toLowerCase().contains(_query) ||

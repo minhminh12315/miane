@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../controllers/app_auth_provider.dart';
+import 'otp_verification_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -135,17 +136,30 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
                         setState(() => _isLoading = true);
                         try {
-                          await ref.read(appAuthProvider.notifier).register(email, password, fullName);
+                          await ref.read(appAuthProvider.notifier).sendRegistrationOtp(email, password, fullName);
+                          if (context.mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => OtpVerificationScreen(
+                                  email: email,
+                                  password: password,
+                                  fullName: fullName,
+                                ),
+                              ),
+                            );
+                          }
                         } catch (e) {
-                          setState(() => _isLoading = false);
-                          if (mounted) {
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Đăng ký thất bại: ${e.toString().replaceAll('ApiException: ', '')}'),
+                                content: Text('Gửi mã xác minh thất bại: ${e.toString().replaceAll('ApiException: ', '')}'),
                                 backgroundColor: Colors.redAccent,
                               ),
                             );
                           }
+                        } finally {
+                          if (mounted) setState(() => _isLoading = false);
                         }
                       },
                 child: Container(

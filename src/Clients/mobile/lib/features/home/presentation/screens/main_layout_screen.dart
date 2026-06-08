@@ -99,7 +99,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
                 child: _buildFloatingStatsButton(
                   isSelected: _currentIndex == 2,
                   onTap: () => _onTabSelected(2),
-                  tripCount: trips.value?.length ?? 0,
+                  tripCount: trips.valueOrNull?.length ?? 0,
                   kAzure: kAzure,
                   kNavy: kNavy,
                   kLight: kLight,
@@ -235,7 +235,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
 
   void _handleAddNewTrip(BuildContext context) {
     final tripsState = ref.read(tripsProvider);
-    final tripsList = tripsState.value ?? [];
+    final tripsList = tripsState.valueOrNull ?? [];
     if (tripsList.length >= 2) {
       _showProPaywall(context);
       return;
