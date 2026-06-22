@@ -2,7 +2,7 @@
 FROM debian:bookworm-slim AS build
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Max-FutureTime=86400 update && apt-get install -y \
   curl \
   git \
   unzip \
