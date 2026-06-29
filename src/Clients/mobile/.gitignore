@@ -47,4 +47,4 @@ Desktop.ini
 skills-lock.json
 
 # ── Flutter project metadata (machine-specific) ───────────────────────────────
-.metadata
+.metadata.env
