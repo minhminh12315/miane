@@ -20,6 +20,9 @@ ENV PATH="/usr/local/flutter/bin:/usr/local/flutter/bin/cache/dart-sdk/bin:${PAT
 # Run flutter doctor to trigger download of SDK dependencies
 RUN flutter doctor -v
 
+# Enable web platform + pre-cache web SDK
+RUN flutter config --enable-web && flutter precache --web
+
 # Set working directory
 WORKDIR /app
 
@@ -31,6 +34,9 @@ RUN flutter pub get
 
 # Copy all source files
 COPY . .
+
+# Ensure web platform is scaffolded (no-op nếu đã có thư mục web/)
+RUN flutter create --platforms web . 2>/dev/null || true
 
 # Generate Riverpod/Freezed files
 RUN flutter pub run build_runner build --delete-conflicting-outputs
