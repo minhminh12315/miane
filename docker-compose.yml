@@ -14,7 +14,7 @@ services:
     networks:
       - Miane-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U Miane"]
+      test: ["CMD-SHELL", "pg_isready -U Miane -d Miane_identity"]
       interval: 5s
       timeout: 5s
       retries: 10
