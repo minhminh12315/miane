@@ -5,10 +5,11 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Yarp.ReverseProxy.Transforms;
+using BuildingBlocks.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is not configured");
-
+// ... Rest of configuration ...
 var frontendOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? new[] { "http://localhost:5173", "http://localhost:3000" };
 
@@ -91,6 +92,7 @@ builder.Services.AddReverseProxy()
 
 var app = builder.Build();
 
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();

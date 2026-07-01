@@ -17,12 +17,19 @@ public class EmailService : IEmailService
 
     public async Task SendOtpAsync(string toEmail, string otpCode)
     {
-        var smtpHost = _config["Smtp:Host"] ?? "smtp.gmail.com";
-        var smtpPort = int.Parse(_config["Smtp:Port"] ?? "587");
-        var smtpUsername = _config["Smtp:Username"] ?? "";
-        var smtpPassword = _config["Smtp:Password"] ?? "";
-        var fromEmail = _config["Smtp:FromEmail"] ?? smtpUsername;
-        var fromName = _config["Smtp:FromName"] ?? "MIANE";
+        var smtpHost = GetSmtpSetting("Host", "smtp.gmail.com");
+        var smtpPortValue = GetSmtpSetting("Port", "587");
+        if (!int.TryParse(smtpPortValue, out var smtpPort))
+        {
+            throw new InvalidOperationException("Smtp:Port is invalid.");
+        }
+
+        var smtpUsername = GetSmtpSetting("Username");
+        var smtpPassword = GetSmtpSetting("Password");
+        var fromEmail = GetSmtpSetting("FromEmail", smtpUsername);
+        var fromName = GetSmtpSetting("FromName", "MIANE");
+
+        EnsureSmtpConfigured(smtpHost, smtpUsername, smtpPassword, fromEmail);
 
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(fromName, fromEmail));
@@ -45,17 +52,8 @@ public class EmailService : IEmailService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send OTP email to {Email} via SMTP. Fallback to Console/Log for Local Development.", toEmail);
-            _logger.LogWarning("=================================================");
-            _logger.LogWarning("DEV OTP CODE FOR {Email}: {Otp}", toEmail, otpCode);
-            _logger.LogWarning("=================================================");
-            
-            // In development, do not block registration flow when SMTP fails.
-            var isDevelopment = string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Development", StringComparison.OrdinalIgnoreCase);
-            if (!isDevelopment)
-            {
-                throw new InvalidOperationException("Không thể gửi email xác minh. Vui lòng thử lại sau.");
-            }
+            _logger.LogError(ex, "Failed to send OTP email to {Email} via SMTP.", toEmail);
+            throw new InvalidOperationException("Khong the gui email xac minh. Vui long kiem tra cau hinh SMTP hoac thu lai sau.", ex);
         }
         finally
         {
@@ -67,6 +65,45 @@ public class EmailService : IEmailService
                 }
             }
             catch {}
+        }
+    }
+
+    private string GetSmtpSetting(string key, string? defaultValue = null)
+    {
+        var fullKey = $"Smtp:{key}";
+
+        if (_config is IConfigurationRoot root)
+        {
+            foreach (var provider in root.Providers.Reverse())
+            {
+                if (provider.TryGet(fullKey, out var value) && !string.IsNullOrWhiteSpace(value))
+                {
+                    return value.Trim();
+                }
+            }
+        }
+
+        var configuredValue = _config[fullKey];
+        if (!string.IsNullOrWhiteSpace(configuredValue))
+        {
+            return configuredValue.Trim();
+        }
+
+        return defaultValue?.Trim() ?? string.Empty;
+    }
+
+    private static void EnsureSmtpConfigured(string smtpHost, string smtpUsername, string smtpPassword, string fromEmail)
+    {
+        var missing = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(smtpHost)) missing.Add("Smtp:Host");
+        if (string.IsNullOrWhiteSpace(smtpUsername)) missing.Add("Smtp:Username");
+        if (string.IsNullOrWhiteSpace(smtpPassword)) missing.Add("Smtp:Password");
+        if (string.IsNullOrWhiteSpace(fromEmail)) missing.Add("Smtp:FromEmail");
+
+        if (missing.Count > 0)
+        {
+            throw new InvalidOperationException($"SMTP is not configured. Missing: {string.Join(", ", missing)}.");
         }
     }
 

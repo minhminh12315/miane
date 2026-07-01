@@ -91,7 +91,7 @@ namespace Identity.API.Services
 
             // Generate 6-digit OTP
             var otpCode = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
-            _logger.LogInformation("[SendOtp] Generated OTP {OtpCode} for {Email}", otpCode, request.Email);
+            _logger.LogInformation("[SendOtp] Generated OTP for {Email}", request.Email);
 
             // Store OTP + registration data in Redis with 5-minute TTL
             var cacheKey = $"reg_otp_{request.Email.ToLowerInvariant()}";
