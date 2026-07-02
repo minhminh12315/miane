@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -10,11 +11,14 @@ import '../../../../core/theme/app_theme.dart';
 part 'welcome_flow_screen.g.dart';
 
 // ── DESIGN SYSTEM TOKENS (DESIGN.md) ─────────────────────────────────────────
-const Color _kDark = AppTheme.canvasDark;       // iOS Canvas Black
-const Color _kNavy = AppTheme.surfaceDark;       // iOS Grouped Surface Dark
-const Color _kAzure = AppTheme.iosBlue;      // iOS System Blue
-const Color _kGold = AppTheme.iosGold;       // iOS Amber/Gold
-const Color _kLight = AppTheme.iosLight;      // iOS System Light
+const Color _kDark = AppTheme.canvasDark; // iOS Canvas Black
+const Color _kNavy = AppTheme.surfaceDark; // iOS Grouped Surface Dark
+const Color _kAzure = AppTheme.iosBlue; // iOS System Blue
+const Color _kGold = AppTheme.iosGold; // iOS Amber/Gold
+const Color _kLight = AppTheme.iosLight; // iOS System Light
+const Duration _kIntroDuration = Duration(milliseconds: 6200);
+const Duration _kOnboardingRevealDelay = Duration(milliseconds: 6200);
+const Duration _kOnboardingRevealDuration = Duration(milliseconds: 900);
 
 // ── STATE MANAGEMENT ────────────────────────────────────────────────────────
 @riverpod
@@ -40,9 +44,13 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
   
   // Timeline Animation Controller (for linear narrative progression)
   late final AnimationController _timelineController;
-  
+
+  // Onboarding reveal is delayed separately so intro cannot be skipped by a fast timeline.
+  late final AnimationController _onboardingRevealController;
+
   // Continuous Repeating Controller (for 3D tilt, shimmers, and glow pulsing)
   late final AnimationController _loopController;
+  Timer? _onboardingRevealTimer;
 
   // Page controller for onboarding steps
   late final PageController _pageController;
@@ -63,67 +71,81 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
     super.initState();
     _pageController = PageController();
 
-    // 1. Narrative timeline controller (3800ms total duration)
+    // 1. Narrative timeline controller for the intro only.
     _timelineController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3800),
+      duration: _kIntroDuration,
+      animationBehavior: AnimationBehavior.preserve,
+    );
+
+    _onboardingRevealController = AnimationController(
+      vsync: this,
+      duration: _kOnboardingRevealDuration,
+      animationBehavior: AnimationBehavior.preserve,
     );
 
     // 2. Loop controller for active environmental micro-oscillations (6000ms duration)
     _loopController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 6000),
+      animationBehavior: AnimationBehavior.preserve,
     )..repeat();
 
     // ── ANIMATION INTERVAL DEFINITIONS ──
-    
-    // Phase 1 (0ms - 1000ms) -> Interval [0.0, 0.26]
+
+    // Phase 1 (0ms - 1200ms) -> logo reveal
     _glowFade = CurvedAnimation(
       parent: _timelineController,
-      curve: const Interval(0.0, 0.22, curve: Curves.easeOut),
+      curve: const Interval(0.0, 0.16, curve: Curves.easeOut),
     );
     _logoFadeIn = CurvedAnimation(
       parent: _timelineController,
-      curve: const Interval(0.05, 0.26, curve: Curves.easeIn),
+      curve: const Interval(0.03, 0.18, curve: Curves.easeIn),
     );
     _logoScaleIn = CurvedAnimation(
       parent: _timelineController,
-      curve: const Interval(0.05, 0.26, curve: Curves.easeOutBack),
+      curve: const Interval(0.03, 0.18, curve: Curves.easeOutBack),
     );
 
-    // Phase 2 (1000ms - 2500ms) -> Interval [0.26, 0.65]
+    // Phase 2 (1200ms - 3600ms) -> cards reveal and hold
     _cardsFadeIn = CurvedAnimation(
       parent: _timelineController,
-      curve: const Interval(0.26, 0.38, curve: Curves.easeIn),
+      curve: const Interval(0.16, 0.29, curve: Curves.easeIn),
     );
     _cardsScaleIn = CurvedAnimation(
       parent: _timelineController,
-      curve: const Interval(0.26, 0.42, curve: Curves.easeOutBack),
+      curve: const Interval(0.16, 0.33, curve: Curves.easeOutBack),
     );
 
-    // Phase 3 (2500ms - 3000ms) -> Interval [0.65, 0.79]
+    // Phase 3 (3600ms - 5200ms) -> cards collapse, slogan reveal, and hold
     _cardsCollapse = CurvedAnimation(
       parent: _timelineController,
-      curve: const Interval(0.65, 0.74, curve: Curves.easeInCubic),
+      curve: const Interval(0.58, 0.68, curve: Curves.easeInCubic),
     );
     _sloganFadeIn = CurvedAnimation(
       parent: _timelineController,
-      curve: const Interval(0.74, 0.87, curve: Curves.easeOut),
+      curve: const Interval(0.64, 0.73, curve: Curves.easeOut),
     );
 
-    // Phase 4 (3000ms - 3800ms) -> Interval [0.79, 1.0]
+    // Phase 4 starts after the intro has had a real minimum screen time.
     _onboardingFadeIn = CurvedAnimation(
-      parent: _timelineController,
-      curve: const Interval(0.79, 1.0, curve: Curves.easeOutCubic),
+      parent: _onboardingRevealController,
+      curve: Curves.easeOutCubic,
     );
 
     // Kick off transition flow
     _timelineController.forward();
+    _onboardingRevealTimer = Timer(_kOnboardingRevealDelay, () {
+      if (!mounted) return;
+      _onboardingRevealController.forward();
+    });
   }
 
   @override
   void dispose() {
+    _onboardingRevealTimer?.cancel();
     _timelineController.dispose();
+    _onboardingRevealController.dispose();
     _loopController.dispose();
     _pageController.dispose();
     super.dispose();
@@ -728,7 +750,7 @@ class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
             final node = nodes[index];
             final double start = index * 0.15;
             final double end = (start + 0.5).clamp(0.0, 1.0);
-            
+
             final anim = CurvedAnimation(
               parent: _controller,
               curve: Interval(start, end, curve: Curves.easeOutBack),
@@ -1022,7 +1044,7 @@ class _DonutChartPainter extends CustomPainter {
     for (final seg in segments) {
       final sweepAngle = seg.$1 * 2 * math.pi * progress;
       paint.color = seg.$2;
-      
+
       canvas.drawArc(rect, startAngle + 0.04, sweepAngle - 0.08, false, paint);
       startAngle += seg.$1 * 2 * math.pi;
     }
@@ -1280,15 +1302,15 @@ class _QrMarkerPainter extends CustomPainter {
     final p = Paint()
       ..color = _kNavy
       ..style = PaintingStyle.fill;
-    
+
     canvas.drawRect(const Rect.fromLTWH(3, 3, 14, 14), p);
     canvas.drawRect(const Rect.fromLTWH(5, 5, 10, 10), Paint()..color = Colors.white);
     canvas.drawRect(const Rect.fromLTWH(7, 7, 6, 6), p);
-    
+
     canvas.drawRect(Rect.fromLTWH(size.width - 17, 3, 14, 14), p);
     canvas.drawRect(Rect.fromLTWH(size.width - 15, 5, 10, 10), Paint()..color = Colors.white);
     canvas.drawRect(Rect.fromLTWH(size.width - 13, 7, 6, 6), p);
-    
+
     canvas.drawRect(Rect.fromLTWH(3, size.height - 17, 14, 14), p);
     canvas.drawRect(Rect.fromLTWH(5, size.height - 15, 10, 10), Paint()..color = Colors.white);
     canvas.drawRect(Rect.fromLTWH(7, size.height - 13, 6, 6), p);
@@ -1302,7 +1324,7 @@ class _QrMarkerPainter extends CustomPainter {
 class _StepShell extends StatelessWidget {
   final Widget visual;
   final String title, body;
-  
+
   const _StepShell({required this.visual, required this.title, required this.body});
 
   @override

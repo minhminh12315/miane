@@ -5,6 +5,7 @@ import '../../data/repositories/auth_repository_impl.dart';
 part 'app_auth_provider.g.dart';
 
 enum AppAuthStatus {
+  initializing,
   welcome,
   unauthenticated,
   needsSetup,
@@ -16,7 +17,7 @@ class AppAuth extends _$AppAuth {
   @override
   AppAuthStatus build() {
     _checkInitialState();
-    return AppAuthStatus.welcome;
+    return AppAuthStatus.initializing;
   }
 
   Future<void> _checkInitialState() async {
@@ -25,8 +26,12 @@ class AppAuth extends _$AppAuth {
       final token = await repo.getToken();
       if (token != null && token.isNotEmpty) {
         state = AppAuthStatus.authenticated;
+      } else {
+        state = AppAuthStatus.welcome;
       }
-    } catch (_) {}
+    } catch (_) {
+      state = AppAuthStatus.welcome;
+    }
   }
 
   void completeWelcome() {
@@ -46,7 +51,8 @@ class AppAuth extends _$AppAuth {
   }
 
   /// Phase 1: Send OTP to email. Does NOT create the account yet.
-  Future<void> sendRegistrationOtp(String email, String password, String fullName) async {
+  Future<void> sendRegistrationOtp(
+      String email, String password, String fullName) async {
     final repo = ref.read(authRepositoryProvider);
     await repo.sendRegistrationOtp(email, password, fullName);
   }
@@ -90,5 +96,3 @@ final currentUserIdProvider = FutureProvider<String?>((ref) async {
   }
   return null;
 });
-
-

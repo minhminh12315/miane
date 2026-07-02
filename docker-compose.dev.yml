@@ -1,0 +1,239 @@
+# ─── MIANE DEVELOPMENT DOCKER COMPOSE CONFIGURATION ──────────────────────────
+# This file is optimized for local development workflows.
+# 
+# WORKFLOWS:
+# 
+# 1. Running Infrastructure Only (Recommended for local IDE development):
+#    Use this mode to run PostgreSQL and Redis in containers, and run the backend 
+#    services and Flutter app directly on your host machine for debugging.
+#    Command:
+#       docker compose -f docker-compose.dev.yml up postgres redis -d
+# 
+# 2. Running Full Stack with Hot Reload (dotnet watch):
+#    Use this mode to run all services containerized. The .NET containers will use 
+#    the .NET SDK, mount your source code, and rebuild/restart automatically on changes.
+#    Command:
+#       docker compose -f docker-compose.dev.yml up --build
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: Miane-postgres-dev
+    environment:
+      - POSTGRES_DB=Miane_identity
+      - POSTGRES_USER=Miane
+      - POSTGRES_PASSWORD=Miane_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - Miane-network-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U Miane -d Miane_identity"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: Miane-redis-dev
+    ports:
+      - "6370:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - Miane-network-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  identity-api:
+    build:
+      context: .
+      dockerfile: src/Services/Identity/Identity.API/Dockerfile
+      target: build
+    container_name: Miane-identity-api-dev
+    working_dir: /src
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5127
+      - ConnectionStrings__DefaultConnection=${IDENTITY_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=Miane_identity;Username=Miane;Password=Miane_password}
+      - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
+      - Jwt__Issuer=MianeIdentityService
+      - Jwt__Audience=MianeClients
+      - Redis__ConnectionString=redis:6379
+      - Firebase__ServiceAccountPath=${FIREBASE_SERVICE_ACCOUNT_PATH:-}
+      - Firebase__ProjectId=${FIREBASE_PROJECT_ID:-}
+      - Smtp__Host=${SMTP_HOST:-smtp.gmail.com}
+      - Smtp__Port=${SMTP_PORT:-587}
+      - Smtp__Username=${SMTP_USERNAME:-}
+      - Smtp__Password=${SMTP_PASSWORD:-}
+      - Smtp__FromEmail=${SMTP_FROM_EMAIL:-}
+      - Smtp__FromName=${SMTP_FROM_NAME:-MIANE}
+      # dotnet watch configuration for Docker
+      - ASPNETCORE_USE_POLLING_FILE_WATCHER=1
+      - DOTNET_USE_POLLING_FILE_WATCHER=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "5127:5127"
+    volumes:
+      - .:/src
+      # Anonymous volumes to prevent bin/obj directories from being overwritten by the host system
+      - /src/src/Services/Identity/Identity.API/bin
+      - /src/src/Services/Identity/Identity.API/obj
+      - /src/src/BuildingBlocks/bin
+      - /src/src/BuildingBlocks/obj
+    entrypoint: ["dotnet", "watch", "run", "--project", "src/Services/Identity/Identity.API/Identity.API.csproj", "--no-launch-profile"]
+    networks:
+      - Miane-network-dev
+
+  trip-api:
+    build:
+      context: .
+      dockerfile: src/Services/Trip/Trip.API/Dockerfile
+      target: build
+    container_name: Miane-trip-api-dev
+    working_dir: /src
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5128
+      - ConnectionStrings__DefaultConnection=${TRIP_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=Miane_trip;Username=Miane;Password=Miane_password}
+      - Redis__ConnectionString=redis:6379
+      # dotnet watch configuration for Docker
+      - ASPNETCORE_USE_POLLING_FILE_WATCHER=1
+      - DOTNET_USE_POLLING_FILE_WATCHER=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "5128:5128"
+    volumes:
+      - .:/src
+      # Anonymous volumes to prevent bin/obj directories from being overwritten by the host system
+      - /src/src/Services/Trip/Trip.API/bin
+      - /src/src/Services/Trip/Trip.API/obj
+      - /src/src/BuildingBlocks/bin
+      - /src/src/BuildingBlocks/obj
+    entrypoint: ["dotnet", "watch", "run", "--project", "src/Services/Trip/Trip.API/Trip.API.csproj", "--no-launch-profile"]
+    networks:
+      - Miane-network-dev
+
+  expense-api:
+    build:
+      context: .
+      dockerfile: src/Services/Expense/Expense.API/Dockerfile
+      target: build
+    container_name: Miane-expense-api-dev
+    working_dir: /src
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5129
+      - ConnectionStrings__DefaultConnection=${EXPENSE_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=Miane_expense;Username=Miane;Password=Miane_password}
+      - Redis__ConnectionString=redis:6379
+      - AiServices__BaseUrl=${AI_SERVICE_URL:-http://localhost:8000}
+      - AiServices__ApiKey=${AI_SERVICE_API_KEY:-}
+      # dotnet watch configuration for Docker
+      - ASPNETCORE_USE_POLLING_FILE_WATCHER=1
+      - DOTNET_USE_POLLING_FILE_WATCHER=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "5129:5129"
+    volumes:
+      - .:/src
+      # Anonymous volumes to prevent bin/obj directories from being overwritten by the host system
+      - /src/src/Services/Expense/Expense.API/bin
+      - /src/src/Services/Expense/Expense.API/obj
+      - /src/src/BuildingBlocks/bin
+      - /src/src/BuildingBlocks/obj
+    entrypoint: ["dotnet", "watch", "run", "--project", "src/Services/Expense/Expense.API/Expense.API.csproj", "--no-launch-profile"]
+    networks:
+      - Miane-network-dev
+
+  notification-api:
+    build:
+      context: .
+      dockerfile: src/Services/Notification/Notification.API/Dockerfile
+      target: build
+    container_name: Miane-notification-api-dev
+    working_dir: /src
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5130
+      - ConnectionStrings__DefaultConnection=${NOTIFICATION_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=Miane_notification;Username=Miane;Password=Miane_password}
+      - Firebase__ServiceAccountPath=${FIREBASE_SERVICE_ACCOUNT_PATH:-}
+      - Firebase__ProjectId=${FIREBASE_PROJECT_ID:-}
+      # dotnet watch configuration for Docker
+      - ASPNETCORE_USE_POLLING_FILE_WATCHER=1
+      - DOTNET_USE_POLLING_FILE_WATCHER=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5130:5130"
+    volumes:
+      - .:/src
+      # Anonymous volumes to prevent bin/obj directories from being overwritten by the host system
+      - /src/src/Services/Notification/Notification.API/bin
+      - /src/src/Services/Notification/Notification.API/obj
+      - /src/src/BuildingBlocks/bin
+      - /src/src/BuildingBlocks/obj
+    entrypoint: ["dotnet", "watch", "run", "--project", "src/Services/Notification/Notification.API/Notification.API.csproj", "--no-launch-profile"]
+    networks:
+      - Miane-network-dev
+
+  web-gateway:
+    build:
+      context: .
+      dockerfile: src/ApiGateways/Web.Gateway/Dockerfile
+      target: build
+    container_name: Miane-web-gateway-dev
+    working_dir: /src
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
+      - Jwt__Issuer=MianeIdentityService
+      - Jwt__Audience=MianeClients
+      # dotnet watch configuration for Docker
+      - ASPNETCORE_USE_POLLING_FILE_WATCHER=1
+      - DOTNET_USE_POLLING_FILE_WATCHER=1
+    ports:
+      - "5000:8080"
+    depends_on:
+      - identity-api
+      - trip-api
+      - expense-api
+      - notification-api
+    volumes:
+      - .:/src
+      # Anonymous volumes to prevent bin/obj directories from being overwritten by the host system
+      - /src/src/ApiGateways/Web.Gateway/bin
+      - /src/src/ApiGateways/Web.Gateway/obj
+      - /src/src/BuildingBlocks/bin
+      - /src/src/BuildingBlocks/obj
+    entrypoint: ["dotnet", "watch", "run", "--project", "src/ApiGateways/Web.Gateway/Web.Gateway.csproj", "--no-launch-profile"]
+    networks:
+      - Miane-network-dev
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+
+networks:
+  Miane-network-dev:
+    driver: bridge

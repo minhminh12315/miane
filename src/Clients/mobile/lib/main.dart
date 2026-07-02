@@ -34,13 +34,16 @@ class MianeApp extends StatelessWidget {
         home: Consumer(
           builder: (context, ref, child) {
             ref.listen<AppAuthStatus>(appAuthProvider, (previous, next) {
-              if (next == AppAuthStatus.unauthenticated || next == AppAuthStatus.welcome) {
+              if (next == AppAuthStatus.unauthenticated ||
+                  next == AppAuthStatus.welcome) {
                 Navigator.of(context).popUntil((route) => route.isFirst);
               }
             });
-            
+
             final authStatus = ref.watch(appAuthProvider);
             switch (authStatus) {
+              case AppAuthStatus.initializing:
+                return const _AppBootSplash();
               case AppAuthStatus.welcome:
                 return const WelcomeFlowScreen();
               case AppAuthStatus.unauthenticated:
@@ -51,6 +54,27 @@ class MianeApp extends StatelessWidget {
                 return const MainLayoutScreen();
             }
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _AppBootSplash extends StatelessWidget {
+  const _AppBootSplash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: AppTheme.canvasDark,
+      body: Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: AppTheme.iosGold,
+          ),
         ),
       ),
     );
