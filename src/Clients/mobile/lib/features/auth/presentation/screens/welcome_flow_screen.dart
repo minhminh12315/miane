@@ -1,26 +1,15 @@
-import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui';
-import 'package:flutter/material.dart';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../controllers/app_auth_provider.dart';
+
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/ui/ios_ui.dart';
+import '../controllers/app_auth_provider.dart';
 
 part 'welcome_flow_screen.g.dart';
 
-// ── DESIGN SYSTEM TOKENS (DESIGN.md) ─────────────────────────────────────────
-const Color _kDark = AppTheme.canvasDark; // iOS Canvas Black
-const Color _kNavy = AppTheme.surfaceDark; // iOS Grouped Surface Dark
-const Color _kAzure = AppTheme.iosBlue; // iOS System Blue
-const Color _kGold = AppTheme.iosGold; // iOS Amber/Gold
-const Color _kLight = AppTheme.iosLight; // iOS System Light
-const Duration _kIntroDuration = Duration(milliseconds: 6200);
-const Duration _kOnboardingRevealDelay = Duration(milliseconds: 6200);
-const Duration _kOnboardingRevealDuration = Duration(milliseconds: 900);
-
-// ── STATE MANAGEMENT ────────────────────────────────────────────────────────
 @riverpod
 class WelcomeFlowPageIndex extends _$WelcomeFlowPageIndex {
   @override
@@ -31,7 +20,6 @@ class WelcomeFlowPageIndex extends _$WelcomeFlowPageIndex {
   }
 }
 
-// ── MAIN SCREEN ──────────────────────────────────────────────────────────────
 class WelcomeFlowScreen extends ConsumerStatefulWidget {
   const WelcomeFlowScreen({super.key});
 
@@ -41,527 +29,155 @@ class WelcomeFlowScreen extends ConsumerStatefulWidget {
 
 class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
     with TickerProviderStateMixin {
-  
-  // Timeline Animation Controller (for linear narrative progression)
-  late final AnimationController _timelineController;
-
-  // Onboarding reveal is delayed separately so intro cannot be skipped by a fast timeline.
-  late final AnimationController _onboardingRevealController;
-
-  // Continuous Repeating Controller (for 3D tilt, shimmers, and glow pulsing)
-  late final AnimationController _loopController;
-  Timer? _onboardingRevealTimer;
-
-  // Page controller for onboarding steps
   late final PageController _pageController;
-  int _currentPage = 0;
+  late final AnimationController _introController;
+  late final AnimationController _liquidController;
 
-  // Staggered timeline animations
-  late final Animation<double> _glowFade;
-  late final Animation<double> _logoFadeIn;
-  late final Animation<double> _logoScaleIn;
-  late final Animation<double> _cardsFadeIn;
-  late final Animation<double> _cardsScaleIn;
-  late final Animation<double> _cardsCollapse;
-  late final Animation<double> _sloganFadeIn;
-  late final Animation<double> _onboardingFadeIn;
+  double _pageValue = 0;
+
+  static const _steps = [
+    _WelcomeStep(
+      icon: CupertinoIcons.map_fill,
+      title: 'Du lịch gọn hơn',
+      body: 'Tạo chuyến đi, mời bạn bè và gom mọi khoản chi vào một nơi.',
+      accent: AppTheme.iosOrange,
+      gradient: [Color(0xFF4A2D1D), Color(0xFF17142E), Color(0xFF050505)],
+      routeFrom: 'HAN',
+      routeTo: 'DAD',
+      routeLabel: 'Trip Plan',
+    ),
+    _WelcomeStep(
+      icon: CupertinoIcons.money_dollar_circle_fill,
+      title: 'Chia tiền rõ ràng',
+      body: 'Theo dõi ai đã trả, ai cần thanh toán và số dư quỹ nhóm.',
+      accent: AppTheme.iosBlue,
+      gradient: [Color(0xFF0E3A55), Color(0xFF11182C), Color(0xFF050505)],
+      routeFrom: 'PAY',
+      routeTo: 'SPLIT',
+      routeLabel: 'Expenses',
+    ),
+    _WelcomeStep(
+      icon: CupertinoIcons.sparkles,
+      title: 'Sẵn sàng cho chuyến mới',
+      body:
+          'MIANE giữ phần tài chính nhẹ nhàng để bạn tập trung tận hưởng hành trình.',
+      accent: AppTheme.iosPink,
+      gradient: [Color(0xFF4B1230), Color(0xFF18143A), Color(0xFF050505)],
+      routeFrom: 'GO',
+      routeTo: 'DONE',
+      routeLabel: 'Assistant',
+    ),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    _pageController = PageController()
+      ..addListener(() {
+        final page =
+            _pageController.page ?? _pageController.initialPage.toDouble();
+        if (page != _pageValue) setState(() => _pageValue = page);
+      });
 
-    // 1. Narrative timeline controller for the intro only.
-    _timelineController = AnimationController(
+    _introController = AnimationController(
       vsync: this,
-      duration: _kIntroDuration,
-      animationBehavior: AnimationBehavior.preserve,
-    );
+      duration: const Duration(milliseconds: 1100),
+    )..forward();
 
-    _onboardingRevealController = AnimationController(
+    _liquidController = AnimationController(
       vsync: this,
-      duration: _kOnboardingRevealDuration,
-      animationBehavior: AnimationBehavior.preserve,
-    );
-
-    // 2. Loop controller for active environmental micro-oscillations (6000ms duration)
-    _loopController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 6000),
-      animationBehavior: AnimationBehavior.preserve,
+      duration: const Duration(milliseconds: 5400),
     )..repeat();
-
-    // ── ANIMATION INTERVAL DEFINITIONS ──
-
-    // Phase 1 (0ms - 1200ms) -> logo reveal
-    _glowFade = CurvedAnimation(
-      parent: _timelineController,
-      curve: const Interval(0.0, 0.16, curve: Curves.easeOut),
-    );
-    _logoFadeIn = CurvedAnimation(
-      parent: _timelineController,
-      curve: const Interval(0.03, 0.18, curve: Curves.easeIn),
-    );
-    _logoScaleIn = CurvedAnimation(
-      parent: _timelineController,
-      curve: const Interval(0.03, 0.18, curve: Curves.easeOutBack),
-    );
-
-    // Phase 2 (1200ms - 3600ms) -> cards reveal and hold
-    _cardsFadeIn = CurvedAnimation(
-      parent: _timelineController,
-      curve: const Interval(0.16, 0.29, curve: Curves.easeIn),
-    );
-    _cardsScaleIn = CurvedAnimation(
-      parent: _timelineController,
-      curve: const Interval(0.16, 0.33, curve: Curves.easeOutBack),
-    );
-
-    // Phase 3 (3600ms - 5200ms) -> cards collapse, slogan reveal, and hold
-    _cardsCollapse = CurvedAnimation(
-      parent: _timelineController,
-      curve: const Interval(0.58, 0.68, curve: Curves.easeInCubic),
-    );
-    _sloganFadeIn = CurvedAnimation(
-      parent: _timelineController,
-      curve: const Interval(0.64, 0.73, curve: Curves.easeOut),
-    );
-
-    // Phase 4 starts after the intro has had a real minimum screen time.
-    _onboardingFadeIn = CurvedAnimation(
-      parent: _onboardingRevealController,
-      curve: Curves.easeOutCubic,
-    );
-
-    // Kick off transition flow
-    _timelineController.forward();
-    _onboardingRevealTimer = Timer(_kOnboardingRevealDelay, () {
-      if (!mounted) return;
-      _onboardingRevealController.forward();
-    });
   }
 
   @override
   void dispose() {
-    _onboardingRevealTimer?.cancel();
-    _timelineController.dispose();
-    _onboardingRevealController.dispose();
-    _loopController.dispose();
     _pageController.dispose();
+    _introController.dispose();
+    _liquidController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final Size size = MediaQuery.of(context).size;
-    final double topPadding = MediaQuery.of(context).padding.top;
+    final currentPage = ref.watch(welcomeFlowPageIndexProvider);
 
-    // Center position for introductory logo
-    final Offset centerLogoPos = Offset(size.width / 2, size.height / 2 - 40);
-
-    return Scaffold(
-      backgroundColor: _kDark,
-      body: Stack(
-        children: [
-          // ── BACKGROUND GLOW (Intro phase radial animation) ──
-          Positioned.fill(
-            child: AnimatedBuilder(
-              animation: Listenable.merge([_timelineController, _loopController]),
-              builder: (context, child) {
-                final double pulse = math.sin(_loopController.value * 2 * math.pi) * 0.5 + 0.5;
-                final double introOpacity = _glowFade.value;
-                return CustomPaint(
-                  painter: _GlowPainter(
-                    pulseValue: pulse,
-                    opacityMultiplier: introOpacity,
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // ── BRAND BLUE & GOLD CORNER GLOWS (Fades in with onboarding) ──
-          Positioned.fill(
-            child: AnimatedBuilder(
-              animation: _onboardingFadeIn,
-              builder: (context, child) {
-                final double opacity = _onboardingFadeIn.value.clamp(0.0, 1.0);
-                if (opacity <= 0.0) return const SizedBox.shrink();
-                return Opacity(
-                  opacity: opacity,
-                  child: child,
-                );
-              },
-              child: Stack(
-                children: [
-                  Positioned(
-                    top: -120,
-                    right: -120,
-                    child: Container(
-                      width: 320,
-                      height: 320,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _kAzure.withValues(alpha: 0.12),
-                      ),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
-                        child: Container(color: Colors.transparent),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: -100,
-                    left: -100,
-                    child: Container(
-                      width: 280,
-                      height: 280,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _kGold.withValues(alpha: 0.08),
-                      ),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
-                        child: Container(color: Colors.transparent),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ── 3D GLASS CARDS INTRO DECORATIONS (Collapses at Phase 3) ──
-          _buildGlassCards(size),
-
-          // ── INTRO SLOGAN TEXT (Fades out when onboarding reveals) ──
-          Positioned(
-            top: topPadding + 80.0,
-            left: 24,
-            right: 24,
-            child: AnimatedBuilder(
-              animation: Listenable.merge([_sloganFadeIn, _onboardingFadeIn]),
-              builder: (context, child) {
-                final double introOpacity = _sloganFadeIn.value.clamp(0.0, 1.0);
-                final double fadeOut = 1.0 - _onboardingFadeIn.value.clamp(0.0, 1.0);
-                final double opacity = introOpacity * fadeOut;
-
-                if (opacity <= 0.0) return const SizedBox.shrink();
-
-                final double yTranslate = (1.0 - introOpacity) * 12.0;
-                return Transform.translate(
-                  offset: Offset(0, yTranslate),
-                  child: Opacity(
-                    opacity: opacity,
-                    child: Text(
-                      'Đồng bộ lịch trình, đơn giản chi tiêu.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(
-                        color: _kLight,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // ── LOGO INTRO ANIMATION (Stays centered, fades out when onboarding shows) ──
-          Positioned.fill(
-            child: AnimatedBuilder(
-              animation: Listenable.merge([_timelineController, _loopController]),
-              builder: (context, child) {
-                final double introOpacity = _logoFadeIn.value.clamp(0.0, 1.0);
-                final double fadeOut = 1.0 - _onboardingFadeIn.value.clamp(0.0, 1.0);
-                final double opacity = introOpacity * fadeOut;
-
-                if (opacity <= 0.0) return const SizedBox.shrink();
-
-                final double introScale = 0.8 + 0.2 * _logoScaleIn.value;
-                final double tiltY = math.sin(_loopController.value * 2 * math.pi) * 4.0;
-                final double floatOffset = tiltY;
-
-                const double logoSize = 130.0;
-
-                return Stack(
-                  children: [
-                    Positioned(
-                      left: centerLogoPos.dx - logoSize / 2,
-                      top: centerLogoPos.dy - logoSize / 2 + floatOffset,
-                      child: Opacity(
-                        opacity: opacity,
-                        child: Transform.scale(
-                          scale: introScale,
-                          child: Hero(
-                            tag: 'app-logo',
-                            child: Container(
-                              width: logoSize,
-                              height: logoSize,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: _kAzure.withValues(alpha: 0.15),
-                                    blurRadius: 20,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(logoSize * 0.2),
-                                child: Image.asset(
-                                  'assets/images/miane-logo.png',
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-
-          // ── MAIN ONBOARDING INTERFACE (Revealed via fade-and-slide) ──
-          Positioned.fill(
-            child: AnimatedBuilder(
-              animation: _onboardingFadeIn,
-              builder: (context, child) {
-                final double opacity = _onboardingFadeIn.value.clamp(0.0, 1.0);
-                if (opacity <= 0.0) return const SizedBox.shrink();
-                final double yTranslate = (1.0 - opacity) * 32.0;
-
-                return Opacity(
-                  opacity: opacity,
-                  child: Transform.translate(
-                    offset: Offset(0, yTranslate),
-                    child: child,
-                  ),
-                );
-              },
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    // Navigation row (Back + Skip)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                      child: SizedBox(
-                        height: 48,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            // Back Button
-                            AnimatedOpacity(
-                              opacity: _currentPage > 0 ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 250),
-                              child: IgnorePointer(
-                                ignoring: _currentPage == 0,
-                                child: IconButton(
-                                  onPressed: () {
-                                    _pageController.previousPage(
-                                      duration: const Duration(milliseconds: 400),
-                                      curve: Curves.easeOutCubic,
-                                    );
-                                  },
-                                  icon: const Icon(
-                                    Icons.arrow_back_ios_new_rounded,
-                                    color: Colors.white70,
-                                    size: 20,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            // Skip Button
-                            GestureDetector(
-                              onTap: () {
-                                ref.read(appAuthProvider.notifier).completeWelcome();
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.05),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Text(
-                                  'Bỏ qua',
-                                  style: GoogleFonts.beVietnamPro(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Full-screen PageView Step Layout
-                    Expanded(
-                      child: PageView(
-                        controller: _pageController,
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentPage = index;
-                          });
-                          ref.read(welcomeFlowPageIndexProvider.notifier).setPage(index);
-                        },
-                        children: const [
-                          _StepTimelinePage(),
-                          _StepExpensePage(),
-                          _StepPaymentPage(),
-                        ],
-                      ),
-                    ),
-
-                    // Bottom navigation controls row
-                    Padding(
-                      padding: EdgeInsets.only(
-                        left: 24,
-                        right: 24,
-                        bottom: MediaQuery.of(context).padding.bottom + 16,
-                        top: 12,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _LocalDotsIndicator(
-                            currentPage: _currentPage,
-                            pageController: _pageController,
-                          ),
-                          _LocalCtaButton(
-                            currentPage: _currentPage,
-                            pageController: _pageController,
-                            onComplete: () {
-                              ref.read(appAuthProvider.notifier).completeWelcome();
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 3D Glass cards layout (matches exact coordinates from initial view)
-  Widget _buildGlassCards(Size size) {
-    return Positioned.fill(
+    return CupertinoPageScaffold(
+      backgroundColor: iosGroupedBackground(context),
       child: AnimatedBuilder(
-        animation: Listenable.merge([_timelineController, _loopController]),
-        builder: (context, child) {
-          final double introProgress = _cardsFadeIn.value;
-          final double introScale = 0.8 + 0.2 * _cardsScaleIn.value;
-          final double collapseProgress = _cardsCollapse.value;
-
-          final double opacity = (introProgress * (1.0 - collapseProgress)).clamp(0.0, 1.0);
-          if (opacity <= 0.0) return const SizedBox.shrink();
-
-          final double time = _loopController.value * 2 * math.pi;
+        animation: Listenable.merge([_introController, _liquidController]),
+        builder: (context, _) {
+          final intro = Curves.easeOutCubic.transform(_introController.value);
+          final liquid = _liquidController.value;
 
           return Stack(
-            children: List.generate(3, (index) {
-              double angleX = 0.0;
-              double angleY = 0.0;
-              double dx = 0.0;
-              double dy = 0.0;
-              double cardW = 100.0;
-              double cardH = 100.0;
-              Color cardBorderColor = _kAzure.withOpacity(0.4);
-
-              if (index == 0) {
-                angleX = math.sin(time) * 0.08;
-                angleY = math.cos(time) * 0.08;
-                dx = -70.0 + (angleY * 20.0);
-                dy = -80.0 + (angleX * 20.0);
-                cardW = 160.0;
-                cardH = 100.0;
-                cardBorderColor = _kAzure.withOpacity(0.3);
-              } else if (index == 1) {
-                angleX = math.cos(time + 1.2) * 0.1;
-                angleY = math.sin(time + 1.2) * 0.1;
-                dx = -50.0 + (angleY * 35.0);
-                dy = 70.0 + (angleX * 35.0);
-                cardW = 110.0;
-                cardH = 70.0;
-                cardBorderColor = _kGold.withOpacity(0.3);
-              } else {
-                angleX = math.sin(time + 2.4) * 0.12;
-                angleY = math.cos(time + 2.4) * 0.06;
-                dx = 70.0 + (angleY * 30.0);
-                dy = -20.0 + (angleX * 30.0);
-                cardW = 90.0;
-                cardH = 90.0;
-                cardBorderColor = _kLight.withOpacity(0.3);
-              }
-
-              final double shimmerVal = (_loopController.value * 2.0) % 1.0;
-
-              return Positioned(
-                left: size.width / 2 - cardW / 2 + dx,
-                top: size.height / 2 - cardH / 2 - 40 + dy,
-                child: Opacity(
-                  opacity: opacity,
-                  child: Transform.scale(
-                    scale: introScale * (1.0 - collapseProgress * 0.2),
-                    child: Transform(
-                      transform: Matrix4.identity()
-                        ..setEntry(3, 2, 0.002)
-                        ..rotateX(angleX)
-                        ..rotateY(angleY),
-                      alignment: Alignment.center,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                          child: CustomPaint(
-                            painter: GlassCardPainter(
-                              shimmerProgress: shimmerVal,
-                              borderColor: cardBorderColor,
-                              fillColor: _kNavy.withOpacity(0.25),
-                            ),
-                            child: SizedBox(
-                              width: cardW,
-                              height: cardH,
-                              child: index == 1
-                                  ? const Center(
-                                      child: Icon(
-                                        Icons.insights_rounded,
-                                        color: _kGold,
-                                        size: 24,
-                                      ),
-                                    )
-                                  : index == 2
-                                      ? const Center(
-                                          child: Icon(
-                                            Icons.auto_awesome_rounded,
-                                            color: _kAzure,
-                                            size: 22,
-                                          ),
-                                        )
-                                      : null,
-                            ),
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _LiquidBackgroundPainter(
+                    progress: liquid,
+                    pageValue: _pageValue,
+                  ),
+                ),
+              ),
+              ModernPage(
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
+                    child: Column(
+                      children: [
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: _SkipButton(
+                            intro: intro,
+                            onPressed: () => ref
+                                .read(appAuthProvider.notifier)
+                                .completeWelcome(),
                           ),
                         ),
-                      ),
+                        Expanded(
+                          child: PageView.builder(
+                            controller: _pageController,
+                            itemCount: _steps.length,
+                            onPageChanged: (index) {
+                              ref
+                                  .read(welcomeFlowPageIndexProvider.notifier)
+                                  .setPage(index);
+                            },
+                            itemBuilder: (context, index) {
+                              return _WelcomePage(
+                                step: _steps[index],
+                                index: index,
+                                pageValue: _pageValue,
+                                intro: intro,
+                                liquid: liquid,
+                              );
+                            },
+                          ),
+                        ),
+                        _BottomControls(
+                          count: _steps.length,
+                          currentPage: currentPage,
+                          liquid: liquid,
+                          onContinue: () {
+                            if (currentPage == _steps.length - 1) {
+                              ref
+                                  .read(appAuthProvider.notifier)
+                                  .completeWelcome();
+                              return;
+                            }
+                            _pageController.nextPage(
+                              duration: const Duration(milliseconds: 540),
+                              curve: Curves.easeOutCubic,
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              );
-            }),
+              ),
+            ],
           );
         },
       ),
@@ -569,374 +185,317 @@ class _WelcomeFlowScreenState extends ConsumerState<WelcomeFlowScreen>
   }
 }
 
-// ── CUSTOM SHIMMER PAINTER ──────────────────────────────────────────────────
-class GlassCardPainter extends CustomPainter {
-  final double shimmerProgress;
-  final Color borderColor;
-  final Color fillColor;
+class _WelcomeStep {
+  final IconData icon;
+  final String title;
+  final String body;
+  final Color accent;
+  final List<Color> gradient;
+  final String routeFrom;
+  final String routeTo;
+  final String routeLabel;
 
-  GlassCardPainter({
-    required this.shimmerProgress,
-    required this.borderColor,
-    required this.fillColor,
+  const _WelcomeStep({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.accent,
+    required this.gradient,
+    required this.routeFrom,
+    required this.routeTo,
+    required this.routeLabel,
+  });
+}
+
+class _WelcomePage extends StatelessWidget {
+  final _WelcomeStep step;
+  final int index;
+  final double pageValue;
+  final double intro;
+  final double liquid;
+
+  const _WelcomePage({
+    required this.step,
+    required this.index,
+    required this.pageValue,
+    required this.intro,
+    required this.liquid,
   });
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(16));
-
-    final fillPaint = Paint()
-      ..color = fillColor
-      ..style = PaintingStyle.fill;
-    canvas.drawRRect(rrect, fillPaint);
-
-    final double shimmerWidth = size.width * 1.5;
-    final double currentPos = -shimmerWidth / 2 + (size.width + shimmerWidth) * shimmerProgress;
-
-    final shimmerPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Colors.white.withValues(alpha: 0.0),
-          Colors.white.withValues(alpha: 0.03),
-          Colors.white.withValues(alpha: 0.24),
-          Colors.white.withValues(alpha: 0.03),
-          Colors.white.withValues(alpha: 0.0),
-        ],
-        stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
-      ).createShader(
-        Rect.fromLTWH(currentPos, 0, shimmerWidth, size.height),
-      )
-      ..style = PaintingStyle.fill;
-
-    canvas.drawRRect(rrect, shimmerPaint);
-
-    final borderPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          borderColor,
-          borderColor.withOpacity(0.2),
-          borderColor,
-        ],
-      ).createShader(rect)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-    canvas.drawRRect(rrect, borderPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant GlassCardPainter oldDelegate) {
-    return oldDelegate.shimmerProgress != shimmerProgress ||
-        oldDelegate.borderColor != borderColor ||
-        oldDelegate.fillColor != fillColor;
-  }
-}
-
-// ── AMBIENT RADIAL GLOW PAINTER ─────────────────────────────────────────────
-class _GlowPainter extends CustomPainter {
-  final double pulseValue;
-  final double opacityMultiplier;
-
-  _GlowPainter({required this.pulseValue, required this.opacityMultiplier});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    canvas.drawRect(rect, Paint()..color = _kDark);
-
-    final double maxOpacity = 0.15 * opacityMultiplier;
-    final double opacity = 0.07 * opacityMultiplier + (0.08 * opacityMultiplier * pulseValue);
-
-    final glowPaint = Paint()
-      ..shader = RadialGradient(
-        center: const Alignment(0.0, -0.2),
-        radius: 0.9,
-        colors: [
-          _kAzure.withOpacity(opacity.clamp(0.0, maxOpacity)),
-          _kNavy.withOpacity((opacity * 0.35).clamp(0.0, maxOpacity)),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.6, 1.0],
-      ).createShader(rect);
-
-    canvas.drawRect(rect, glowPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _GlowPainter oldDelegate) {
-    return oldDelegate.pulseValue != pulseValue ||
-        oldDelegate.opacityMultiplier != opacityMultiplier;
-  }
-}
-
-// ── ONBOARDING STEP WIDGET: STEP 1 (TIMELINE PLANNING) ───────────────────────
-class _StepTimelinePage extends StatelessWidget {
-  const _StepTimelinePage();
-
-  @override
   Widget build(BuildContext context) {
-    return const _StepShell(
-      visual: _AnimatedTimelineMockup(),
-      title: 'Đồng bộ lịch trình',
-      body: 'Công cụ lập kế hoạch hành trình thông minh. Chia sẻ và chỉnh sửa lộ trình cùng bạn bè theo thời gian thực tế.',
-    );
-  }
-}
+    final compact = MediaQuery.sizeOf(context).height < 720;
+    final offset = (pageValue - index).clamp(-1.0, 1.0);
+    final distance = offset.abs();
+    final pageOpacity = (1 - distance * 0.38).clamp(0.0, 1.0);
+    final entrance = _interval(intro, 0.0, 0.86);
+    final titleEntrance = _interval(intro, 0.12, 0.76);
+    final visualEntrance = _interval(intro, 0.22, 0.98);
+    final actionEntrance = _interval(intro, 0.36, 1.0);
+    final floatY = math.sin((liquid + index * 0.21) * math.pi * 2) * 8;
+    final tilt = -offset * 0.055 + math.sin(liquid * math.pi * 2) * 0.006;
 
-class _AnimatedTimelineMockup extends StatefulWidget {
-  const _AnimatedTimelineMockup();
-
-  @override
-  State<_AnimatedTimelineMockup> createState() => _AnimatedTimelineMockupState();
-}
-
-class _AnimatedTimelineMockupState extends State<_AnimatedTimelineMockup>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    );
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final nodes = [
-      ('08:00', 'Bay đi Đà Lạt', Icons.flight_takeoff_rounded, true),
-      ('12:00', 'Ăn trưa lẩu gà lá é', Icons.restaurant_rounded, true),
-      ('14:30', 'Nhận phòng Colline', Icons.hotel_rounded, false),
-      ('18:00', 'Ngắm hoàng hôn Hồ Xuân Hương', Icons.photo_camera_rounded, false),
-    ];
-
-    return Stack(
-      children: [
-        // Connecting line
-        Positioned(
-          left: 19,
-          top: 16,
-          bottom: 16,
-          child: Container(
-            width: 2,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  _kAzure,
-                  _kGold.withOpacity(0.15),
-                ],
+    return Opacity(
+      opacity: pageOpacity,
+      child: Transform.translate(
+        offset: Offset(-offset * 26, 26 * (1 - entrance)),
+        child: Transform.scale(
+          scale: 0.94 + entrance * 0.06 - distance * 0.035,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, 0.001)
+                ..rotateY(tilt),
+              child: ModernCard(
+                radius: 38,
+                padding: EdgeInsets.zero,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: step.gradient,
+                ),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: -60 + floatY,
+                      right: -54 - offset * 20,
+                      child: _LiquidOrb(
+                        size: 180,
+                        color: step.accent,
+                        alpha: 0.24,
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 116 - floatY,
+                      left: -76 + offset * 28,
+                      child: const _LiquidOrb(
+                        size: 170,
+                        color: AppTheme.iosBlue,
+                        alpha: 0.16,
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        compact ? 20 : 26,
+                        compact ? 22 : 30,
+                        compact ? 20 : 26,
+                        compact ? 18 : 26,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _Entrance(
+                            value: titleEntrance,
+                            y: 18,
+                            child: Text(
+                              'MIANE',
+                              style: AppTheme.labelSm(color: AppTheme.iosOrange)
+                                  .copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _Entrance(
+                            value: titleEntrance,
+                            y: 24,
+                            child: Text(
+                              step.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: CupertinoColors.white,
+                                fontSize: 36,
+                                height: 1.04,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0,
+                              ).copyWith(fontSize: compact ? 30 : 36),
+                            ),
+                          ),
+                          SizedBox(height: compact ? 10 : 16),
+                          _Entrance(
+                            value: _interval(intro, 0.22, 0.82),
+                            y: 18,
+                            child: Text(
+                              step.body,
+                              maxLines: compact ? 2 : 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTheme.bodyMd(
+                                color: CupertinoColors.white
+                                    .withValues(alpha: 0.72),
+                              ).copyWith(height: 1.45),
+                            ),
+                          ),
+                          const Spacer(),
+                          _Entrance(
+                            value: visualEntrance,
+                            y: 34,
+                            child: Center(
+                              child: Transform.translate(
+                                offset: Offset(offset * 32, floatY),
+                                child: SizedBox(
+                                  width: compact ? 154 : 238,
+                                  height: compact ? 200 : 310,
+                                  child: FittedBox(
+                                    fit: BoxFit.contain,
+                                    child: _PhoneTravelMock(
+                                      step: step,
+                                      progress: liquid,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (!compact) ...[
+                            const Spacer(),
+                            _Entrance(
+                              value: actionEntrance,
+                              y: 18,
+                              child: _ActionDock(step: step),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-        Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: List.generate(nodes.length, (index) {
-            final node = nodes[index];
-            final double start = index * 0.15;
-            final double end = (start + 0.5).clamp(0.0, 1.0);
-
-            final anim = CurvedAnimation(
-              parent: _controller,
-              curve: Interval(start, end, curve: Curves.easeOutBack),
-            );
-
-            return AnimatedBuilder(
-              animation: anim,
-              builder: (context, child) {
-                final double val = anim.value;
-                return Transform.translate(
-                  offset: Offset(0, (1.0 - val) * 12.0),
-                  child: Opacity(
-                    opacity: val.clamp(0.0, 1.0),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: node.$4 ? _kNavy : _kDark,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: node.$4 ? _kAzure : _kAzure.withOpacity(0.3),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Icon(
-                            node.$3,
-                            color: node.$4 ? _kGold : Colors.white38,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: _kNavy.withValues(alpha: 0.35),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.05),
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        node.$2,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.beVietnamPro(
-                                          color: _kLight,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        node.$1,
-                                        style: GoogleFonts.beVietnamPro(
-                                          color: _kAzure,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (node.$4)
-                                  const Icon(
-                                    Icons.check_circle_rounded,
-                                    color: _kGold,
-                                    size: 18,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            );
-          }),
-        ),
-      ],
+      ),
     );
   }
 }
 
-// ── ONBOARDING STEP WIDGET: STEP 2 (EXPENSE BALANCING) ───────────────────────
-class _StepExpensePage extends StatelessWidget {
-  const _StepExpensePage();
+class _PhoneTravelMock extends StatelessWidget {
+  final _WelcomeStep step;
+  final double progress;
+
+  const _PhoneTravelMock({
+    required this.step,
+    required this.progress,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return const _StepShell(
-      visual: _AnimatedExpenseMockup(),
-      title: 'Đơn giản chi tiêu',
-      body: 'Giải pháp tính toán thu chi thông minh. Tự động quy đổi, tổng hợp và chia đều hóa đơn nhóm, tránh mọi sự sai lệch.',
-    );
-  }
-}
+    final pulse = 0.5 + math.sin(progress * math.pi * 2) * 0.5;
 
-class _AnimatedExpenseMockup extends StatefulWidget {
-  const _AnimatedExpenseMockup();
-
-  @override
-  State<_AnimatedExpenseMockup> createState() => _AnimatedExpenseMockupState();
-}
-
-class _AnimatedExpenseMockupState extends State<_AnimatedExpenseMockup>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final segments = [
-      (0.48, _kAzure, 'Di chuyển'),
-      (0.32, _kGold, 'Khách sạn'),
-      (0.20, const Color(0xFFE57373), 'Ăn uống'),
-    ];
-
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SizedBox(
-          height: 120,
-          width: 120,
+    return Container(
+      width: 238,
+      height: 310,
+      decoration: BoxDecoration(
+        color: const Color(0xFF101010),
+        borderRadius: BorderRadius.circular(42),
+        border:
+            Border.all(color: CupertinoColors.white.withValues(alpha: 0.18)),
+        boxShadow: [
+          BoxShadow(
+            color: step.accent.withValues(alpha: 0.18 + pulse * 0.08),
+            blurRadius: 34,
+            offset: const Offset(0, 20),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(32),
           child: Stack(
             children: [
-              Positioned.fill(
-                child: AnimatedBuilder(
-                  animation: _controller,
-                  builder: (context, child) {
-                    return CustomPaint(
-                      painter: _DonutChartPainter(
-                        progress: _controller.value,
-                        segments: segments,
-                      ),
-                    );
-                  },
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      step.accent.withValues(alpha: 0.32),
+                      AppTheme.surfaceElevated,
+                      AppTheme.surfaceDark,
+                    ],
+                  ),
                 ),
               ),
-              Center(
+              Align(
+                alignment: Alignment.topCenter,
+                child: Container(
+                  margin: const EdgeInsets.only(top: 9),
+                  width: 72,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.black,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 44, 14, 14),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      'TỔNG CHI',
-                      style: GoogleFonts.beVietnamPro(
-                        color: Colors.white38,
-                        fontSize: 8,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.8,
-                      ),
+                    Row(
+                      children: [
+                        _MockCircle(
+                            icon: CupertinoIcons.ellipsis, color: step.accent),
+                        const SizedBox(width: 8),
+                        const _MockCircle(
+                            icon: CupertinoIcons.search,
+                            color: AppTheme.iosLight),
+                        const Spacer(),
+                        const _MockCircle(
+                            icon: CupertinoIcons.xmark,
+                            color: AppTheme.iosLight),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '8.5M đ',
-                      style: GoogleFonts.beVietnamPro(
-                        color: _kLight,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                    const SizedBox(height: 18),
+                    _MockRouteCard(step: step, progress: progress),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: ModernGlass(
+                        radius: 24,
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(step.icon, color: step.accent, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  step.routeLabel,
+                                  style: AppTheme.titleSm(),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  'Today',
+                                  style: AppTheme.bodySm(
+                                    color: CupertinoColors.white
+                                        .withValues(alpha: 0.48),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            const _TimelineRow(
+                              icon: CupertinoIcons.sun_max_fill,
+                              color: AppTheme.iosGold,
+                              text: '18° / 27° • Đà Nẵng',
+                              time: 'Now',
+                            ),
+                            _TimelineRow(
+                              icon: CupertinoIcons.airplane,
+                              color: AppTheme.iosBlue,
+                              text: '${step.routeFrom} → ${step.routeTo}',
+                              time: '09:41',
+                            ),
+                            const _TimelineRow(
+                              icon: CupertinoIcons.creditcard_fill,
+                              color: AppTheme.iosPink,
+                              text: 'Split ready',
+                              time: 'Auto',
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -945,504 +504,268 @@ class _AnimatedExpenseMockupState extends State<_AnimatedExpenseMockup>
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        Column(
-          children: List.generate(segments.length, (index) {
-            final seg = segments[index];
-            final double start = 0.3 + index * 0.15;
-            final double end = (start + 0.5).clamp(0.0, 1.0);
-            final anim = CurvedAnimation(
-              parent: _controller,
-              curve: Interval(start, end, curve: Curves.easeOutBack),
-            );
-
-            return AnimatedBuilder(
-              animation: anim,
-              builder: (context, child) {
-                final double val = anim.value;
-                return Transform.scale(
-                  scale: val,
-                  child: Opacity(
-                    opacity: val.clamp(0.0, 1.0),
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _kNavy.withValues(alpha: 0.35),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.05),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: seg.$2,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            seg.$3,
-                            style: GoogleFonts.beVietnamPro(
-                              color: _kLight.withValues(alpha: 0.8),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${(seg.$1 * 8.5).toStringAsFixed(1)}M đ',
-                            style: GoogleFonts.beVietnamPro(
-                              color: _kLight,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '(${(seg.$1 * 100).toStringAsFixed(0)}%)',
-                            style: GoogleFonts.beVietnamPro(
-                              color: Colors.white38,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            );
-          }),
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _DonutChartPainter extends CustomPainter {
+class _MockCircle extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+
+  const _MockCircle({required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: CupertinoColors.black.withValues(alpha: 0.22),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, color: color, size: 20),
+    );
+  }
+}
+
+class _MockRouteCard extends StatelessWidget {
+  final _WelcomeStep step;
   final double progress;
-  final List<(double, Color, String)> segments;
 
-  _DonutChartPainter({required this.progress, required this.segments});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 10
-      ..strokeCap = StrokeCap.round;
-
-    final rect = Rect.fromLTWH(5, 5, size.width - 10, size.height - 10);
-    var startAngle = -math.pi / 2;
-
-    for (final seg in segments) {
-      final sweepAngle = seg.$1 * 2 * math.pi * progress;
-      paint.color = seg.$2;
-
-      canvas.drawArc(rect, startAngle + 0.04, sweepAngle - 0.08, false, paint);
-      startAngle += seg.$1 * 2 * math.pi;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DonutChartPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.segments != segments;
-  }
-}
-
-// ── ONBOARDING STEP WIDGET: STEP 3 (1-TOUCH PAYMENTS) ────────────────────────
-class _StepPaymentPage extends StatelessWidget {
-  const _StepPaymentPage();
+  const _MockRouteCard({
+    required this.step,
+    required this.progress,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return const _StepShell(
-      visual: _AnimatedPaymentMockup(),
-      title: 'Quyết toán 1 chạm',
-      body: 'Tích hợp thanh toán QR và Ví điện tử. Quét mã - tự động chia hóa đơn lẻ và giải quyết số dư nợ tức thì.',
-    );
-  }
-}
-
-class _AnimatedPaymentMockup extends StatefulWidget {
-  const _AnimatedPaymentMockup();
-
-  @override
-  State<_AnimatedPaymentMockup> createState() => _AnimatedPaymentMockupState();
-}
-
-class _AnimatedPaymentMockupState extends State<_AnimatedPaymentMockup>
-    with TickerProviderStateMixin {
-  late final AnimationController _entryController;
-  late final AnimationController _laserController;
-
-  @override
-  void initState() {
-    super.initState();
-    _entryController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    );
-    _laserController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    );
-    _entryController.forward();
-    _laserController.repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _entryController.dispose();
-    _laserController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // VietQR visual glass container
-        ScaleTransition(
-          scale: CurvedAnimation(
-            parent: _entryController,
-            curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _kNavy.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: _kAzure.withOpacity(0.3),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Stack(
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.all(4),
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        color: _kNavy,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                    Container(
-                      width: 56,
-                      height: 56,
-                      color: Colors.transparent,
-                      child: CustomPaint(
-                        painter: _QrMarkerPainter(),
-                      ),
-                    ),
-                    AnimatedBuilder(
-                      animation: _laserController,
-                      builder: (context, child) {
-                        return Positioned(
-                          top: _laserController.value * 54,
-                          left: 2,
-                          right: 2,
-                          child: Container(
-                            height: 2,
-                            decoration: BoxDecoration(
-                              color: _kAzure,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: _kAzure.withOpacity(0.8),
-                                  blurRadius: 4,
-                                  spreadRadius: 1,
-                                )
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Liên kết VietQR',
-                            style: GoogleFonts.beVietnamPro(
-                              color: _kLight,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: _kGold.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'FREE',
-                              style: GoogleFonts.beVietnamPro(
-                                color: _kGold,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        'Thanh toán chuyển khoản liên ngân hàng nhận diện tức thì.',
-                        style: GoogleFonts.beVietnamPro(
-                          color: Colors.white38,
-                          fontSize: 11,
-                          height: 1.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        // MoMo payment visual container
-        ScaleTransition(
-          scale: CurvedAnimation(
-            parent: _entryController,
-            curve: const Interval(0.3, 0.9, curve: Curves.easeOutBack),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _kNavy.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.05),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFA50064),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'mơ',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Liên kết ví MoMo',
-                        style: GoogleFonts.beVietnamPro(
-                          color: _kLight,
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        'Thanh toán tiện lợi, chia sẻ số tiền dư chuyển thẳng vào ví.',
-                        style: GoogleFonts.beVietnamPro(
-                          color: Colors.white38,
-                          fontSize: 11,
-                          height: 1.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _QrMarkerPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = _kNavy
-      ..style = PaintingStyle.fill;
-
-    canvas.drawRect(const Rect.fromLTWH(3, 3, 14, 14), p);
-    canvas.drawRect(const Rect.fromLTWH(5, 5, 10, 10), Paint()..color = Colors.white);
-    canvas.drawRect(const Rect.fromLTWH(7, 7, 6, 6), p);
-
-    canvas.drawRect(Rect.fromLTWH(size.width - 17, 3, 14, 14), p);
-    canvas.drawRect(Rect.fromLTWH(size.width - 15, 5, 10, 10), Paint()..color = Colors.white);
-    canvas.drawRect(Rect.fromLTWH(size.width - 13, 7, 6, 6), p);
-
-    canvas.drawRect(Rect.fromLTWH(3, size.height - 17, 14, 14), p);
-    canvas.drawRect(Rect.fromLTWH(5, size.height - 15, 10, 10), Paint()..color = Colors.white);
-    canvas.drawRect(Rect.fromLTWH(7, size.height - 13, 6, 6), p);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// ── NARRATIVE STEP CONTAINER SHELL ───────────────────────────────────────────
-class _StepShell extends StatelessWidget {
-  final Widget visual;
-  final String title, body;
-
-  const _StepShell({required this.visual, required this.title, required this.body});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      height: 86,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: CupertinoColors.black.withValues(alpha: 0.52),
+        borderRadius: BorderRadius.circular(26),
+      ),
+      child: Row(
         children: [
-          const Spacer(flex: 3),
+          Expanded(
+            child: _RouteText(
+              label: 'From',
+              value: step.routeFrom,
+              alignEnd: false,
+            ),
+          ),
           SizedBox(
-            height: 300,
-            child: Center(child: visual),
-          ),
-          const Spacer(flex: 2),
-          // Title
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              color: _kLight,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
+            width: 74,
+            height: 44,
+            child: CustomPaint(
+              painter: _RouteLinePainter(
+                color: step.accent,
+                progress: progress,
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          // Body Description
-          Text(
-            body,
-            style: GoogleFonts.beVietnamPro(
-              color: Colors.white54,
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              height: 1.5,
+          Expanded(
+            child: _RouteText(
+              label: 'To',
+              value: step.routeTo,
+              alignEnd: true,
             ),
           ),
-          const Spacer(flex: 4),
         ],
       ),
     );
   }
 }
 
-// ── LOCAL DOTS INDICATOR ─────────────────────────────────────────────────────
-class _LocalDotsIndicator extends StatelessWidget {
-  final int currentPage;
-  final PageController pageController;
+class _RouteText extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool alignEnd;
 
-  const _LocalDotsIndicator({required this.currentPage, required this.pageController});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: List.generate(3, (index) {
-        final bool isActive = currentPage == index;
-        return GestureDetector(
-          onTap: () {
-            pageController.animateToPage(
-              index,
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOutCubic,
-            );
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            margin: const EdgeInsets.only(right: 6),
-            height: 6,
-            width: isActive ? 24 : 6,
-            decoration: BoxDecoration(
-              color: isActive ? _kGold : _kGold.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-        );
-      }),
-    );
-  }
-}
-
-// ── LOCAL CTA BUTTON ─────────────────────────────────────────────────────────
-class _LocalCtaButton extends StatelessWidget {
-  final int currentPage;
-  final PageController pageController;
-  final VoidCallback onComplete;
-
-  const _LocalCtaButton({
-    required this.currentPage,
-    required this.pageController,
-    required this.onComplete,
+  const _RouteText({
+    required this.label,
+    required this.value,
+    required this.alignEnd,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bool isLastPage = currentPage == 2;
-
-    return GestureDetector(
-      onTap: () {
-        if (!isLastPage) {
-          pageController.nextPage(
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOutCubic,
-          );
-        } else {
-          onComplete();
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [_kGold, Color(0xFFD4A040)],
+    return Column(
+      crossAxisAlignment:
+          alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: AppTheme.labelXs(
+            color: CupertinoColors.white.withValues(alpha: 0.5),
           ),
-          borderRadius: BorderRadius.circular(12),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: CupertinoColors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TimelineRow extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String text;
+  final String time;
+
+  const _TimelineRow({
+    required this.icon,
+    required this.color,
+    required this.text,
+    required this.time,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 15),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.bodySm(),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            time,
+            style: AppTheme.labelSm(
+              color: CupertinoColors.white.withValues(alpha: 0.46),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionDock extends StatelessWidget {
+  final _WelcomeStep step;
+
+  const _ActionDock({required this.step});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: ModernActionCircle(
+            icon: CupertinoIcons.airplane,
+            label: 'Flights',
+            color: step.accent,
+          ),
+        ),
+        const Expanded(
+          child: ModernActionCircle(
+            icon: CupertinoIcons.bed_double,
+            label: 'Stay',
+            color: AppTheme.iosLight,
+          ),
+        ),
+        const Expanded(
+          child: ModernActionCircle(
+            icon: CupertinoIcons.money_dollar,
+            label: 'Split',
+            color: AppTheme.iosGold,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BottomControls extends StatelessWidget {
+  final int count;
+  final int currentPage;
+  final double liquid;
+  final VoidCallback onContinue;
+
+  const _BottomControls({
+    required this.count,
+    required this.currentPage,
+    required this.liquid,
+    required this.onContinue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _Dots(count: count, current: currentPage),
+        const Spacer(),
+        _ContinueButton(
+          label: currentPage == count - 1 ? 'Bắt đầu' : 'Tiếp tục',
+          liquid: liquid,
+          onPressed: onContinue,
+        ),
+      ],
+    );
+  }
+}
+
+class _ContinueButton extends StatelessWidget {
+  final String label;
+  final double liquid;
+  final VoidCallback onPressed;
+
+  const _ContinueButton({
+    required this.label,
+    required this.liquid,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pulse = 0.5 + math.sin(liquid * math.pi * 2) * 0.5;
+
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onPressed,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 11, 14, 11),
+        decoration: BoxDecoration(
+          color: AppTheme.iosBlue.withValues(alpha: 0.18 + pulse * 0.08),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(
+            color: AppTheme.iosBlue.withValues(alpha: 0.28 + pulse * 0.18),
+          ),
           boxShadow: [
             BoxShadow(
-              color: _kGold.withValues(alpha: 0.2),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              color: AppTheme.iosBlue.withValues(alpha: 0.18 + pulse * 0.12),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
             ),
           ],
         ),
@@ -1450,22 +773,228 @@ class _LocalCtaButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              isLastPage ? 'Bắt đầu' : 'Tiếp tục',
-              style: GoogleFonts.beVietnamPro(
-                color: _kDark,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
+              label,
+              style: AppTheme.bodyMd(color: CupertinoColors.white)
+                  .copyWith(fontWeight: FontWeight.w700),
             ),
-            const SizedBox(width: 6),
-            Icon(
-              isLastPage ? Icons.done_rounded : Icons.arrow_forward_rounded,
-              color: _kDark,
-              size: 14,
+            const SizedBox(width: 8),
+            const Icon(
+              CupertinoIcons.arrow_right,
+              color: CupertinoColors.white,
+              size: 17,
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _SkipButton extends StatelessWidget {
+  final double intro;
+  final VoidCallback onPressed;
+
+  const _SkipButton({
+    required this.intro,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: _interval(intro, 0.35, 1),
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: onPressed,
+        child: const Text('Xong'),
+      ),
+    );
+  }
+}
+
+class _Entrance extends StatelessWidget {
+  final double value;
+  final double y;
+  final Widget child;
+
+  const _Entrance({
+    required this.value,
+    required this.y,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final eased = Curves.easeOutCubic.transform(value.clamp(0, 1));
+    return Opacity(
+      opacity: eased,
+      child: Transform.translate(
+        offset: Offset(0, (1 - eased) * y),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _LiquidOrb extends StatelessWidget {
+  final double size;
+  final Color color;
+  final double alpha;
+
+  const _LiquidOrb({
+    required this.size,
+    required this.color,
+    required this.alpha,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withValues(alpha: alpha),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: alpha),
+            blurRadius: 56,
+            spreadRadius: 8,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Dots extends StatelessWidget {
+  final int count;
+  final int current;
+
+  const _Dots({required this.count, required this.current});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(count, (index) {
+        final active = current == index;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+          width: active ? 26 : 7,
+          height: 7,
+          margin: const EdgeInsets.only(right: 6),
+          decoration: BoxDecoration(
+            color: active
+                ? AppTheme.iosBlue
+                : CupertinoColors.systemGrey.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(999),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _RouteLinePainter extends CustomPainter {
+  final Color color;
+  final double progress;
+
+  const _RouteLinePainter({
+    required this.color,
+    required this.progress,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y = size.height / 2;
+    final start = Offset(4, y);
+    final end = Offset(size.width - 4, y);
+    final basePaint = Paint()
+      ..color = CupertinoColors.white.withValues(alpha: 0.16)
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+    final activePaint = Paint()
+      ..color = color
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(start, end, basePaint);
+    canvas.drawLine(
+      start,
+      Offset(4 + (size.width - 8) * progress, y),
+      activePaint,
+    );
+
+    final planeX = 4 + (size.width - 8) * progress;
+    final planeCenter = Offset(planeX, y);
+    final iconPaint = Paint()..color = color;
+    final path = Path()
+      ..moveTo(planeCenter.dx + 8, planeCenter.dy)
+      ..lineTo(planeCenter.dx - 7, planeCenter.dy - 7)
+      ..lineTo(planeCenter.dx - 3, planeCenter.dy)
+      ..lineTo(planeCenter.dx - 7, planeCenter.dy + 7)
+      ..close();
+    canvas.drawPath(path, iconPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RouteLinePainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.color != color;
+  }
+}
+
+class _LiquidBackgroundPainter extends CustomPainter {
+  final double progress;
+  final double pageValue;
+
+  const _LiquidBackgroundPainter({
+    required this.progress,
+    required this.pageValue,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final paint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFF060606),
+          Color(0xFF090A16),
+          Color(0xFF000000),
+        ],
+      ).createShader(rect);
+    canvas.drawRect(rect, paint);
+
+    final colors = [
+      AppTheme.iosOrange,
+      AppTheme.iosBlue,
+      AppTheme.iosPink,
+    ];
+    for (var i = 0; i < 3; i++) {
+      final phase = progress * math.pi * 2 + i * 1.7 + pageValue * 0.42;
+      final center = Offset(
+        size.width * (0.2 + i * 0.28) + math.sin(phase) * 34,
+        size.height * (0.18 + i * 0.2) + math.cos(phase * 0.8) * 44,
+      );
+      final orbPaint = Paint()
+        ..color = colors[i].withValues(alpha: 0.14)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 58);
+      canvas.drawCircle(center, 116 + i * 24, orbPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LiquidBackgroundPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.pageValue != pageValue;
+  }
+}
+
+double _interval(double value, double start, double end) {
+  if (value <= start) return 0;
+  if (value >= end) return 1;
+  return ((value - start) / (end - start)).clamp(0.0, 1.0);
 }

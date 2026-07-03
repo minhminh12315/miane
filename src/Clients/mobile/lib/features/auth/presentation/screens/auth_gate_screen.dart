@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../../../../core/theme/app_theme.dart';
 import '../controllers/app_auth_provider.dart';
 import 'login_screen.dart';
@@ -13,350 +16,250 @@ class AuthGateScreen extends ConsumerStatefulWidget {
   ConsumerState<AuthGateScreen> createState() => _AuthGateScreenState();
 }
 
-class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _logoScale;
-  late final Animation<double> _logoRotate;
-  late final Animation<double> _textFade;
-  late final Animation<Offset> _textSlide;
-  late final Animation<double> _subFade;
-  late final Animation<Offset> _subSlide;
+class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
+    with TickerProviderStateMixin {
+  late final AnimationController _introController;
+  late final AnimationController _loopController;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _introController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    );
-
-    // Elastic spring scale-up for the logo circle
-    _logoScale = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.6, curve: Curves.elasticOut),
-    );
-
-    // Subtle rotate/spin for the inner sync icon
-    _logoRotate = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.1, 0.7, curve: Curves.easeOutBack),
-    );
-
-    // Staggered slide/fade for the main "Miane" text
-    _textFade = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.4, 0.8, curve: Curves.easeOut),
-    );
-    _textSlide = Tween<Offset>(
-      begin: const Offset(0.0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.4, 0.8, curve: Curves.easeOutCubic),
-    ));
-
-    // Staggered slide/fade for the subtitle
-    _subFade = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.6, 1.0, curve: Curves.easeOut),
-    );
-    _subSlide = Tween<Offset>(
-      begin: const Offset(0.0, 0.4),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.6, 1.0, curve: Curves.easeOutCubic),
-    ));
-
-    // Trigger the animation on load
-    _controller.forward();
+      duration: const Duration(milliseconds: 1100),
+    )..forward();
+    _loopController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 5200),
+    )..repeat();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _introController.dispose();
+    _loopController.dispose();
     super.dispose();
+  }
+
+  double _stagger(double start, double end) {
+    final value =
+        ((_introController.value - start) / (end - start)).clamp(0.0, 1.0);
+    return Curves.easeOutCubic.transform(value);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Styling constants matching DESIGN.md
-    const Color kDark = AppTheme.canvasDark;
-    const Color kNavy = AppTheme.surfaceDark;
-    const Color kAzure = AppTheme.iosBlue;
-    const Color kGold = AppTheme.iosGold;
-    const Color kLight = AppTheme.iosLight;
+    return CupertinoPageScaffold(
+      backgroundColor: AppTheme.canvasDark,
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_introController, _loopController]),
+        builder: (context, _) {
+          final loop = _loopController.value;
 
-    return Scaffold(
-      backgroundColor: kDark,
-      body: Stack(
-        children: [
-          // Background Glows
-          Positioned(
-            top: -100,
-            right: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: kAzure.withOpacity(0.1),
-                    blurRadius: 100,
-                    spreadRadius: 50,
-                  ),
-                ],
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _AuthBackdropPainter(progress: loop),
+                ),
               ),
-            ),
-          ),
-          Positioned(
-            bottom: -50,
-            left: -50,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: kNavy.withOpacity(0.2),
-                    blurRadius: 80,
-                    spreadRadius: 40,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // Content
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              child: Column(
-                children: [
-                  const Spacer(flex: 2),
-                  // Logo/Header Area with elastic spring animation
-                  ScaleTransition(
-                    scale: _logoScale,
-                    child: RotationTransition(
-                      turns: _logoRotate,
-                      child: Hero(
-                        tag: 'app-logo',
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: const LinearGradient(
-                              colors: [kNavy, kAzure],
-                            ),
-                            border: Border.all(
-                              color: kAzure.withOpacity(0.3),
-                              width: 2,
-                            ),
-                          ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.sync_alt_rounded,
-                              color: kGold,
-                              size: 36,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  FadeTransition(
-                    opacity: _textFade,
-                    child: SlideTransition(
-                      position: _textSlide,
-                      child: Text(
-                        'Miane',
-                        style: GoogleFonts.inter(
-                          color: kLight,
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -1.0,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  FadeTransition(
-                    opacity: _subFade,
-                    child: SlideTransition(
-                      position: _subSlide,
-                      child: Text(
-                        'Đồng hành cùng chuyến đi của bạn',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.beVietnamPro(
-                          color: kAzure.withOpacity(0.8),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const Spacer(flex: 3),
-                  // Login Options List
-                  _buildSocialButton(
-                    context: context,
-                    icon: Icons.apple_rounded,
-                    label: 'Tiếp tục với Apple',
-                    onTap: () => ref.read(appAuthProvider.notifier).loginFake(),
-                    color: Colors.white,
-                    textColor: Colors.black,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildSocialButton(
-                    context: context,
-                    iconWidget: const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CustomPaint(
-                        painter: GoogleGLogoPainter(),
-                      ),
-                    ),
-                    label: 'Tiếp tục với Google',
-                    onTap: () => ref.read(appAuthProvider.notifier).loginFake(),
-                    color: Colors.transparent,
-                    textColor: kLight,
-                    borderColor: kAzure.withOpacity(0.4),
-                  ),
-
-
-                  const SizedBox(height: 16),
-                  // Divider
-                  Row(
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 28, 18, 18),
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: Divider(
-                          color: kLight.withOpacity(0.1),
-                          thickness: 0.5,
-                        ),
+                      const Spacer(flex: 2),
+                      _AnimatedEntry(
+                        progress: _stagger(0.00, 0.42),
+                        dy: 24,
+                        scaleBegin: 0.88,
+                        child: _MianeLogo(progress: loop),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                      const SizedBox(height: 26),
+                      _AnimatedEntry(
+                        progress: _stagger(0.10, 0.54),
+                        dy: 18,
+                        child: Text('Miane', style: AppTheme.displayLg()),
+                      ),
+                      const SizedBox(height: 8),
+                      _AnimatedEntry(
+                        progress: _stagger(0.18, 0.62),
+                        dy: 18,
                         child: Text(
-                          'HOẶC',
-                          style: GoogleFonts.beVietnamPro(
-                            color: kLight.withOpacity(0.3),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                          'Đồng hành cùng chuyến đi của bạn',
+                          textAlign: TextAlign.center,
+                          style: AppTheme.bodyMd(
+                            color: CupertinoColors.secondaryLabel
+                                .resolveFrom(context),
                           ),
                         ),
                       ),
-                      Expanded(
-                        child: Divider(
-                          color: kLight.withOpacity(0.1),
-                          thickness: 0.5,
+                      const Spacer(flex: 3),
+                      _AnimatedEntry(
+                        progress: _stagger(0.38, 0.72),
+                        dy: 28,
+                        child: _AuthButton(
+                          label: 'Tiếp tục với Apple',
+                          backgroundColor: CupertinoColors.white,
+                          foregroundColor: CupertinoColors.black,
+                          icon: Icons.apple,
+                          borderColor:
+                              CupertinoColors.white.withValues(alpha: 0.24),
+                          shadowColor:
+                              CupertinoColors.white.withValues(alpha: 0.18),
+                          onPressed: () =>
+                              ref.read(appAuthProvider.notifier).loginFake(),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // Email Login Button
-                  _buildSocialButton(
-                    context: context,
-                    icon: Icons.email_rounded,
-                    label: 'Sử dụng Email',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const LoginScreen()),
-                      );
-                    },
-                    color: Colors.transparent,
-                    textColor: kLight,
-                    borderColor: kAzure.withOpacity(0.4),
-                  ),
-                  const Spacer(flex: 1),
-                  // Register redirect
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Chưa có tài khoản? ',
-                        style: GoogleFonts.beVietnamPro(
-                          color: kLight.withOpacity(0.6),
-                          fontSize: 13,
+                      const SizedBox(height: 12),
+                      _AnimatedEntry(
+                        progress: _stagger(0.48, 0.82),
+                        dy: 28,
+                        child: _AuthButton(
+                          label: 'Tiếp tục với Google',
+                          backgroundColor: AppTheme.surfaceDark,
+                          foregroundColor: AppTheme.iosLight,
+                          iconWidget: const _GoogleMark(),
+                          onPressed: () =>
+                              ref.read(appAuthProvider.notifier).loginFake(),
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const RegisterScreen()),
-                          );
-                        },
-                        child: Text(
-                          'Đăng ký ngay',
-                          style: GoogleFonts.beVietnamPro(
-                            color: kAzure,
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
+                      const SizedBox(height: 12),
+                      _AnimatedEntry(
+                        progress: _stagger(0.58, 0.92),
+                        dy: 28,
+                        child: _AuthButton(
+                          label: 'Sử dụng Email',
+                          backgroundColor: AppTheme.surfaceDark,
+                          foregroundColor: AppTheme.iosBlue,
+                          icon: CupertinoIcons.mail,
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              CupertinoPageRoute(
+                                builder: (_) => const LoginScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      _AnimatedEntry(
+                        progress: _stagger(0.70, 1.00),
+                        dy: 18,
+                        child: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              CupertinoPageRoute(
+                                builder: (_) => const RegisterScreen(),
+                              ),
+                            );
+                          },
+                          child: Text(
+                            'Chưa có tài khoản? Đăng ký ngay',
+                            style: AppTheme.bodySm(color: AppTheme.iosBlue),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
+}
 
-  Widget _buildSocialButton({
-    required BuildContext context,
-    IconData? icon,
-    Widget? iconWidget,
-    required String label,
-    required VoidCallback onTap,
-    required Color color,
-    required Color textColor,
-    Color? borderColor,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 56,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(12), // rounded: md (12px)
-          border: borderColor != null
-              ? Border.all(color: borderColor, width: 1.0)
-              : null,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
+class _AnimatedEntry extends StatelessWidget {
+  final double progress;
+  final double dy;
+  final double scaleBegin;
+  final Widget child;
+
+  const _AnimatedEntry({
+    required this.progress,
+    required this.child,
+    this.dy = 16,
+    this.scaleBegin = 0.98,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final value = progress.clamp(0.0, 1.0);
+
+    return Opacity(
+      opacity: value,
+      child: Transform.translate(
+        offset: Offset(0, (1 - value) * dy),
+        child: Transform.scale(
+          scale: scaleBegin + ((1 - scaleBegin) * value),
+          child: child,
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+      ),
+    );
+  }
+}
+
+class _MianeLogo extends StatelessWidget {
+  final double progress;
+
+  const _MianeLogo({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    final wave = math.sin(progress * math.pi * 2);
+
+    return Transform.translate(
+      offset: Offset(0, wave * 5),
+      child: SizedBox(
+        width: 108,
+        height: 108,
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            if (iconWidget != null)
-              iconWidget
-            else if (icon != null)
-              Icon(
-                icon,
-                color: textColor,
-                size: 24,
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _LogoOrbitPainter(progress: progress),
               ),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: GoogleFonts.beVietnamPro(
-                color: textColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+            ),
+            Transform.scale(
+              scale: 1 + (wave * 0.025),
+              child: Container(
+                width: 86,
+                height: 86,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF36B7FF),
+                      AppTheme.iosBlue,
+                      AppTheme.iosIndigo,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(27),
+                  border: Border.all(
+                    color: CupertinoColors.white.withValues(alpha: 0.16),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.iosBlue.withValues(alpha: 0.36),
+                      blurRadius: 30,
+                      offset: const Offset(0, 18),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Transform.rotate(
+              angle: progress * math.pi * 2,
+              child: const Icon(
+                CupertinoIcons.arrow_2_circlepath,
+                color: CupertinoColors.white,
+                size: 40,
               ),
             ),
           ],
@@ -366,50 +269,313 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
   }
 }
 
-class GoogleGLogoPainter extends CustomPainter {
-  const GoogleGLogoPainter();
+class _AuthButton extends StatefulWidget {
+  final String label;
+  final Color backgroundColor;
+  final Color foregroundColor;
+  final IconData? icon;
+  final Widget? iconWidget;
+  final Color? borderColor;
+  final Color? shadowColor;
+  final VoidCallback? onPressed;
+
+  const _AuthButton({
+    required this.label,
+    required this.backgroundColor,
+    required this.foregroundColor,
+    required this.onPressed,
+    this.icon,
+    this.iconWidget,
+    this.borderColor,
+    this.shadowColor,
+  });
+
+  @override
+  State<_AuthButton> createState() => _AuthButtonState();
+}
+
+class _AuthButtonState extends State<_AuthButton> {
+  bool _isPressed = false;
+
+  void _setPressed(bool value) {
+    if (_isPressed == value || widget.onPressed == null) return;
+    setState(() => _isPressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor =
+        widget.borderColor ?? CupertinoColors.white.withValues(alpha: 0.08);
+
+    return Listener(
+      onPointerDown: (_) => _setPressed(true),
+      onPointerUp: (_) => _setPressed(false),
+      onPointerCancel: (_) => _setPressed(false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.975 : 1,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        child: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          pressedOpacity: 0.9,
+          onPressed: widget.onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            width: double.infinity,
+            height: 54,
+            decoration: BoxDecoration(
+              color: widget.backgroundColor,
+              borderRadius: BorderRadius.circular(17),
+              border: Border.all(color: borderColor, width: 0.7),
+              boxShadow: [
+                BoxShadow(
+                  color: widget.shadowColor ??
+                      CupertinoColors.black.withValues(alpha: 0.26),
+                  blurRadius: 22,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.iconWidget != null) ...[
+                  widget.iconWidget!,
+                  const SizedBox(width: 9),
+                ] else if (widget.icon != null) ...[
+                  Icon(widget.icon, color: widget.foregroundColor, size: 22),
+                  const SizedBox(width: 8),
+                ],
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: widget.foregroundColor,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GoogleMark extends StatelessWidget {
+  const _GoogleMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 22,
+      height: 22,
+      child: CustomPaint(painter: _GoogleMarkPainter()),
+    );
+  }
+}
+
+class _GoogleMarkPainter extends CustomPainter {
+  const _GoogleMarkPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double w = size.width;
-    final double h = size.height;
-    final Offset center = Offset(w / 2, h / 2);
-    final double strokeWidth = w * 0.22;
-    final double r = w / 2 - strokeWidth / 2;
-
-    final Paint paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.butt;
-
-    final Rect rect = Rect.fromCircle(center: center, radius: r);
-
-    // Google red (top)
-    canvas.drawArc(rect, -2.4, 1.9, false, paint..color = const Color(0xFFEA4335));
-
-    // Google yellow (left)
-    canvas.drawArc(rect, 2.5, 1.0, false, paint..color = const Color(0xFFFBBC05));
-
-    // Google green (bottom)
-    canvas.drawArc(rect, 0.9, 1.6, false, paint..color = const Color(0xFF34A853));
-
-    // Google blue (right/arc)
-    canvas.drawArc(rect, -0.18, 1.1, false, paint..color = const Color(0xFF4285F4));
-
-    // Google blue (horizontal bar)
-    final Paint barPaint = Paint()
-      ..color = const Color(0xFF4285F4)
-      ..style = PaintingStyle.fill;
-    
-    final Rect barRect = Rect.fromLTWH(
-      center.dx,
-      center.dy - strokeWidth / 2,
-      w / 2,
-      strokeWidth,
+    final stroke = size.width * 0.18;
+    final rect = Rect.fromLTWH(
+      stroke,
+      stroke,
+      size.width - stroke * 2,
+      size.height - stroke * 2,
     );
-    canvas.drawRect(barRect, barPaint);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+
+    void arc(Color color, double start, double sweep) {
+      paint.color = color;
+      canvas.drawArc(rect, start, sweep, false, paint);
+    }
+
+    arc(const Color(0xFFEA4335), math.pi * 1.02, math.pi * 0.58);
+    arc(const Color(0xFFFBBC05), math.pi * 0.58, math.pi * 0.47);
+    arc(const Color(0xFF34A853), math.pi * 0.08, math.pi * 0.56);
+    arc(const Color(0xFF4285F4), -math.pi * 0.18, math.pi * 0.34);
+
+    final bluePaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.square;
+    canvas.drawLine(
+      Offset(size.width * 0.54, size.height * 0.50),
+      Offset(size.width * 0.92, size.height * 0.50),
+      bluePaint,
+    );
+    canvas.drawLine(
+      Offset(size.width * 0.90, size.height * 0.50),
+      Offset(size.width * 0.82, size.height * 0.68),
+      bluePaint,
+    );
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _LogoOrbitPainter extends CustomPainter {
+  final double progress;
+
+  const _LogoOrbitPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    for (var i = 0; i < 2; i++) {
+      final phase = (progress + i * 0.5) % 1;
+      final radius = 36 + phase * 18;
+      paint.color = AppTheme.iosBlue.withValues(alpha: (1 - phase) * 0.22);
+      canvas.drawCircle(center, radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LogoOrbitPainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
+
+class _AuthBackdropPainter extends CustomPainter {
+  final double progress;
+
+  const _AuthBackdropPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final width = size.width;
+    final height = size.height;
+    final t = progress * math.pi * 2;
+
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = AppTheme.canvasDark,
+    );
+
+    final topPath = Path()
+      ..moveTo(0, height * (0.12 + math.sin(t) * 0.012))
+      ..cubicTo(
+        width * 0.25,
+        height * (0.05 + math.cos(t * 0.8) * 0.018),
+        width * 0.68,
+        height * (0.20 + math.sin(t * 0.7) * 0.014),
+        width,
+        height * (0.10 + math.cos(t) * 0.012),
+      )
+      ..lineTo(width, 0)
+      ..lineTo(0, 0)
+      ..close();
+
+    canvas.drawPath(
+      topPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0x662BAEFF),
+            Color(0x305E5CE6),
+            Color(0x00000000),
+          ],
+        ).createShader(Rect.fromLTWH(0, 0, width, height * 0.38))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16),
+    );
+
+    final midPath = Path()
+      ..moveTo(0, height * (0.38 + math.cos(t) * 0.018))
+      ..cubicTo(
+        width * 0.22,
+        height * (0.31 + math.sin(t * 0.9) * 0.02),
+        width * 0.58,
+        height * (0.46 + math.cos(t * 0.7) * 0.016),
+        width,
+        height * (0.36 + math.sin(t) * 0.016),
+      )
+      ..lineTo(width, height * 0.58)
+      ..cubicTo(
+        width * 0.70,
+        height * (0.50 + math.cos(t) * 0.016),
+        width * 0.26,
+        height * (0.62 + math.sin(t * 0.6) * 0.018),
+        0,
+        height * 0.52,
+      )
+      ..close();
+
+    canvas.drawPath(
+      midPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            Color(0x24FF2D55),
+            Color(0x1FFF9F0A),
+            Color(0x220A84FF),
+          ],
+        ).createShader(Rect.fromLTWH(0, height * 0.28, width, height * 0.36))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 28),
+    );
+
+    final bottomPath = Path()
+      ..moveTo(0, height)
+      ..lineTo(0, height * (0.80 + math.sin(t * 0.6) * 0.012))
+      ..cubicTo(
+        width * 0.28,
+        height * (0.72 + math.cos(t * 0.7) * 0.016),
+        width * 0.64,
+        height * (0.88 + math.sin(t) * 0.016),
+        width,
+        height * (0.78 + math.cos(t * 0.8) * 0.012),
+      )
+      ..lineTo(width, height)
+      ..close();
+
+    canvas.drawPath(
+      bottomPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.bottomLeft,
+          end: Alignment.topRight,
+          colors: [
+            Color(0x330A84FF),
+            Color(0x1A30D158),
+            Color(0x00000000),
+          ],
+        ).createShader(Rect.fromLTWH(0, height * 0.66, width, height * 0.34))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22),
+    );
+
+    final linePaint = Paint()
+      ..color = CupertinoColors.white.withValues(alpha: 0.035)
+      ..strokeWidth = 0.7;
+    for (var i = 0; i < 6; i++) {
+      final y = height * (0.22 + i * 0.11) + math.sin(t + i) * 2.5;
+      canvas.drawLine(Offset(18, y), Offset(width - 18, y), linePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AuthBackdropPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }

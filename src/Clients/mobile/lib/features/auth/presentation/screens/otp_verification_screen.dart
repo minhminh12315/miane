@@ -1,9 +1,12 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/ui/ios_ui.dart';
 import '../controllers/app_auth_provider.dart';
 
 class OtpVerificationScreen extends ConsumerStatefulWidget {
@@ -19,53 +22,44 @@ class OtpVerificationScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
+  ConsumerState<OtpVerificationScreen> createState() =>
+      _OtpVerificationScreenState();
 }
 
 class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
-    with SingleTickerProviderStateMixin {
-  final List<TextEditingController> _otpControllers =
-      List.generate(6, (_) => TextEditingController());
-  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+    with TickerProviderStateMixin {
+  final _otpControllers = List.generate(6, (_) => TextEditingController());
+  final _focusNodes = List.generate(6, (_) => FocusNode());
+  late final AnimationController _loopController;
 
   bool _isVerifying = false;
   bool _isResending = false;
   int _resendCooldown = 60;
   Timer? _resendTimer;
 
-  late final AnimationController _animController;
-  late final Animation<double> _fadeIn;
-  late final Animation<Offset> _slideUp;
+  String get _otpCode =>
+      _otpControllers.map((controller) => controller.text).join();
+
+  String get _maskedEmail {
+    final parts = widget.email.split('@');
+    if (parts.length != 2 || parts[0].length < 2) return widget.email;
+    final name = parts[0];
+    return '${name[0]}${'•' * (name.length - 2)}${name[name.length - 1]}@${parts[1]}';
+  }
 
   @override
   void initState() {
     super.initState();
-    _startResendCooldown();
-
-    _animController = AnimationController(
+    _loopController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-
-    _fadeIn = CurvedAnimation(
-      parent: _animController,
-      curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
-    );
-
-    _slideUp = Tween<Offset>(
-      begin: const Offset(0.0, 0.15),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animController,
-      curve: const Interval(0.2, 0.8, curve: Curves.easeOutCubic),
-    ));
-
-    _animController.forward();
+      duration: const Duration(milliseconds: 5200),
+    )..repeat();
+    _startResendCooldown();
   }
 
   void _startResendCooldown() {
-    _resendCooldown = 60;
     _resendTimer?.cancel();
+    _resendCooldown = 60;
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -73,9 +67,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
       }
       setState(() {
         _resendCooldown--;
-        if (_resendCooldown <= 0) {
-          timer.cancel();
-        }
+        if (_resendCooldown <= 0) timer.cancel();
       });
     });
   }
@@ -83,52 +75,43 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
   @override
   void dispose() {
     _resendTimer?.cancel();
-    _animController.dispose();
-    for (final c in _otpControllers) {
-      c.dispose();
+    _loopController.dispose();
+    for (final controller in _otpControllers) {
+      controller.dispose();
     }
-    for (final f in _focusNodes) {
-      f.dispose();
+    for (final node in _focusNodes) {
+      node.dispose();
     }
     super.dispose();
   }
 
-  String get _otpCode => _otpControllers.map((c) => c.text).join();
-
-  String get _maskedEmail {
-    final parts = widget.email.split('@');
-    if (parts.length != 2 || parts[0].length < 2) return widget.email;
-    final name = parts[0];
-    final masked = '${name[0]}${'•' * (name.length - 2)}${name[name.length - 1]}';
-    return '$masked@${parts[1]}';
-  }
-
   Future<void> _verifyOtp() async {
     final code = _otpCode;
-    if (code.length != 6) return;
+    if (code.length != 6 || _isVerifying) return;
 
     setState(() => _isVerifying = true);
     try {
-      await ref.read(appAuthProvider.notifier).verifyRegistrationOtp(widget.email, code);
-      if (context.mounted) {
-        // Pop all auth screens back to root (which will now show MainLayoutScreen)
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
+      await ref
+          .read(appAuthProvider.notifier)
+          .verifyRegistrationOtp(widget.email, code);
+      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
-      setState(() => _isVerifying = false);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('ApiException: ', '').replaceAll('Exception: ', '')),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-        // Clear OTP fields on error
-        for (final c in _otpControllers) {
-          c.clear();
+      if (mounted) {
+        for (final controller in _otpControllers) {
+          controller.clear();
         }
-        _focusNodes[0].requestFocus();
+        _focusNodes.first.requestFocus();
+        await showIosMessage(
+          context,
+          message: e
+              .toString()
+              .replaceAll('ApiException: ', '')
+              .replaceAll('Exception: ', ''),
+          isError: true,
+        );
       }
+    } finally {
+      if (mounted) setState(() => _isVerifying = false);
     }
   }
 
@@ -143,21 +126,20 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
             widget.fullName,
           );
       _startResendCooldown();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Đã gửi lại mã xác minh đến ${_maskedEmail}'),
-            backgroundColor: AppTheme.iosBlue,
-          ),
+      if (mounted) {
+        await showIosMessage(
+          context,
+          title: 'Đã gửi lại',
+          message: 'Mã xác minh đã được gửi đến $_maskedEmail.',
         );
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gửi lại thất bại: ${e.toString().replaceAll('ApiException: ', '')}'),
-            backgroundColor: Colors.redAccent,
-          ),
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message:
+              'Gửi lại thất bại: ${e.toString().replaceAll('ApiException: ', '')}',
+          isError: true,
         );
       }
     } finally {
@@ -167,221 +149,301 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
 
   @override
   Widget build(BuildContext context) {
-    const Color kDark = AppTheme.canvasDark;
-    const Color kNavy = AppTheme.surfaceDark;
-    const Color kAzure = AppTheme.iosBlue;
-    const Color kGold = AppTheme.iosGold;
-    const Color kLight = AppTheme.iosLight;
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
 
-    return Scaffold(
-      backgroundColor: kDark,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: kLight, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+    return CupertinoPageScaffold(
+      backgroundColor: AppTheme.canvasDark,
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor: AppTheme.canvasDark.withValues(alpha: 0.72),
+        border: null,
+        middle: const Text('Xác minh email'),
+        previousPageTitle: 'Đăng ký',
       ),
-      body: SafeArea(
-        child: FadeTransition(
-          opacity: _fadeIn,
-          child: SlideTransition(
-            position: _slideUp,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 24),
-                  // Icon
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const LinearGradient(
-                        colors: [kNavy, kAzure],
-                      ),
-                      border: Border.all(
-                        color: kAzure.withValues(alpha: 0.3),
-                        width: 2,
-                      ),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.mail_outline_rounded,
-                        color: kGold,
-                        size: 32,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Xác minh email',
-                    style: GoogleFonts.inter(
-                      color: kLight,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Chúng tôi đã gửi mã 6 số đến',
-                    style: GoogleFonts.beVietnamPro(
-                      color: kLight.withValues(alpha: 0.6),
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _maskedEmail,
-                    style: GoogleFonts.beVietnamPro(
-                      color: kAzure,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 36),
-                  // OTP Input Boxes
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(6, (index) {
-                      return Container(
-                        width: 48,
-                        height: 56,
-                        margin: EdgeInsets.only(
-                          left: index == 0 ? 0 : (index == 3 ? 16 : 8),
-                        ),
-                        decoration: BoxDecoration(
-                          color: kNavy,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: _otpControllers[index].text.isNotEmpty
-                                ? kAzure
-                                : kAzure.withValues(alpha: 0.25),
-                            width: _otpControllers[index].text.isNotEmpty ? 1.5 : 1.0,
-                          ),
-                        ),
-                        child: TextField(
-                          controller: _otpControllers[index],
-                          focusNode: _focusNodes[index],
-                          textAlign: TextAlign.center,
-                          keyboardType: TextInputType.number,
-                          maxLength: 1,
-                          style: GoogleFonts.inter(
-                            color: kLight,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          decoration: const InputDecoration(
-                            counterText: '',
-                            border: InputBorder.none,
-                          ),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          onChanged: (value) {
-                            setState(() {});
-                            if (value.isNotEmpty && index < 5) {
-                              _focusNodes[index + 1].requestFocus();
-                            }
-                            // Auto-submit when all 6 digits are entered
-                            if (_otpCode.length == 6) {
-                              _verifyOtp();
-                            }
-                          },
-                          onTap: () {
-                            _otpControllers[index].selection = TextSelection(
-                              baseOffset: 0,
-                              extentOffset: _otpControllers[index].text.length,
-                            );
-                          },
-                        ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 32),
-                  // Verify Button
-                  GestureDetector(
-                    onTap: _isVerifying ? null : _verifyOtp,
-                    child: Container(
-                      height: 56,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: _otpCode.length == 6 ? kAzure : kAzure.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: _otpCode.length == 6
-                            ? [
-                                BoxShadow(
-                                  color: kAzure.withValues(alpha: 0.25),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Center(
-                        child: _isVerifying
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  color: kLight,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Text(
-                                'Xác minh',
-                                style: GoogleFonts.beVietnamPro(
-                                  color: kLight,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
+      child: AnimatedBuilder(
+        animation: _loopController,
+        builder: (context, _) {
+          final loop = _loopController.value;
+
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _OtpBackdropPainter(progress: loop),
+                ),
+              ),
+              SafeArea(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints:
+                            BoxConstraints(minHeight: constraints.maxHeight),
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 28, 16, 28),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 460),
+                              child: IosAnimatedEntry(
+                                delay: 0,
+                                dy: 28,
+                                scaleBegin: 0.96,
+                                child: ModernGlass(
+                                  radius: 34,
+                                  padding:
+                                      const EdgeInsets.fromLTRB(18, 28, 18, 22),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _MailVerificationBadge(progress: loop),
+                                      const SizedBox(height: 24),
+                                      IosAnimatedEntry(
+                                        delay: 0.06,
+                                        child: Text(
+                                          'Nhập mã 6 số',
+                                          textAlign: TextAlign.center,
+                                          style: AppTheme.displayLg(),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      IosAnimatedEntry(
+                                        delay: 0.12,
+                                        child: Text(
+                                          'Chúng tôi đã gửi mã xác minh đến $_maskedEmail.',
+                                          textAlign: TextAlign.center,
+                                          style:
+                                              AppTheme.bodyMd(color: secondary)
+                                                  .copyWith(height: 1.45),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 26),
+                                      _OtpInputRow(
+                                        controllers: _otpControllers,
+                                        focusNodes: _focusNodes,
+                                        onChanged: (index, value) {
+                                          setState(() {});
+                                          if (value.isNotEmpty && index < 5) {
+                                            _focusNodes[index + 1]
+                                                .requestFocus();
+                                          }
+                                          if (_otpCode.length == 6) {
+                                            _verifyOtp();
+                                          }
+                                        },
+                                      ),
+                                      const SizedBox(height: 22),
+                                      _OtpProgress(
+                                        value: _otpCode.length / 6,
+                                      ),
+                                      const SizedBox(height: 26),
+                                      IosAnimatedEntry(
+                                        delay: 0.42,
+                                        dy: 20,
+                                        child: IosPrimaryButton(
+                                          label: 'Xác minh',
+                                          isLoading: _isVerifying,
+                                          onPressed: _otpCode.length == 6
+                                              ? _verifyOtp
+                                              : null,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      IosAnimatedEntry(
+                                        delay: 0.50,
+                                        child: CupertinoButton(
+                                          padding: EdgeInsets.zero,
+                                          onPressed: _resendCooldown > 0 ||
+                                                  _isResending
+                                              ? null
+                                              : _resendOtp,
+                                          child: Text(
+                                            _isResending
+                                                ? 'Đang gửi lại...'
+                                                : _resendCooldown > 0
+                                                    ? 'Gửi lại sau ${_resendCooldown}s'
+                                                    : 'Gửi lại mã',
+                                            style: AppTheme.bodySm(
+                                              color: _resendCooldown > 0 ||
+                                                      _isResending
+                                                  ? secondary.withValues(
+                                                      alpha: 0.64,
+                                                    )
+                                                  : AppTheme.iosBlue,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  // Resend OTP
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Không nhận được mã? ',
-                        style: GoogleFonts.beVietnamPro(
-                          color: kLight.withValues(alpha: 0.5),
-                          fontSize: 13,
+                            ),
+                          ),
                         ),
                       ),
-                      GestureDetector(
-                        onTap: _resendCooldown > 0 ? null : _resendOtp,
-                        child: _isResending
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  color: kAzure,
-                                  strokeWidth: 1.5,
-                                ),
-                              )
-                            : Text(
-                                _resendCooldown > 0
-                                    ? 'Gửi lại (${_resendCooldown}s)'
-                                    : 'Gửi lại',
-                                style: GoogleFonts.beVietnamPro(
-                                  color: _resendCooldown > 0
-                                      ? kLight.withValues(alpha: 0.3)
-                                      : kAzure,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                      ),
-                    ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MailVerificationBadge extends StatelessWidget {
+  final double progress;
+
+  const _MailVerificationBadge({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    final wave = math.sin(progress * math.pi * 2);
+
+    return SizedBox(
+      width: 116,
+      height: 116,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _PulseRingPainter(progress: progress),
+            ),
+          ),
+          Transform.translate(
+            offset: Offset(0, wave * 4),
+            child: Container(
+              width: 78,
+              height: 78,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF3CC8FF),
+                    AppTheme.iosBlue,
+                    AppTheme.iosIndigo,
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(25),
+                border: Border.all(
+                  color: CupertinoColors.white.withValues(alpha: 0.18),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.iosBlue.withValues(alpha: 0.42),
+                    blurRadius: 30,
+                    offset: const Offset(0, 18),
                   ),
-                  const SizedBox(height: 40),
+                ],
+              ),
+              child: const Icon(
+                CupertinoIcons.mail,
+                color: CupertinoColors.white,
+                size: 36,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 19,
+            bottom: 20,
+            child: Container(
+              width: 27,
+              height: 27,
+              decoration: BoxDecoration(
+                color: AppTheme.iosGreen,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.canvasDark, width: 3),
+              ),
+              child: const Icon(
+                CupertinoIcons.check_mark,
+                color: CupertinoColors.black,
+                size: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OtpInputRow extends StatelessWidget {
+  final List<TextEditingController> controllers;
+  final List<FocusNode> focusNodes;
+  final void Function(int index, String value) onChanged;
+
+  const _OtpInputRow({
+    required this.controllers,
+    required this.focusNodes,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 8.0;
+        final availableWidth = math.min(
+            constraints.maxWidth.isFinite ? constraints.maxWidth : 360, 360.0);
+        final rawWidth = (availableWidth - gap * 5) / 6;
+        final boxWidth = rawWidth.clamp(42.0, 54.0).toDouble();
+        final boxHeight = (boxWidth + 8).clamp(52.0, 60.0).toDouble();
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(6, (index) {
+            return IosAnimatedEntry(
+              delay: 0.20 + index * 0.035,
+              dy: 18,
+              scaleBegin: 0.86,
+              child: Padding(
+                padding: EdgeInsets.only(left: index == 0 ? 0 : gap),
+                child: _OtpBox(
+                  width: boxWidth,
+                  height: boxHeight,
+                  controller: controllers[index],
+                  focusNode: focusNodes[index],
+                  onChanged: (value) => onChanged(index, value),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+}
+
+class _OtpProgress extends StatelessWidget {
+  final double value;
+
+  const _OtpProgress({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = value.clamp(0.0, 1.0);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+      child: Container(
+        height: 5,
+        width: 112,
+        color: CupertinoColors.white.withValues(alpha: 0.08),
+        alignment: Alignment.centerLeft,
+        child: AnimatedFractionallySizedBox(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          widthFactor: progress,
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.iosBlue,
+                  AppTheme.iosGreen,
                 ],
               ),
             ),
@@ -390,4 +452,192 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
       ),
     );
   }
+}
+
+class _OtpBox extends StatelessWidget {
+  final double width;
+  final double height;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
+
+  const _OtpBox({
+    required this.width,
+    required this.height,
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: focusNode,
+      builder: (context, _) {
+        final isFocused = focusNode.hasFocus;
+        final hasValue = controller.text.isNotEmpty;
+        final accent = hasValue ? AppTheme.iosGreen : AppTheme.iosBlue;
+
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: isFocused
+                ? AppTheme.surfaceSecondaryDark.withValues(alpha: 0.96)
+                : AppTheme.surfaceDark.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: (isFocused || hasValue)
+                  ? accent.withValues(alpha: 0.72)
+                  : CupertinoColors.white.withValues(alpha: 0.07),
+              width: isFocused ? 1.4 : 0.7,
+            ),
+            boxShadow: [
+              if (isFocused || hasValue)
+                BoxShadow(
+                  color: accent.withValues(alpha: isFocused ? 0.28 : 0.16),
+                  blurRadius: isFocused ? 18 : 10,
+                  offset: const Offset(0, 8),
+                ),
+            ],
+          ),
+          child: CupertinoTextField(
+            controller: controller,
+            focusNode: focusNode,
+            textAlign: TextAlign.center,
+            textAlignVertical: TextAlignVertical.center,
+            keyboardType: TextInputType.number,
+            maxLength: 1,
+            cursorHeight: 24,
+            cursorColor: AppTheme.iosBlue,
+            style: const TextStyle(
+              color: AppTheme.iosLight,
+              fontSize: 24,
+              height: 1,
+              fontWeight: FontWeight.w800,
+            ),
+            strutStyle: const StrutStyle(
+              fontSize: 24,
+              height: 1,
+              forceStrutHeight: true,
+            ),
+            padding: const EdgeInsets.only(bottom: 1),
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const BoxDecoration(
+              color: CupertinoColors.transparent,
+            ),
+            onChanged: onChanged,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PulseRingPainter extends CustomPainter {
+  final double progress;
+
+  const _PulseRingPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    for (var i = 0; i < 3; i++) {
+      final phase = (progress + i / 3) % 1;
+      final radius = 34 + phase * 28;
+      paint.color = AppTheme.iosBlue.withValues(alpha: (1 - phase) * 0.20);
+      canvas.drawCircle(center, radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PulseRingPainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
+
+class _OtpBackdropPainter extends CustomPainter {
+  final double progress;
+
+  const _OtpBackdropPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final width = size.width;
+    final height = size.height;
+    final t = progress * math.pi * 2;
+
+    canvas.drawRect(Offset.zero & size, Paint()..color = AppTheme.canvasDark);
+
+    void glow({
+      required Offset center,
+      required double radius,
+      required List<Color> colors,
+    }) {
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..shader = RadialGradient(colors: colors).createShader(
+            Rect.fromCircle(center: center, radius: radius),
+          ),
+      );
+    }
+
+    glow(
+      center: Offset(width * (0.14 + math.sin(t) * 0.03), height * 0.18),
+      radius: width * 0.48,
+      colors: [
+        AppTheme.iosBlue.withValues(alpha: 0.26),
+        AppTheme.iosIndigo.withValues(alpha: 0.08),
+        CupertinoColors.transparent,
+      ],
+    );
+    glow(
+      center: Offset(width * (0.88 + math.cos(t * 0.8) * 0.03), height * 0.70),
+      radius: width * 0.52,
+      colors: [
+        AppTheme.iosGreen.withValues(alpha: 0.16),
+        AppTheme.iosBlue.withValues(alpha: 0.08),
+        CupertinoColors.transparent,
+      ],
+    );
+    glow(
+      center: Offset(width * (0.28 + math.sin(t * 0.7) * 0.04), height * 0.86),
+      radius: width * 0.42,
+      colors: [
+        AppTheme.iosPink.withValues(alpha: 0.14),
+        AppTheme.iosOrange.withValues(alpha: 0.07),
+        CupertinoColors.transparent,
+      ],
+    );
+
+    final linePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.7
+      ..color = CupertinoColors.white.withValues(alpha: 0.035);
+    for (var i = 0; i < 6; i++) {
+      final y = height * (0.22 + i * 0.11) + math.sin(t + i) * 4;
+      final path = Path()
+        ..moveTo(20, y)
+        ..cubicTo(
+          width * 0.30,
+          y - 18,
+          width * 0.70,
+          y + 18,
+          width - 20,
+          y,
+        );
+      canvas.drawPath(path, linePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _OtpBackdropPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }

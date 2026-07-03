@@ -1,13 +1,14 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/ui/ios_ui.dart';
 import '../../../auth/presentation/controllers/app_auth_provider.dart';
+import '../../../expense/domain/models/expense_models.dart';
 import '../../../expense/presentation/controllers/expense_controller.dart';
 import '../../../expense/presentation/controllers/pool_controller.dart';
-import '../../../expense/domain/models/expense_models.dart';
-import '../../domain/models/trip_models.dart';
 import '../../data/repositories/trip_repository_impl.dart';
+import '../../domain/models/trip_models.dart';
 import '../controllers/trips_provider.dart';
 
 class TripWorkspaceScreen extends ConsumerStatefulWidget {
@@ -25,82 +26,75 @@ class TripWorkspaceScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<TripWorkspaceScreen> createState() => _TripWorkspaceScreenState();
+  ConsumerState<TripWorkspaceScreen> createState() =>
+      _TripWorkspaceScreenState();
 }
 
-class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
+  int _selectedTab = 0;
 
   @override
   Widget build(BuildContext context) {
-    const Color kDark = AppTheme.canvasDark;
-    const Color kNavy = AppTheme.surfaceDark;
-    const Color kAzure = AppTheme.iosBlue;
-    const Color kGold = AppTheme.iosGold;
-    const Color kLight = AppTheme.iosLight;
-
     final expensesState = ref.watch(tripExpensesProvider(widget.tripId));
     final balancesState = ref.watch(tripBalancesProvider(widget.tripId));
     final poolState = ref.watch(tripPoolControllerProvider(widget.tripId));
     final detailsState = ref.watch(tripDetailsProvider(widget.tripId));
     final userIdState = ref.watch(currentUserIdProvider);
 
-    return Scaffold(
-      backgroundColor: kDark,
-      appBar: AppBar(
-        backgroundColor: kNavy,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: kLight, size: 20),
-          onPressed: () => Navigator.pop(context),
+    return CupertinoPageScaffold(
+      backgroundColor: iosGroupedBackground(context),
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(widget.tripName),
+        previousPageTitle: 'Miane',
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: () => _showAddExpenseSheet(context, detailsState),
+          child: const Icon(CupertinoIcons.add),
         ),
-        title: Text(
-          widget.tripName,
-          style: GoogleFonts.inter(color: kLight, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: kAzure,
-          labelColor: kLight,
-          unselectedLabelColor: kLight.withOpacity(0.5),
-          tabs: const [
-            Tab(text: 'Tổng quan'),
-            Tab(text: 'Số dư nợ'),
-            Tab(text: 'Quỹ nhóm'),
-            Tab(text: 'Thành viên'),
+      ),
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: CupertinoSlidingSegmentedControl<int>(
+                groupValue: _selectedTab,
+                children: const {
+                  0: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: Text('Tổng quan'),
+                  ),
+                  1: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: Text('Nợ'),
+                  ),
+                  2: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: Text('Quỹ'),
+                  ),
+                  3: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: Text('Thành viên'),
+                  ),
+                },
+                onValueChanged: (value) {
+                  if (value != null) setState(() => _selectedTab = value);
+                },
+              ),
+            ),
+            Expanded(
+              child: IndexedStack(
+                index: _selectedTab,
+                children: [
+                  _buildOverviewTab(expensesState, poolState),
+                  _buildBalancesTab(balancesState, detailsState, userIdState),
+                  _buildPoolTab(poolState, detailsState),
+                  _buildMembersTab(detailsState),
+                ],
+              ),
+            ),
           ],
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          // Tab 1: Overview & Transactions
-          _buildOverviewTab(expensesState, poolState, kNavy, kAzure, kGold, kLight),
-          // Tab 2: Debt Balances
-          _buildBalancesTab(balancesState, detailsState, userIdState, kNavy, kAzure, kGold, kLight),
-          // Tab 3: Trip Pool
-          _buildPoolTab(poolState, detailsState, kNavy, kAzure, kGold, kLight),
-          // Tab 4: Members
-          _buildMembersTab(detailsState, kNavy, kAzure, kGold, kLight),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: kAzure,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        onPressed: () => _showAddExpenseDialog(context, detailsState),
-        child: const Icon(Icons.add_rounded, color: kLight, size: 28),
       ),
     );
   }
@@ -108,224 +102,85 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> with 
   Widget _buildOverviewTab(
     AsyncValue<List<ExpenseModel>> expensesState,
     AsyncValue<TripPoolModel?> poolState,
-    Color kNavy, Color kAzure, Color kGold, Color kLight
   ) {
-    return expensesState.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.iosBlue)),
-      error: (err, stack) => Center(child: Text('Lỗi: $err', style: TextStyle(color: AppTheme.iosRed))),
-      data: (expenses) {
-        final totalSpent = expenses.fold<double>(0, (sum, e) => sum + e.amount);
-        final poolBalance = poolState.valueOrNull?.balance ?? 0.0;
-
-        return RefreshIndicator(
+    return CustomScrollView(
+      physics:
+          const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      slivers: [
+        CupertinoSliverRefreshControl(
           onRefresh: () async {
             ref.invalidate(tripExpensesProvider(widget.tripId));
             ref.invalidate(tripPoolControllerProvider(widget.tripId));
           },
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            slivers: [
-              // Itinerary card
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+        expensesState.when(
+          loading: () => const SliverFillRemaining(child: IosLoading()),
+          error: (err, stack) => SliverFillRemaining(
+            child: IosEmptyState(
+              icon: CupertinoIcons.exclamationmark_circle,
+              title: 'Không tải được chi tiêu',
+              message: err.toString(),
+            ),
+          ),
+          data: (expenses) {
+            final totalSpent = expenses.fold<double>(
+                0, (sum, expense) => sum + expense.amount);
+            final poolBalance = poolState.valueOrNull?.balance ?? 0;
+
+            return SliverList(
+              delegate: SliverChildListDelegate(
+                [
+                  IosSection(
+                    header: 'Lịch trình',
                     children: [
-                      Text(
-                        'Lịch trình tiếp theo',
-                        style: GoogleFonts.inter(color: kLight, fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: kNavy,
-                          borderRadius: BorderRadius.circular(16),
-                          border: AppTheme.thinBorder,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: kAzure.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(Icons.map_rounded, color: kAzure, size: 24),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Tham quan & Check-in',
-                                    style: GoogleFonts.beVietnamPro(color: kLight, fontSize: 15, fontWeight: FontWeight.bold),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${widget.destination} • Tự do khám phá',
-                                    style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.5), fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(Icons.chevron_right_rounded, color: kLight, size: 24),
-                          ],
-                        ),
+                      IosListTile(
+                        icon: CupertinoIcons.map,
+                        title: 'Tham quan và check-in',
+                        subtitle: '${widget.destination} • Tự do khám phá',
                       ),
                     ],
                   ),
-                ),
+                  IosSection(
+                    header: 'Tài chính nhóm',
+                    children: [
+                      IosListTile(
+                        icon: CupertinoIcons.money_dollar,
+                        title: 'Đã chi tiêu',
+                        value:
+                            '${formatMoney(totalSpent)} ${widget.baseCurrency}',
+                      ),
+                      IosListTile(
+                        icon: CupertinoIcons.creditcard,
+                        iconColor: AppTheme.iosGold,
+                        title: 'Số dư quỹ nhóm',
+                        value:
+                            '${formatMoney(poolBalance)} ${widget.baseCurrency}',
+                      ),
+                    ],
+                  ),
+                  if (expenses.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 48),
+                      child: IosEmptyState(
+                        icon: CupertinoIcons.doc_text,
+                        title: 'Chưa có chi tiêu',
+                        message: 'Nhấn nút + để thêm khoản chi đầu tiên.',
+                      ),
+                    )
+                  else
+                    IosSection(
+                      header: 'Lịch sử chi tiêu',
+                      children: expenses
+                          .map((expense) => _ExpenseTile(expense: expense))
+                          .toList(),
+                    ),
+                  const SizedBox(height: 28),
+                ],
               ),
-
-              // Group Budget summary
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: kNavy,
-                      borderRadius: BorderRadius.circular(16),
-                      border: AppTheme.thinBorder,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Tổng quan tài chính nhóm',
-                          style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.7), fontSize: 12),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Đã chi tiêu:',
-                              style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.7), fontSize: 14),
-                            ),
-                            Text(
-                              '${_formatMoney(totalSpent)} ${widget.baseCurrency}',
-                              style: GoogleFonts.beVietnamPro(color: kLight, fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Số dư quỹ nhóm:',
-                              style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.7), fontSize: 14),
-                            ),
-                            Text(
-                              '${_formatMoney(poolBalance)} ${widget.baseCurrency}',
-                              style: GoogleFonts.beVietnamPro(color: kGold, fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Transaction List Header
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-                  child: Text(
-                    'Lịch sử chi tiêu (${expenses.length})',
-                    style: GoogleFonts.inter(color: kLight, fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-
-              // Transactions
-              if (expenses.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Text(
-                      'Chưa có khoản chi tiêu nào.',
-                      style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.4)),
-                    ),
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final ex = expenses[index];
-                        final isPool = ex.isPaidFromPool;
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: kNavy,
-                            borderRadius: BorderRadius.circular(16),
-                            border: AppTheme.thinBorder,
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: (isPool ? kGold : kAzure).withOpacity(0.15),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  isPool ? Icons.pix_rounded : Icons.payments_rounded,
-                                  color: isPool ? kGold : kAzure,
-                                  size: 20,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      ex.description,
-                                      style: GoogleFonts.beVietnamPro(color: kLight, fontSize: 14, fontWeight: FontWeight.bold),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      isPool ? 'Quỹ chi trả' : 'Cá nhân trả • ${_formatDate(ex.createdAt)}',
-                                      style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.4), fontSize: 11),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                '${_formatMoney(ex.amount)} ${ex.currency}',
-                                style: GoogleFonts.beVietnamPro(
-                                  color: isPool ? kGold : kLight,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                      childCount: expenses.length,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -333,776 +188,692 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> with 
     AsyncValue<TripBalancesModel> balancesState,
     AsyncValue<TripDetailModel> detailsState,
     AsyncValue<String?> userIdState,
-    Color kNavy, Color kAzure, Color kGold, Color kLight
   ) {
-    return balancesState.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.iosBlue)),
-      error: (err, stack) => Center(child: Text('Lỗi: $err', style: TextStyle(color: AppTheme.iosRed))),
-      data: (balances) {
-        final unsettled = balances.unsettledDebts;
-        final settled = balances.settledDebts;
+    final currentUserId = userIdState.valueOrNull?.toLowerCase();
 
-        final currentUserId = userIdState.valueOrNull;
-
-        return RefreshIndicator(
+    return CustomScrollView(
+      physics:
+          const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      slivers: [
+        CupertinoSliverRefreshControl(
           onRefresh: () async {
             ref.invalidate(tripBalancesProvider(widget.tripId));
           },
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Text(
-                    'Các khoản cần thanh toán',
-                    style: GoogleFonts.inter(color: kLight, fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-
-              if (unsettled.isEmpty)
-                const SliverToBoxAdapter(
-                  child: Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 32.0),
-                      child: Text('Mọi số dư đã được đơn giản hóa & thanh toán xong! 🎉'),
-                    ),
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final debt = unsettled[index];
-                        final isOwedByMe = debt.fromUserId.toLowerCase() == currentUserId?.toLowerCase();
-
-                        // Try to resolve member names
-                        final fromName = _getMemberName(debt.fromUserId, detailsState);
-                        final toName = _getMemberName(debt.toUserId, detailsState);
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: kNavy,
-                            borderRadius: BorderRadius.circular(16),
-                            border: AppTheme.thinBorder,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    RichText(
-                                      text: TextSpan(
-                                        style: GoogleFonts.beVietnamPro(color: kLight, fontSize: 14),
-                                        children: [
-                                          TextSpan(
-                                            text: isOwedByMe ? 'Bạn ' : '$fromName ',
-                                            style: const TextStyle(fontWeight: FontWeight.bold),
-                                          ),
-                                          const TextSpan(text: 'nợ '),
-                                          TextSpan(
-                                            text: debt.toUserId.toLowerCase() == currentUserId?.toLowerCase() ? 'Bạn' : toName,
-                                            style: const TextStyle(fontWeight: FontWeight.bold),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Số tiền: ${_formatMoney(debt.amount)} ${debt.currency}',
-                                      style: GoogleFonts.beVietnamPro(color: kAzure, fontSize: 15, fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (isOwedByMe)
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: kAzure,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  ),
-                                  onPressed: () async {
-                                    try {
-                                      await ref.read(tripBalancesProvider(widget.tripId).notifier).settle(debt.debtRecordId);
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('Thanh toán khoản nợ thành công!'),
-                                            backgroundColor: AppTheme.iosGreen,
-                                          ),
-                                        );
-                                      }
-                                    } catch (e) {
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Lỗi thanh toán: ${e.toString().replaceAll('ApiException: ', '')}'),
-                                            backgroundColor: AppTheme.iosRed,
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  },
-                                  child: Text('Trả nợ', style: GoogleFonts.beVietnamPro(color: kLight, fontWeight: FontWeight.bold, fontSize: 12)),
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                      childCount: unsettled.length,
-                    ),
-                  ),
-                ),
-
-              // Settled debts
-              if (settled.isNotEmpty) ...[
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 8),
-                    child: Text(
-                      'Lịch sử thanh toán xong',
-                      style: GoogleFonts.inter(color: kLight, fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final debt = settled[index];
-                        final fromName = _getMemberName(debt.fromUserId, detailsState);
-                        final toName = _getMemberName(debt.toUserId, detailsState);
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: kNavy.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: kLight.withOpacity(0.1), width: 0.5),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '$fromName đã trả cho $toName',
-                                  style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.5), fontSize: 13),
-                                ),
-                              ),
-                              Text(
-                                '${_formatMoney(debt.amount)} ${debt.currency}',
-                                style: GoogleFonts.beVietnamPro(color: Colors.greenAccent[200], fontSize: 13, decoration: TextDecoration.lineThrough),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                      childCount: settled.length,
-                    ),
-                  ),
-                ),
-              ],
-            ],
+        ),
+        balancesState.when(
+          loading: () => const SliverFillRemaining(child: IosLoading()),
+          error: (err, stack) => SliverFillRemaining(
+            child: IosEmptyState(
+              icon: CupertinoIcons.exclamationmark_circle,
+              title: 'Không tải được số dư',
+              message: err.toString(),
+            ),
           ),
-        );
-      },
+          data: (balances) {
+            if (balances.unsettledDebts.isEmpty &&
+                balances.settledDebts.isEmpty) {
+              return const SliverFillRemaining(
+                child: IosEmptyState(
+                  icon: CupertinoIcons.check_mark_circled,
+                  title: 'Đã cân bằng',
+                  message: 'Hiện không có khoản nợ cần thanh toán.',
+                ),
+              );
+            }
+
+            return SliverList(
+              delegate: SliverChildListDelegate(
+                [
+                  if (balances.unsettledDebts.isNotEmpty)
+                    IosSection(
+                      header: 'Cần thanh toán',
+                      children: balances.unsettledDebts.map((debt) {
+                        final isOwedByMe =
+                            debt.fromUserId.toLowerCase() == currentUserId;
+                        final fromName =
+                            _getMemberName(debt.fromUserId, detailsState);
+                        final toName =
+                            _getMemberName(debt.toUserId, detailsState);
+
+                        return IosListTile(
+                          icon: CupertinoIcons.arrow_right_arrow_left,
+                          iconColor:
+                              isOwedByMe ? AppTheme.iosRed : AppTheme.iosBlue,
+                          title:
+                              '${isOwedByMe ? 'Bạn' : fromName} nợ ${debt.toUserId.toLowerCase() == currentUserId ? 'Bạn' : toName}',
+                          subtitle:
+                              '${formatMoney(debt.amount)} ${debt.currency}',
+                          trailing: isOwedByMe
+                              ? CupertinoButton(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                  onPressed: () => _settleDebt(debt),
+                                  child: const Text('Trả'),
+                                )
+                              : null,
+                        );
+                      }).toList(),
+                    ),
+                  if (balances.settledDebts.isNotEmpty)
+                    IosSection(
+                      header: 'Đã thanh toán',
+                      children: balances.settledDebts.map((debt) {
+                        return IosListTile(
+                          icon: CupertinoIcons.check_mark,
+                          iconColor: AppTheme.iosGreen,
+                          title:
+                              '${_getMemberName(debt.fromUserId, detailsState)} đã trả ${_getMemberName(debt.toUserId, detailsState)}',
+                          subtitle:
+                              '${formatMoney(debt.amount)} ${debt.currency}',
+                        );
+                      }).toList(),
+                    ),
+                  const SizedBox(height: 28),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 
   Widget _buildPoolTab(
     AsyncValue<TripPoolModel?> poolState,
     AsyncValue<TripDetailModel> detailsState,
-    Color kNavy, Color kAzure, Color kGold, Color kLight
   ) {
-    return poolState.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.iosBlue)),
-      error: (err, stack) => Center(child: Text('Lỗi: $err', style: TextStyle(color: AppTheme.iosRed))),
-      data: (pool) {
-        final contributions = pool?.contributions ?? [];
-        return RefreshIndicator(
+    return CustomScrollView(
+      physics:
+          const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      slivers: [
+        CupertinoSliverRefreshControl(
           onRefresh: () async {
             ref.invalidate(tripPoolControllerProvider(widget.tripId));
           },
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: kNavy,
-                      borderRadius: BorderRadius.circular(16),
-                      border: AppTheme.thinBorder,
-                    ),
-                    child: Column(
-                      children: [
-                        Text('Số dư Quỹ nhóm hiện tại', style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.6), fontSize: 12)),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${_formatMoney(pool?.balance ?? 0.0)} ${pool?.currency ?? widget.baseCurrency}',
-                          style: GoogleFonts.inter(color: kGold, fontSize: 28, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: kGold,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          ),
-                          onPressed: () => _showContributeDialog(context),
-                          icon: const Icon(Icons.add_card_rounded, color: Colors.black),
-                          label: Text('Đóng góp vào Quỹ', style: GoogleFonts.beVietnamPro(color: Colors.black, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  child: Text('Lịch sử đóng góp', style: GoogleFonts.inter(color: kLight, fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-
-              if (contributions.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Text('Chưa có thành viên nào đóng góp quỹ.', style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.4))),
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final c = contributions[index];
-                        final memberName = _getMemberName(c.userId, detailsState);
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: kNavy,
-                            borderRadius: BorderRadius.circular(16),
-                            border: AppTheme.thinBorder,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(memberName, style: GoogleFonts.beVietnamPro(color: kLight, fontSize: 14, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 4),
-                                  Text(_formatDate(c.contributedAt), style: GoogleFonts.beVietnamPro(color: kLight.withOpacity(0.4), fontSize: 11)),
-                                ],
-                              ),
-                              Text(
-                                '+${_formatMoney(c.amount)} ${pool?.currency ?? widget.baseCurrency}',
-                                style: GoogleFonts.beVietnamPro(color: Colors.greenAccent[200], fontSize: 14, fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                      childCount: contributions.length,
-                    ),
-                  ),
-                ),
-            ],
+        ),
+        poolState.when(
+          loading: () => const SliverFillRemaining(child: IosLoading()),
+          error: (err, stack) => SliverFillRemaining(
+            child: IosEmptyState(
+              icon: CupertinoIcons.exclamationmark_circle,
+              title: 'Không tải được quỹ nhóm',
+              message: err.toString(),
+            ),
           ),
-        );
-      },
+          data: (pool) {
+            final contributions = pool?.contributions ?? [];
+            final balance = pool?.balance ?? 0;
+            final currency = pool?.currency ?? widget.baseCurrency;
+
+            return SliverList(
+              delegate: SliverChildListDelegate(
+                [
+                  IosSection(
+                    header: 'Quỹ nhóm',
+                    children: [
+                      IosListTile(
+                        icon: CupertinoIcons.creditcard,
+                        iconColor: AppTheme.iosGold,
+                        title: 'Số dư hiện tại',
+                        value: '${formatMoney(balance)} $currency',
+                      ),
+                      IosListTile(
+                        icon: CupertinoIcons.add_circled,
+                        title: 'Đóng góp quỹ',
+                        onTap: () => _showContributeDialog(context),
+                      ),
+                    ],
+                  ),
+                  if (contributions.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 48),
+                      child: IosEmptyState(
+                        icon: CupertinoIcons.creditcard,
+                        title: 'Chưa có đóng góp',
+                        message:
+                            'Các khoản nạp vào quỹ nhóm sẽ hiển thị tại đây.',
+                      ),
+                    )
+                  else
+                    IosSection(
+                      header: 'Lịch sử đóng góp',
+                      children: contributions.map((contribution) {
+                        return IosListTile(
+                          icon: CupertinoIcons.person,
+                          title:
+                              _getMemberName(contribution.userId, detailsState),
+                          subtitle: _formatDate(contribution.contributedAt),
+                          value:
+                              '${formatMoney(contribution.amount)} $currency',
+                        );
+                      }).toList(),
+                    ),
+                  const SizedBox(height: 28),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 
-  Widget _buildMembersTab(
-    AsyncValue<TripDetailModel> detailsState,
-    Color kNavy, Color kAzure, Color kGold, Color kLight
-  ) {
-    return detailsState.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.iosBlue)),
-      error: (err, stack) => Center(child: Text('Lỗi: $err', style: TextStyle(color: AppTheme.iosRed))),
-      data: (details) {
-        return CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Thành viên nhóm (${details.members.length})', style: GoogleFonts.inter(color: kLight, fontSize: 16, fontWeight: FontWeight.bold)),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: () => _handleLeaveTrip(context),
-                      icon: Icon(Icons.logout_rounded, color: kLight, size: 16),
-                      label: Text('Rời chuyến', style: GoogleFonts.beVietnamPro(color: kLight, fontWeight: FontWeight.bold, fontSize: 12)),
-                    ),
-                  ],
-                ),
-              ),
+  Widget _buildMembersTab(AsyncValue<TripDetailModel> detailsState) {
+    return CustomScrollView(
+      physics:
+          const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      slivers: [
+        CupertinoSliverRefreshControl(
+          onRefresh: () async {
+            ref.invalidate(tripDetailsProvider(widget.tripId));
+          },
+        ),
+        detailsState.when(
+          loading: () => const SliverFillRemaining(child: IosLoading()),
+          error: (err, stack) => SliverFillRemaining(
+            child: IosEmptyState(
+              icon: CupertinoIcons.exclamationmark_circle,
+              title: 'Không tải được thành viên',
+              message: err.toString(),
             ),
-
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final member = details.members[index];
-                    final isOwner = member.role == 0;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: kNavy,
-                        borderRadius: BorderRadius.circular(16),
-                        border: AppTheme.thinBorder,
+          ),
+          data: (details) {
+            return SliverList(
+              delegate: SliverChildListDelegate(
+                [
+                  IosSection(
+                    header: 'Mã mời',
+                    footer:
+                        'Chia sẻ mã này để mời thêm thành viên vào chuyến đi.',
+                    children: [
+                      IosListTile(
+                        icon: CupertinoIcons.number,
+                        title: details.inviteCode,
+                        subtitle: details.baseCurrency,
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: kAzure.withOpacity(0.15),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(Icons.person_rounded, color: kAzure),
-                              ),
-                              const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    member.nickName ?? 'Thành viên mới',
-                                    style: GoogleFonts.beVietnamPro(color: kLight, fontSize: 14, fontWeight: FontWeight.bold),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    isOwner ? 'Trưởng nhóm' : 'Thành viên',
-                                    style: GoogleFonts.beVietnamPro(color: isOwner ? kGold : kLight.withOpacity(0.5), fontSize: 11),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          if (member.userTier > 0)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: kGold.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(99),
-                              ),
-                              child: Text('PRO', style: GoogleFonts.beVietnamPro(color: kGold, fontSize: 9, fontWeight: FontWeight.bold)),
-                            ),
-                        ],
+                    ],
+                  ),
+                  IosSection(
+                    header: 'Thành viên',
+                    children: details.members.map((member) {
+                      return IosListTile(
+                        icon: CupertinoIcons.person,
+                        title: member.nickName ?? 'Thành viên',
+                        subtitle:
+                            member.role == 0 ? 'Chủ chuyến đi' : 'Thành viên',
+                        value: member.userTier == 1 ? 'PRO' : null,
+                      );
+                    }).toList(),
+                  ),
+                  IosSection(
+                    children: [
+                      IosListTile(
+                        icon: CupertinoIcons.square_arrow_right,
+                        iconColor: AppTheme.iosRed,
+                        title: 'Rời chuyến đi',
+                        destructive: true,
+                        onTap: () => _handleLeaveTrip(context),
                       ),
-                    );
-                  },
-                  childCount: details.members.length,
-                ),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+                ],
               ),
-            ),
-          ],
-        );
-      },
+            );
+          },
+        ),
+      ],
     );
+  }
+
+  Future<void> _settleDebt(DebtModel debt) async {
+    try {
+      await ref
+          .read(tripBalancesProvider(widget.tripId).notifier)
+          .settle(debt.debtRecordId);
+      if (mounted) {
+        await showIosMessage(
+          context,
+          title: 'Đã thanh toán',
+          message: 'Khoản nợ đã được đánh dấu là đã trả.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message:
+              'Không thể thanh toán: ${e.toString().replaceAll('ApiException: ', '')}',
+          isError: true,
+        );
+      }
+    }
   }
 
   void _showContributeDialog(BuildContext context) {
     final amountController = TextEditingController();
 
-    showDialog(
+    showCupertinoDialog<void>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppTheme.canvasDark,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: Text(
-            'Đóng góp Quỹ nhóm',
-            style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          content: TextField(
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('Đóng góp quỹ'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 14),
+          child: IosTextField(
             controller: amountController,
+            placeholder: 'Số tiền (${widget.baseCurrency})',
+            prefixIcon: CupertinoIcons.money_dollar,
             keyboardType: TextInputType.number,
-            style: GoogleFonts.beVietnamPro(color: Colors.white, fontSize: 14),
-            decoration: InputDecoration(
-              labelText: 'Số tiền đóng góp (${widget.baseCurrency})',
-              labelStyle: GoogleFonts.beVietnamPro(color: Colors.white.withOpacity(0.6), fontSize: 13),
-              filled: true,
-              fillColor: AppTheme.surfaceDark,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Hủy', style: GoogleFonts.beVietnamPro(color: Colors.white.withOpacity(0.5))),
-            ),
-            TextButton(
-              onPressed: () async {
-                final amountVal = double.tryParse(amountController.text.trim());
-                if (amountVal != null && amountVal > 0) {
-                  try {
-                    await ref.read(tripPoolControllerProvider(widget.tripId).notifier).contribute(amountVal, widget.baseCurrency);
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đóng góp quỹ thành công!'), backgroundColor: AppTheme.iosGreen),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Lỗi đóng góp: ${e.toString().replaceAll('ApiException: ', '')}'), backgroundColor: AppTheme.iosRed),
-                      );
-                    }
-                  }
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Hủy'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () async {
+              final amount = double.tryParse(amountController.text.trim());
+              if (amount == null || amount <= 0) return;
+
+              try {
+                await ref
+                    .read(tripPoolControllerProvider(widget.tripId).notifier)
+                    .contribute(amount, widget.baseCurrency);
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+              } catch (e) {
+                if (context.mounted) {
+                  await showIosMessage(
+                    context,
+                    message:
+                        'Lỗi đóng góp: ${e.toString().replaceAll('ApiException: ', '')}',
+                    isError: true,
+                  );
                 }
-              },
-              child: const Text('Đóng góp', style: TextStyle(color: AppTheme.iosGold, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
+              }
+            },
+            child: const Text('Đóng góp'),
+          ),
+        ],
+      ),
     );
   }
 
-  void _showAddExpenseDialog(BuildContext context, AsyncValue<TripDetailModel> detailsState) {
-    detailsState.whenData((details) {
-      final descController = TextEditingController();
-      final amountController = TextEditingController();
-      int selectedSplitType = 0; // 0: Equal, 1: Custom, 3: TripPool
+  void _showAddExpenseSheet(
+    BuildContext context,
+    AsyncValue<TripDetailModel> detailsState,
+  ) {
+    detailsState.when(
+      loading: () =>
+          showIosMessage(context, message: 'Đang tải danh sách thành viên.'),
+      error: (err, stack) =>
+          showIosMessage(context, message: err.toString(), isError: true),
+      data: (details) {
+        final descController = TextEditingController();
+        final amountController = TextEditingController();
+        var selectedSplitType = 0;
+        final selectedUserIds =
+            details.members.map((member) => member.userId).toSet();
+        final customAmountControllers = {
+          for (final member in details.members)
+            member.userId: TextEditingController(),
+        };
 
-      // Track participants (equal split) or amounts (custom split)
-      final List<String> selectedUserIds = details.members.map((m) => m.userId).toList();
-      final Map<String, TextEditingController> customAmountControllers = {
-        for (var m in details.members) m.userId: TextEditingController()
-      };
-
-      showDialog(
-        context: context,
-        builder: (context) {
-          return StatefulBuilder(
-            builder: (context, setState) {
-              return AlertDialog(
-                backgroundColor: AppTheme.canvasDark,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                title: Text(
-                  'Thêm chi tiêu mới',
-                  style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: descController,
-                        style: GoogleFonts.beVietnamPro(color: Colors.white, fontSize: 14),
-                        decoration: InputDecoration(
-                          labelText: 'Nội dung chi tiêu',
-                          labelStyle: GoogleFonts.beVietnamPro(color: Colors.white.withOpacity(0.6), fontSize: 13),
-                          filled: true,
-                          fillColor: AppTheme.surfaceDark,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: amountController,
-                        keyboardType: TextInputType.number,
-                        style: GoogleFonts.beVietnamPro(color: Colors.white, fontSize: 14),
-                        decoration: InputDecoration(
-                          labelText: 'Tổng số tiền (${widget.baseCurrency})',
-                          labelStyle: GoogleFonts.beVietnamPro(color: Colors.white.withOpacity(0.6), fontSize: 13),
-                          filled: true,
-                          fillColor: AppTheme.surfaceDark,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Split Type selector
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        showCupertinoModalPopup<void>(
+          context: context,
+          builder: (sheetContext) {
+            return SafeArea(
+              child: CupertinoPopupSurface(
+                child: SizedBox(
+                  height: MediaQuery.of(sheetContext).size.height * 0.82,
+                  child: StatefulBuilder(
+                    builder: (context, setSheetState) {
+                      return Column(
                         children: [
-                          const Text('Hình thức chia:', style: TextStyle(color: Colors.white, fontSize: 12)),
-                          DropdownButton<int>(
-                            value: selectedSplitType,
-                            dropdownColor: AppTheme.canvasDark,
-                            style: GoogleFonts.beVietnamPro(color: Colors.white, fontSize: 13),
-                            items: const [
-                              DropdownMenuItem(value: 0, child: Text('Chia đều')),
-                              DropdownMenuItem(value: 1, child: Text('Tùy chỉnh')),
-                              DropdownMenuItem(value: 3, child: Text('Trả bằng Quỹ')),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() => selectedSplitType = val);
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // Dynamic split widgets depending on type
-                      if (selectedSplitType == 0) ...[
-                        Text('Ai sẽ tham gia chia đều?', style: GoogleFonts.beVietnamPro(color: Colors.white.withOpacity(0.6), fontSize: 12)),
-                        const SizedBox(height: 8),
-                        ...details.members.map((m) {
-                          final isChecked = selectedUserIds.contains(m.userId);
-                          return CheckboxListTile(
-                            title: Text(m.nickName ?? 'Thành viên', style: const TextStyle(color: Colors.white, fontSize: 13)),
-                            value: isChecked,
-                            activeColor: AppTheme.iosBlue,
-                            onChanged: (val) {
-                              setState(() {
-                                if (val == true) {
-                                  selectedUserIds.add(m.userId);
-                                } else {
-                                  selectedUserIds.remove(m.userId);
-                                }
-                              });
-                            },
-                            controlAffinity: ListTileControlAffinity.leading,
-                            contentPadding: EdgeInsets.zero,
-                          );
-                        }),
-                      ] else if (selectedSplitType == 1) ...[
-                        Text('Nhập số tiền cho từng thành viên:', style: GoogleFonts.beVietnamPro(color: Colors.white.withOpacity(0.6), fontSize: 12)),
-                        const SizedBox(height: 8),
-                        ...details.members.map((m) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                             child: Row(
                               children: [
-                                Expanded(flex: 3, child: Text(m.nickName ?? 'Thành viên', style: const TextStyle(color: Colors.white, fontSize: 13))),
-                                Expanded(
-                                  flex: 2,
-                                  child: SizedBox(
-                                    height: 36,
-                                    child: TextField(
-                                      controller: customAmountControllers[m.userId],
-                                      keyboardType: TextInputType.number,
-                                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                                      decoration: InputDecoration(
-                                        filled: true,
-                                        fillColor: AppTheme.surfaceDark,
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                                      ),
-                                    ),
+                                CupertinoButton(
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () =>
+                                      Navigator.of(sheetContext).pop(),
+                                  child: const Text('Hủy'),
+                                ),
+                                const Spacer(),
+                                Text('Thêm chi tiêu',
+                                    style: AppTheme.titleSm()),
+                                const Spacer(),
+                                CupertinoButton(
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () => _submitExpense(
+                                    context: context,
+                                    sheetContext: sheetContext,
+                                    details: details,
+                                    descController: descController,
+                                    amountController: amountController,
+                                    selectedSplitType: selectedSplitType,
+                                    selectedUserIds: selectedUserIds,
+                                    customAmountControllers:
+                                        customAmountControllers,
                                   ),
+                                  child: const Text('Thêm'),
                                 ),
                               ],
                             ),
-                          );
-                        }),
-                      ] else if (selectedSplitType == 3) ...[
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8.0),
-                          child: Text(
-                            'Khoản chi tiêu này sẽ được thanh toán trực tiếp từ Số dư quỹ nhóm, các thành viên không phát sinh nợ mới.',
-                            style: TextStyle(color: AppTheme.iosGold, fontSize: 12, height: 1.4),
                           ),
-                        ),
-                      ],
-                    ],
+                          Expanded(
+                            child: ListView(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                              children: [
+                                IosTextField(
+                                  controller: descController,
+                                  label: 'Nội dung',
+                                  placeholder: 'Ăn tối, taxi, khách sạn...',
+                                  prefixIcon: CupertinoIcons.doc_text,
+                                ),
+                                const SizedBox(height: 14),
+                                IosTextField(
+                                  controller: amountController,
+                                  label: 'Tổng tiền',
+                                  placeholder: '0 ${widget.baseCurrency}',
+                                  prefixIcon: CupertinoIcons.money_dollar,
+                                  keyboardType: TextInputType.number,
+                                ),
+                                const SizedBox(height: 18),
+                                Text(
+                                  'Cách chia',
+                                  style: AppTheme.labelSm(
+                                    color: CupertinoColors.secondaryLabel
+                                        .resolveFrom(context),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                CupertinoSlidingSegmentedControl<int>(
+                                  groupValue: selectedSplitType,
+                                  children: const {
+                                    0: Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(horizontal: 8),
+                                      child: Text('Đều'),
+                                    ),
+                                    1: Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(horizontal: 8),
+                                      child: Text('Tùy chỉnh'),
+                                    ),
+                                    3: Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(horizontal: 8),
+                                      child: Text('Quỹ'),
+                                    ),
+                                  },
+                                  onValueChanged: (value) {
+                                    if (value != null) {
+                                      setSheetState(
+                                          () => selectedSplitType = value);
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                                if (selectedSplitType == 0)
+                                  IosSection(
+                                    header: 'Người tham gia chia đều',
+                                    children: details.members.map((member) {
+                                      final checked = selectedUserIds
+                                          .contains(member.userId);
+                                      return IosListTile(
+                                        icon: CupertinoIcons.person,
+                                        title: member.nickName ?? 'Thành viên',
+                                        trailing: CupertinoSwitch(
+                                          value: checked,
+                                          onChanged: (value) {
+                                            setSheetState(() {
+                                              if (value) {
+                                                selectedUserIds
+                                                    .add(member.userId);
+                                              } else {
+                                                selectedUserIds
+                                                    .remove(member.userId);
+                                              }
+                                            });
+                                          },
+                                        ),
+                                      );
+                                    }).toList(),
+                                  )
+                                else if (selectedSplitType == 1)
+                                  Column(
+                                    children: details.members.map((member) {
+                                      return Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 12),
+                                        child: IosTextField(
+                                          controller: customAmountControllers[
+                                              member.userId]!,
+                                          label:
+                                              member.nickName ?? 'Thành viên',
+                                          placeholder: '0',
+                                          prefixIcon:
+                                              CupertinoIcons.money_dollar,
+                                          keyboardType: TextInputType.number,
+                                        ),
+                                      );
+                                    }).toList(),
+                                  )
+                                else
+                                  const IosSection(
+                                    footer:
+                                        'Khoản chi này sẽ được thanh toán trực tiếp từ quỹ nhóm và không phát sinh nợ mới.',
+                                    children: [
+                                      IosListTile(
+                                        icon: CupertinoIcons.creditcard,
+                                        iconColor: AppTheme.iosGold,
+                                        title: 'Trả bằng quỹ nhóm',
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text('Hủy', style: GoogleFonts.beVietnamPro(color: Colors.white.withOpacity(0.5))),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      final desc = descController.text.trim();
-                      final totalAmountVal = double.tryParse(amountController.text.trim());
-                      if (desc.isEmpty || totalAmountVal == null || totalAmountVal <= 0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Vui lòng điền nội dung và số tiền hợp lệ'), backgroundColor: Colors.redAccent),
-                        );
-                        return;
-                      }
-
-                      // Prepare Splits payload
-                      List<Map<String, dynamic>> splits = [];
-
-                      if (selectedSplitType == 0) {
-                        // Equal splits
-                        if (selectedUserIds.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Vui lòng chọn ít nhất 1 người tham gia chia tiền'), backgroundColor: Colors.redAccent),
-                          );
-                          return;
-                        }
-                        splits = selectedUserIds.map((uid) => {
-                          'userId': uid,
-                          'amount': null,
-                          'percentage': null,
-                        }).toList();
-                      } else if (selectedSplitType == 1) {
-                        // Custom splits
-                        double customTotal = 0.0;
-                        for (var m in details.members) {
-                          final amt = double.tryParse(customAmountControllers[m.userId]?.text.trim() ?? '');
-                          if (amt != null && amt > 0) {
-                            customTotal += amt;
-                            splits.add({
-                              'userId': m.userId,
-                              'amount': amt,
-                              'percentage': null,
-                            });
-                          }
-                        }
-
-                        if (customTotal != totalAmountVal) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Tổng số tiền tùy chỉnh ($customTotal) phải khớp với Tổng số tiền chi tiêu ($totalAmountVal)'),
-                              backgroundColor: Colors.redAccent,
-                            ),
-                          );
-                          return;
-                        }
-                      } else if (selectedSplitType == 3) {
-                        // TripPool splits: backend splits equally among all members from pool
-                        splits = details.members.map((m) => {
-                          'userId': m.userId,
-                          'amount': null,
-                          'percentage': null,
-                        }).toList();
-                      }
-
-                      try {
-                        await ref.read(tripExpensesProvider(widget.tripId).notifier).createExpense(
-                          description: desc,
-                          amount: totalAmountVal,
-                          currency: widget.baseCurrency,
-                          tripBaseCurrency: widget.baseCurrency,
-                          splitType: selectedSplitType,
-                          splits: splits,
-                        );
-
-                        // Trigger refresh on related states
-                        ref.invalidate(tripBalancesProvider(widget.tripId));
-                        ref.invalidate(tripPoolControllerProvider(widget.tripId));
-
-                        if (context.mounted) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Thêm chi tiêu thành công!'), backgroundColor: AppTheme.iosGreen),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Lỗi tạo chi tiêu: ${e.toString().replaceAll('ApiException: ', '')}'), backgroundColor: AppTheme.iosRed),
-                          );
-                        }
-                      }
-                    },
-                    child: const Text('Thêm', style: TextStyle(color: AppTheme.iosBlue, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    });
-  }
-
-  void _handleLeaveTrip(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppTheme.canvasDark,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: Text(
-            'Xác nhận rời nhóm',
-            style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          content: Text(
-            'Bạn có chắc chắn muốn rời khỏi chuyến đi này không? Nếu bạn có nợ chưa thanh toán, bạn không thể rời chuyến.',
-            style: GoogleFonts.beVietnamPro(color: Colors.white.withOpacity(0.8), fontSize: 13, height: 1.4),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Hủy', style: GoogleFonts.beVietnamPro(color: Colors.white.withOpacity(0.5))),
-            ),
-            TextButton(
-              onPressed: () async {
-                try {
-                  final repo = ref.read(tripRepositoryProvider);
-                  await repo.leaveTrip(widget.tripId);
-                  ref.invalidate(tripsProvider);
-                  if (context.mounted) {
-                    Navigator.pop(context); // Close dialog
-                    Navigator.pop(context); // Exit workspace
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Đã rời khỏi chuyến đi thành công'), backgroundColor: AppTheme.iosGreen),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Lỗi rời chuyến: ${e.toString().replaceAll('ApiException: ', '')}'), backgroundColor: AppTheme.iosRed),
-                    );
-                  }
-                }
-              },
-              child: Text('Rời chuyến', style: GoogleFonts.beVietnamPro(color: AppTheme.iosRed, fontWeight: FontWeight.bold)),
-            ),
-          ],
+              ),
+            );
+          },
         );
       },
     );
   }
 
-  String _getMemberName(String userId, AsyncValue<TripDetailModel> detailsState) {
+  Future<void> _submitExpense({
+    required BuildContext context,
+    required BuildContext sheetContext,
+    required TripDetailModel details,
+    required TextEditingController descController,
+    required TextEditingController amountController,
+    required int selectedSplitType,
+    required Set<String> selectedUserIds,
+    required Map<String, TextEditingController> customAmountControllers,
+  }) async {
+    final desc = descController.text.trim();
+    final totalAmount = double.tryParse(amountController.text.trim());
+    if (desc.isEmpty || totalAmount == null || totalAmount <= 0) {
+      await showIosMessage(
+        context,
+        message: 'Vui lòng nhập nội dung và số tiền hợp lệ.',
+        isError: true,
+      );
+      return;
+    }
+
+    var splits = <Map<String, dynamic>>[];
+    if (selectedSplitType == 0) {
+      if (selectedUserIds.isEmpty) {
+        await showIosMessage(
+          context,
+          message: 'Vui lòng chọn ít nhất một người tham gia chia tiền.',
+          isError: true,
+        );
+        return;
+      }
+      splits = selectedUserIds
+          .map(
+            (userId) => {
+              'userId': userId,
+              'amount': null,
+              'percentage': null,
+            },
+          )
+          .toList();
+    } else if (selectedSplitType == 1) {
+      var customTotal = 0.0;
+      for (final member in details.members) {
+        final amount = double.tryParse(
+          customAmountControllers[member.userId]?.text.trim() ?? '',
+        );
+        if (amount != null && amount > 0) {
+          customTotal += amount;
+          splits.add({
+            'userId': member.userId,
+            'amount': amount,
+            'percentage': null,
+          });
+        }
+      }
+      if (customTotal != totalAmount) {
+        await showIosMessage(
+          context,
+          message:
+              'Tổng tiền tùy chỉnh (${formatMoney(customTotal)}) phải bằng tổng chi (${formatMoney(totalAmount)}).',
+          isError: true,
+        );
+        return;
+      }
+    } else if (selectedSplitType == 3) {
+      splits = details.members
+          .map(
+            (member) => {
+              'userId': member.userId,
+              'amount': null,
+              'percentage': null,
+            },
+          )
+          .toList();
+    }
+
+    try {
+      await ref
+          .read(tripExpensesProvider(widget.tripId).notifier)
+          .createExpense(
+            description: desc,
+            amount: totalAmount,
+            currency: widget.baseCurrency,
+            tripBaseCurrency: widget.baseCurrency,
+            splitType: selectedSplitType,
+            splits: splits,
+          );
+      ref.invalidate(tripBalancesProvider(widget.tripId));
+      ref.invalidate(tripPoolControllerProvider(widget.tripId));
+      if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+    } catch (e) {
+      if (context.mounted) {
+        await showIosMessage(
+          context,
+          message:
+              'Lỗi tạo chi tiêu: ${e.toString().replaceAll('ApiException: ', '')}',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _handleLeaveTrip(BuildContext context) async {
+    final confirmed = await showIosConfirm(
+      context,
+      title: 'Rời chuyến đi?',
+      message:
+          'Nếu bạn còn nợ chưa thanh toán, hệ thống có thể không cho rời chuyến.',
+      confirmLabel: 'Rời chuyến',
+      destructive: true,
+    );
+    if (!confirmed) return;
+
+    try {
+      final repo = ref.read(tripRepositoryProvider);
+      await repo.leaveTrip(widget.tripId);
+      ref.invalidate(tripsProvider);
+      if (context.mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (context.mounted) {
+        await showIosMessage(
+          context,
+          message:
+              'Lỗi rời chuyến: ${e.toString().replaceAll('ApiException: ', '')}',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  String _getMemberName(
+      String userId, AsyncValue<TripDetailModel> detailsState) {
     return detailsState.maybeWhen(
       data: (details) {
-        final member = details.members.firstWhere((m) => m.userId.toLowerCase() == userId.toLowerCase(), orElse: () => TripMemberModel(userId: userId, role: 1, userTier: 0, joinedAt: DateTime.now()));
+        final member = details.members.firstWhere(
+          (member) => member.userId.toLowerCase() == userId.toLowerCase(),
+          orElse: () => TripMemberModel(
+            userId: userId,
+            role: 1,
+            userTier: 0,
+            joinedAt: DateTime.now(),
+          ),
+        );
         return member.nickName ?? 'Thành viên';
       },
       orElse: () => 'Thành viên',
     );
   }
 
-  String _formatMoney(double amount) {
-    final int val = amount.round();
-    final RegExp reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
-    return val.toString().replaceAllMapped(reg, (Match match) => '${match[1]}.');
+  String _formatDate(DateTime dt) {
+    final day = dt.day.toString().padLeft(2, '0');
+    final month = dt.month.toString().padLeft(2, '0');
+    final hour = dt.hour.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    return '$day/$month $hour:$minute';
+  }
+}
+
+class _ExpenseTile extends StatelessWidget {
+  final ExpenseModel expense;
+
+  const _ExpenseTile({required this.expense});
+
+  @override
+  Widget build(BuildContext context) {
+    final paidFromPool = expense.isPaidFromPool;
+    return IosListTile(
+      icon: paidFromPool
+          ? CupertinoIcons.creditcard
+          : CupertinoIcons.money_dollar,
+      iconColor: paidFromPool ? AppTheme.iosGold : AppTheme.iosBlue,
+      title: expense.description,
+      subtitle: paidFromPool
+          ? 'Quỹ nhóm chi trả'
+          : 'Cá nhân trả • ${_formatDate(expense.createdAt)}',
+      value: '${formatMoney(expense.amount)} ${expense.currency}',
+    );
   }
 
   String _formatDate(DateTime dt) {
-    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    final day = dt.day.toString().padLeft(2, '0');
+    final month = dt.month.toString().padLeft(2, '0');
+    final hour = dt.hour.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    return '$day/$month $hour:$minute';
   }
 }
