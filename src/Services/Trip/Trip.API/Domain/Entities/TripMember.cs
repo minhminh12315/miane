@@ -10,6 +10,7 @@ public class TripMember : BaseEntity
 {
     public Guid TripId { get; set; }
     public Guid UserId { get; set; }
+    public Guid? RoleId { get; set; }
     public MemberRole Role { get; set; } = MemberRole.Member;
     public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
     public string? NickName { get; set; }
@@ -22,4 +23,5 @@ public class TripMember : BaseEntity
 
     // Navigation
     public TripEntity Trip { get; set; } = null!;
+    public TripRole? CustomRole { get; set; }
 }

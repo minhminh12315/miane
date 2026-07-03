@@ -6,6 +6,8 @@ import '../../../../core/ui/ios_ui.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
 import '../../domain/models/trip_models.dart';
 import '../controllers/trips_provider.dart';
+import '../widgets/trip_creation_sheet.dart';
+import '../widgets/trip_share_sheet.dart';
 import 'trip_workspace_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -43,7 +45,20 @@ class HomeScreen extends ConsumerWidget {
                   CupertinoSliverRefreshControl(
                     onRefresh: () => ref.read(tripsProvider.notifier).refresh(),
                   ),
-                  
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                      child: _HomeHeader(
+                        onSettings: () {
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
@@ -95,84 +110,31 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  void _handleAddNewTrip(BuildContext context, WidgetRef ref) {
+  Future<void> _handleAddNewTrip(BuildContext context, WidgetRef ref) async {
     final trips = ref.read(tripsProvider).valueOrNull ?? [];
     if (trips.length >= 2) {
       showIosProSheet(context, featureName: 'Tạo thêm chuyến đi');
       return;
     }
-    _showCreateTripDialog(context, ref);
-  }
-
-  void _showCreateTripDialog(BuildContext context, WidgetRef ref) {
-    final nameController = TextEditingController();
-    final descController = TextEditingController();
-    final currencyController = TextEditingController(text: 'VND');
-
-    showCupertinoDialog<void>(
+    final result = await showGlassBottomSheet<TripCreationResult>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('Tạo chuyến đi'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 14),
-          child: Column(
-            children: [
-              IosTextField(
-                controller: nameController,
-                placeholder: 'Tên chuyến đi',
-                prefixIcon: CupertinoIcons.map,
-              ),
-              const SizedBox(height: 10),
-              IosTextField(
-                controller: descController,
-                placeholder: 'Mô tả hoặc điểm đến',
-                prefixIcon: CupertinoIcons.location,
-              ),
-              const SizedBox(height: 10),
-              IosTextField(
-                controller: currencyController,
-                placeholder: 'VND',
-                prefixIcon: CupertinoIcons.money_dollar,
-              ),
-            ],
+      heightFactor: 0.90,
+      builder: (_) => const TripCreationSheet(),
+    );
+    if (result != null && context.mounted) {
+      await showTripShareSheet(context, result);
+      if (!context.mounted) return;
+      Navigator.of(context).push(
+        CupertinoPageRoute(
+          builder: (_) => TripWorkspaceScreen(
+            tripId: result.tripId,
+            tripName: 'Chuyến đi mới',
+            destination: 'Đang tải thông tin...',
+            baseCurrency: 'VND',
           ),
         ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Hủy'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () async {
-              final name = nameController.text.trim();
-              final desc = descController.text.trim();
-              final currency = currencyController.text.trim().toUpperCase();
-              if (name.isEmpty) return;
-
-              try {
-                await ref.read(tripsProvider.notifier).createTrip(
-                      name,
-                      desc.isEmpty ? null : desc,
-                      currency.isEmpty ? 'VND' : currency,
-                    );
-                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-              } catch (e) {
-                if (context.mounted) {
-                  await showIosMessage(
-                    context,
-                    message:
-                        'Không thể tạo chuyến đi: ${e.toString().replaceAll('ApiException: ', '')}',
-                    isError: true,
-                  );
-                }
-              }
-            },
-            child: const Text('Tạo'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
   }
 
   void _handleJoinTrip(BuildContext context, WidgetRef ref) {

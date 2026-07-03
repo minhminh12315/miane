@@ -20,5 +20,10 @@ public class TripMemberConfiguration : IEntityTypeConfiguration<TripMember>
 
         builder.Property(m => m.Role)
             .HasConversion<int>();
+
+        builder.HasOne(m => m.CustomRole)
+            .WithMany()
+            .HasForeignKey(m => m.RoleId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

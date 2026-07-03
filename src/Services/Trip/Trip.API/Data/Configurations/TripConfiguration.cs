@@ -34,12 +34,47 @@ public class TripConfiguration : IEntityTypeConfiguration<TripEntity>
             .HasDefaultValue("VND")
             .IsRequired();
 
+        builder.Property(t => t.DestinationCity)
+            .HasMaxLength(160);
+
+        builder.Property(t => t.DestinationCountry)
+            .HasMaxLength(120);
+
+        builder.Property(t => t.Latitude)
+            .HasPrecision(9, 6);
+
+        builder.Property(t => t.Longitude)
+            .HasPrecision(9, 6);
+
+        builder.Property(t => t.CoverImageUrl)
+            .HasMaxLength(1000);
+
         builder.Property(t => t.Status)
             .HasConversion<int>();
 
         builder.HasMany(t => t.Members)
             .WithOne(m => m.Trip)
             .HasForeignKey(m => m.TripId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(t => t.Roles)
+            .WithOne(r => r.Trip)
+            .HasForeignKey(r => r.TripId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(t => t.Invitations)
+            .WithOne(i => i.Trip)
+            .HasForeignKey(i => i.TripId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(t => t.ShareLinks)
+            .WithOne(s => s.Trip)
+            .HasForeignKey(s => s.TripId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(t => t.Images)
+            .WithOne(i => i.Trip)
+            .HasForeignKey(i => i.TripId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.Property(t => t.Version)

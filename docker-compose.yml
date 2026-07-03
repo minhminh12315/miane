@@ -151,6 +151,7 @@ services:
       dockerfile: Dockerfile
       args:
         - API_URL=http://localhost:5000
+        - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
     container_name: Miane-mobile-client
     ports:
       - "3000:80"
@@ -159,8 +160,24 @@ services:
     networks:
       - Miane-network
 
+  ai-image:
+    build:
+      context: ./services/ai-image
+      dockerfile: Dockerfile
+    container_name: Miane-ai-image
+    environment:
+      - AI_IMAGE_PUBLIC_BASE_URL=http://localhost:8000
+      - AI_IMAGE_CACHE_DIR=/app/cache
+    ports:
+      - "8000:8000"
+    volumes:
+      - ai_image_cache:/app/cache
+    networks:
+      - Miane-network
+
 volumes:
   postgres_data:
+  ai_image_cache:
 
 networks:
   Miane-network:

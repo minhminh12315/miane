@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:typed_data';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
 import '../../domain/models/trip_models.dart';
 import '../controllers/trips_provider.dart';
+import '../widgets/trip_share_sheet.dart';
 import 'trip_workspace_screen.dart';
 
 class TripsScreen extends ConsumerWidget {
@@ -40,6 +44,7 @@ class TripsScreen extends ConsumerWidget {
                   ),
                 ),
                 data: (trips) {
+                  final covers = ref.watch(tripCoverMemoryProvider);
                   final activeTrips =
                       trips.where((trip) => trip.status == 0).toList();
                   final pastTrips =
@@ -69,9 +74,17 @@ class TripsScreen extends ConsumerWidget {
                           ),
                         ),
                         if (activeTrips.isNotEmpty)
-                          _TripGroup(title: 'Đang diễn ra', trips: activeTrips),
+                          _TripGroup(
+                            title: 'Đang diễn ra',
+                            trips: activeTrips,
+                            covers: covers,
+                          ),
                         if (pastTrips.isNotEmpty)
-                          _TripGroup(title: 'Đã kết thúc', trips: pastTrips),
+                          _TripGroup(
+                            title: 'Đã kết thúc',
+                            trips: pastTrips,
+                            covers: covers,
+                          ),
                         const SizedBox(height: 132),
                       ],
                     ),
@@ -156,8 +169,13 @@ class _TripsSummaryCard extends StatelessWidget {
 class _TripGroup extends StatelessWidget {
   final String title;
   final List<TripModel> trips;
+  final Map<String, Uint8List> covers;
 
-  const _TripGroup({required this.title, required this.trips});
+  const _TripGroup({
+    required this.title,
+    required this.trips,
+    required this.covers,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +193,8 @@ class _TripGroup extends StatelessWidget {
               ).copyWith(fontWeight: FontWeight.w800),
             ),
           ),
-          for (final trip in trips) _TripListCard(trip: trip),
+          for (final trip in trips)
+            _TripListCard(trip: trip, coverBytes: covers[trip.id]),
         ],
       ),
     );
@@ -184,85 +203,366 @@ class _TripGroup extends StatelessWidget {
 
 class _TripListCard extends StatelessWidget {
   final TripModel trip;
+  final Uint8List? coverBytes;
 
-  const _TripListCard({required this.trip});
+  const _TripListCard({required this.trip, this.coverBytes});
 
   @override
   Widget build(BuildContext context) {
     final isActive = trip.status == 0;
+    final destination = trip.destinationLabel;
+    final createdAgo = _relativeDate(trip.createdAt);
 
-    return ModernCard(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      onTap: () {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      onPressed: () {
         Navigator.of(context).push(
           CupertinoPageRoute(
             builder: (_) => TripWorkspaceScreen(
               tripId: trip.id,
               tripName: trip.name,
-              destination: trip.description ?? 'Không có mô tả',
+              destination: trip.destinationLabel,
               baseCurrency: trip.baseCurrency,
             ),
           ),
         );
       },
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: (isActive ? AppTheme.iosBlue : AppTheme.iosGray)
-                  .withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Icon(
-              isActive ? CupertinoIcons.airplane : CupertinoIcons.archivebox,
-              color: isActive ? AppTheme.iosBlue : AppTheme.iosGray,
-              size: 25,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  trip.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTheme.titleSm(),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  trip.description ?? 'Không có mô tả',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTheme.bodySm(
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+      child: ModernCard(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: EdgeInsets.zero,
+        radius: AppTheme.radiusXl,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                trip.baseCurrency,
-                style: AppTheme.labelSm(color: AppTheme.iosGold),
+              SizedBox(
+                height: 176,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (coverBytes != null)
+                      Image.memory(coverBytes!, fit: BoxFit.cover)
+                    else if ((trip.coverImageUrl ?? '').isNotEmpty)
+                      Image.network(trip.coverImageUrl!, fit: BoxFit.cover)
+                    else
+                      CustomPaint(painter: _TripCoverPainter(trip.name)),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            CupertinoColors.black.withValues(alpha: 0.05),
+                            CupertinoColors.black.withValues(alpha: 0.74),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _StatusPill(
+                            label: isActive ? 'Đang diễn ra' : 'Đã kết thúc',
+                            color:
+                                isActive ? AppTheme.iosGreen : AppTheme.iosGray,
+                          ),
+                          const SizedBox(height: 9),
+                          Text(
+                            trip.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: CupertinoColors.white,
+                              fontSize: 26,
+                              height: 1,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            destination,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.bodySm(
+                              color:
+                                  CupertinoColors.white.withValues(alpha: 0.72),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 10),
-              Icon(
-                CupertinoIcons.chevron_right,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                size: 18,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _TripMetric(
+                            icon: CupertinoIcons.person_2_fill,
+                            label: 'Members',
+                            value: '${trip.memberCount}',
+                          ),
+                        ),
+                        Expanded(
+                          child: _TripMetric(
+                            icon: CupertinoIcons.money_dollar,
+                            label: 'Currency',
+                            value: trip.baseCurrency,
+                          ),
+                        ),
+                        Expanded(
+                          child: _TripMetric(
+                            icon: CupertinoIcons.calendar,
+                            label: 'Created',
+                            value: createdAgo,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        _MemberAvatarStack(count: trip.memberCount),
+                        const Spacer(),
+                        CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(44, 44),
+                          onPressed: () {
+                            showTripShareSheet(
+                              context,
+                              TripCreationResult(
+                                tripId: trip.id,
+                                inviteCode: trip.inviteCode,
+                                shareUrl: trip.shareUrl ??
+                                    'https://miane.app/trip/${trip.inviteCode}',
+                              ),
+                            );
+                          },
+                          child: Container(
+                            height: 42,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            decoration: BoxDecoration(
+                              color: AppTheme.iosBlue.withValues(alpha: 0.15),
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusPill),
+                              border: Border.all(
+                                color: AppTheme.iosBlue.withValues(alpha: 0.24),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(CupertinoIcons.square_arrow_up,
+                                    color: AppTheme.iosBlue, size: 18),
+                                const SizedBox(width: 7),
+                                Text(
+                                  trip.inviteCode,
+                                  style:
+                                      AppTheme.labelSm(color: AppTheme.iosBlue),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          CupertinoIcons.chevron_right,
+                          color: CupertinoColors.secondaryLabel
+                              .resolveFrom(context),
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  String _relativeDate(DateTime date) {
+    final days = DateTime.now().difference(date).inDays;
+    if (days <= 0) return 'Today';
+    if (days < 30) return '${days}d';
+    return '${(days / 30).floor()}mo';
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _StatusPill({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return ModernGlass(
+      radius: AppTheme.radiusPill,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: AppTheme.labelSm(color: CupertinoColors.white)),
         ],
       ),
     );
   }
+}
+
+class _TripMetric extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _TripMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, color: AppTheme.iosBlue, size: 18),
+        const SizedBox(height: 6),
+        Text(value, style: AppTheme.titleSm()),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTheme.labelXs(
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MemberAvatarStack extends StatelessWidget {
+  final int count;
+
+  const _MemberAvatarStack({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = math.min(count, 4);
+    return SizedBox(
+      width: 24.0 + visible * 22,
+      height: 36,
+      child: Stack(
+        children: [
+          for (var i = 0; i < visible; i++)
+            Positioned(
+              left: i * 20,
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      HSVColor.fromAHSV(
+                        1,
+                        (210 + i * 38) % 360,
+                        0.65,
+                        0.95,
+                      ).toColor(),
+                      AppTheme.iosBlue,
+                    ],
+                  ),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.surfaceDark, width: 2),
+                ),
+                child: Center(
+                  child: Text(
+                    String.fromCharCode(65 + i),
+                    style: AppTheme.labelSm(color: CupertinoColors.white),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TripCoverPainter extends CustomPainter {
+  final String seed;
+
+  const _TripCoverPainter(this.seed);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final code = seed.codeUnits.fold<int>(0, (sum, value) => sum + value);
+    final rect = Offset.zero & size;
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            HSVColor.fromAHSV(1, (code % 360).toDouble(), 0.58, 0.75).toColor(),
+            const Color(0xFF133452),
+            const Color(0xFF050505),
+          ],
+        ).createShader(rect),
+    );
+
+    final glow = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          AppTheme.iosGold.withValues(alpha: 0.56),
+          CupertinoColors.transparent,
+        ],
+      ).createShader(
+        Rect.fromCircle(
+          center: Offset(size.width * 0.82, size.height * 0.24),
+          radius: size.width * 0.42,
+        ),
+      );
+    canvas.drawCircle(
+      Offset(size.width * 0.82, size.height * 0.24),
+      size.width * 0.42,
+      glow,
+    );
+
+    final mountain = Paint()
+      ..color = CupertinoColors.black.withValues(alpha: 0.20);
+    final path = Path()
+      ..moveTo(0, size.height * 0.74)
+      ..lineTo(size.width * 0.24, size.height * 0.48)
+      ..lineTo(size.width * 0.45, size.height * 0.69)
+      ..lineTo(size.width * 0.66, size.height * 0.40)
+      ..lineTo(size.width, size.height * 0.72)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, mountain);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TripCoverPainter oldDelegate) =>
+      oldDelegate.seed != seed;
 }

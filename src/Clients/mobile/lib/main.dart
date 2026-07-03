@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/app_theme.dart';
@@ -21,6 +22,16 @@ class MianeApp extends StatelessWidget {
       child: CupertinoApp(
         title: 'MIANE',
         debugShowCheckedModeBanner: false,
+        locale: const Locale('vi', 'VN'),
+        supportedLocales: const [
+          Locale('vi', 'VN'),
+          Locale('en', 'US'),
+        ],
+        localizationsDelegates: const [
+          GlobalCupertinoLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
         theme: AppTheme.cupertinoTheme,
         home: Consumer(
           builder: (context, ref, child) {

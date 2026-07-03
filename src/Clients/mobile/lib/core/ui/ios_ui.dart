@@ -178,6 +178,196 @@ class ModernGlass extends StatelessWidget {
   }
 }
 
+Future<T?> showGlassBottomSheet<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  double heightFactor = 0.88,
+}) {
+  return showCupertinoModalPopup<T>(
+    context: context,
+    barrierDismissible: true,
+    filter: ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+    builder: (context) {
+      return _GlassBottomSheetRoute<T>(
+        heightFactor: heightFactor,
+        child: builder(context),
+      );
+    },
+  );
+}
+
+class GlassBottomSheetScaffold extends StatelessWidget {
+  final String title;
+  final Widget child;
+  final Widget? trailing;
+
+  const GlassBottomSheetScaffold({
+    super.key,
+    required this.title,
+    required this.child,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        Container(
+          width: 44,
+          height: 5,
+          decoration: BoxDecoration(
+            color: CupertinoColors.systemGrey.resolveFrom(context),
+            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 12, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.headlineMd(),
+                ),
+              ),
+              if (trailing != null) ...[
+                trailing!,
+                const SizedBox(width: 6),
+              ],
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(42, 42),
+                onPressed: () => Navigator.of(context).pop(),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemGrey4
+                        .resolveFrom(context)
+                        .withValues(alpha: 0.32),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    CupertinoIcons.xmark,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                    size: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: child),
+      ],
+    );
+  }
+}
+
+class _GlassBottomSheetRoute<T> extends StatefulWidget {
+  final Widget child;
+  final double heightFactor;
+
+  const _GlassBottomSheetRoute({
+    required this.child,
+    required this.heightFactor,
+  });
+
+  @override
+  State<_GlassBottomSheetRoute<T>> createState() =>
+      _GlassBottomSheetRouteState<T>();
+}
+
+class _GlassBottomSheetRouteState<T> extends State<_GlassBottomSheetRoute<T>> {
+  double _dragOffset = 0;
+
+  void _handleDragEnd(DragEndDetails details) {
+    if (_dragOffset > 90 ||
+        details.primaryVelocity != null && details.primaryVelocity! > 700) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() => _dragOffset = 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final heightFactor = widget.heightFactor.clamp(0.5, 0.94);
+
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.black.withValues(alpha: 0.24),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.of(context).pop(),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 1, end: 0),
+            duration: const Duration(milliseconds: 420),
+            curve: Curves.easeOutBack,
+            builder: (context, animation, child) {
+              return Transform.translate(
+                offset: Offset(0, animation * 320 + _dragOffset),
+                child: child,
+              );
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {},
+              onVerticalDragUpdate: (details) {
+                if (details.primaryDelta == null) return;
+                setState(() {
+                  _dragOffset =
+                      (_dragOffset + details.primaryDelta!).clamp(0.0, 260.0);
+                });
+              },
+              onVerticalDragEnd: _handleDragEnd,
+              child: FractionallySizedBox(
+                heightFactor: heightFactor,
+                widthFactor: 1,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(36),
+                  ),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceDark.withValues(alpha: 0.82),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(36),
+                        ),
+                        border: Border(
+                          top: BorderSide(
+                            color:
+                                CupertinoColors.white.withValues(alpha: 0.16),
+                            width: 0.8,
+                          ),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                CupertinoColors.black.withValues(alpha: 0.55),
+                            blurRadius: 34,
+                            offset: const Offset(0, -14),
+                          ),
+                        ],
+                      ),
+                      child: widget.child,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ModernActionCircle extends StatelessWidget {
   final IconData icon;
   final String label;

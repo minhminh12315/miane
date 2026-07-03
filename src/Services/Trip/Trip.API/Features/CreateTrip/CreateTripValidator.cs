@@ -15,6 +15,22 @@ public sealed class CreateTripValidator : AbstractValidator<CreateTripCommand>
             .NotEmpty().WithMessage("Base currency is required.")
             .Length(3).WithMessage("Currency code must be exactly 3 characters (e.g., VND, USD).");
 
+        RuleFor(x => x.Destination)
+            .MaximumLength(240).WithMessage("Destination cannot exceed 240 characters.");
+
+        RuleFor(x => x.DestinationCity)
+            .MaximumLength(160).WithMessage("Destination city cannot exceed 160 characters.");
+
+        RuleFor(x => x.DestinationCountry)
+            .MaximumLength(120).WithMessage("Destination country cannot exceed 120 characters.");
+
+        RuleFor(x => x.CoverImageUrl)
+            .MaximumLength(1000).WithMessage("Cover image URL cannot exceed 1000 characters.");
+
+        RuleFor(x => x)
+            .Must(x => !x.StartDate.HasValue || !x.EndDate.HasValue || x.EndDate.Value.Date >= x.StartDate.Value.Date)
+            .WithMessage("Trip end date must be greater than or equal to start date.");
+
         RuleFor(x => x.UserId)
             .NotEmpty().WithMessage("User ID is required.");
 

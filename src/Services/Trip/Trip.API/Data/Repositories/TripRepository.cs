@@ -15,6 +15,8 @@ public class TripRepository : BaseRepository<TripEntity, TripDbContext>, ITripRe
     {
         return await DbSet
             .Include(t => t.Members)
+                .ThenInclude(m => m.CustomRole)
+            .Include(t => t.ShareLinks)
             .FirstOrDefaultAsync(t => t.InviteCode == inviteCode, cancellationToken);
     }
 
@@ -22,6 +24,11 @@ public class TripRepository : BaseRepository<TripEntity, TripDbContext>, ITripRe
     {
         return await DbSet
             .Include(t => t.Members)
+                .ThenInclude(m => m.CustomRole)
+            .Include(t => t.Roles)
+                .ThenInclude(r => r.RolePermissions)
+            .Include(t => t.ShareLinks)
+            .Include(t => t.Images)
             .FirstOrDefaultAsync(t => t.Id == tripId, cancellationToken);
     }
 
@@ -44,7 +51,15 @@ public class TripRepository : BaseRepository<TripEntity, TripDbContext>, ITripRe
     {
         return await DbContext.TripMembers
             .Where(m => m.UserId == userId)
-            .Join(DbSet.Include(t => t.Members), m => m.TripId, t => t.Id, (m, t) => t)
+            .Join(
+                DbSet
+                    .Include(t => t.Members)
+                        .ThenInclude(m => m.CustomRole)
+                    .Include(t => t.ShareLinks)
+                    .Include(t => t.Images),
+                m => m.TripId,
+                t => t.Id,
+                (m, t) => t)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
     }

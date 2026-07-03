@@ -15,6 +15,15 @@ public sealed record UserTripResponse(
     TripStatus Status,
     int MemberCount,
     MemberRole UserRole,
+    string? UserRoleName,
+    string? DestinationCity,
+    string? DestinationCountry,
+    decimal? Latitude,
+    decimal? Longitude,
+    DateTime? StartDate,
+    DateTime? EndDate,
+    string? CoverImageUrl,
+    string ShareUrl,
     DateTime CreatedAt);
 
 public sealed class GetUserTripsHandler : IQueryHandler<GetUserTripsQuery, List<UserTripResponse>>
@@ -42,6 +51,15 @@ public sealed class GetUserTripsHandler : IQueryHandler<GetUserTripsQuery, List<
                 t.Status,
                 t.Members.Count,
                 userMember?.Role ?? MemberRole.Member,
+                userMember?.CustomRole?.RoleName,
+                t.DestinationCity,
+                t.DestinationCountry,
+                t.Latitude,
+                t.Longitude,
+                t.StartDate,
+                t.EndDate,
+                t.Images.FirstOrDefault(i => i.IsCover)?.ImageUrl ?? t.CoverImageUrl,
+                t.ShareLinks.FirstOrDefault(s => s.IsActive)?.Url ?? $"https://miane.app/trip/{t.InviteCode}",
                 t.CreatedAt);
         }).ToList();
     }

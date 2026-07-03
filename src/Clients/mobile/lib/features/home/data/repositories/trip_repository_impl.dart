@@ -25,7 +25,11 @@ class TripRepositoryImpl implements TripRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> createTrip(String name, String? description, String? baseCurrency) async {
+  Future<Map<String, dynamic>> createTrip(
+    String name,
+    String? description,
+    String? baseCurrency,
+  ) async {
     final response = await _apiClient.post(
       ApiEndpoints.trips,
       body: {
@@ -38,7 +42,19 @@ class TripRepositoryImpl implements TripRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> joinTrip(String inviteCode, String? nickName) async {
+  Future<TripCreationResult> createTripDraft(TripCreationDraft draft) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.trips,
+      body: draft.toApiJson(),
+    );
+    return TripCreationResult.fromJson(response as Map<String, dynamic>);
+  }
+
+  @override
+  Future<Map<String, dynamic>> joinTrip(
+    String inviteCode,
+    String? nickName,
+  ) async {
     final response = await _apiClient.post(
       ApiEndpoints.joinTrip,
       body: {

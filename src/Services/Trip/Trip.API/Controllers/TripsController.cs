@@ -38,6 +38,14 @@ public class TripsController : ControllerBase
             request.Name,
             request.Description,
             request.BaseCurrency ?? "VND",
+            request.Destination,
+            request.DestinationCity,
+            request.DestinationCountry,
+            request.Latitude,
+            request.Longitude,
+            request.StartDate,
+            request.EndDate,
+            request.CoverImageUrl,
             GetUserId(),
             GetUserTier()), ct);
 
@@ -99,6 +107,17 @@ public class TripsController : ControllerBase
 }
 
 // Request DTOs
-public sealed record CreateTripRequest(string Name, string? Description, string? BaseCurrency);
+public sealed record CreateTripRequest(
+    string Name,
+    string? Description,
+    string? BaseCurrency,
+    string? Destination,
+    string? DestinationCity,
+    string? DestinationCountry,
+    double? Latitude,
+    double? Longitude,
+    DateTime? StartDate,
+    DateTime? EndDate,
+    string? CoverImageUrl);
 public sealed record JoinTripRequest(string InviteCode, string? NickName);
 public sealed record UpdateTripRequest(string? Name, string? Description, Trip.API.Domain.Enums.TripStatus? Status);

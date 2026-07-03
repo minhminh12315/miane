@@ -43,7 +43,8 @@ RUN flutter pub run build_runner build --delete-conflicting-outputs
 
 # Build the web app with the target API URL
 ARG API_URL=http://localhost:5000
-RUN flutter build web --release --dart-define=API_URL=${API_URL}
+ARG GOOGLE_MAPS_API_KEY=
+RUN flutter build web --release --dart-define=API_URL=${API_URL} --dart-define=GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
 
 # Stage 2: Serve using Nginx
 FROM nginx:alpine

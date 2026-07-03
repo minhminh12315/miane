@@ -230,9 +230,25 @@ services:
     networks:
       - Miane-network-dev
 
+  ai-image:
+    build:
+      context: ./services/ai-image
+      dockerfile: Dockerfile
+    container_name: Miane-ai-image-dev
+    environment:
+      - AI_IMAGE_PUBLIC_BASE_URL=http://localhost:8000
+      - AI_IMAGE_CACHE_DIR=/app/cache
+    ports:
+      - "8000:8000"
+    volumes:
+      - ai_image_dev_cache:/app/cache
+    networks:
+      - Miane-network-dev
+
 volumes:
   postgres_dev_data:
   redis_dev_data:
+  ai_image_dev_cache:
 
 networks:
   Miane-network-dev:
