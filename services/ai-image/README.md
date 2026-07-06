@@ -35,3 +35,12 @@ ships with a deterministic Pillow fallback so the app always has a cover image.
 You can later enable a local Diffusers/SDXL or Flux Schnell backend without
 changing the Flutter UI contract.
 
+## AI-OCR (Receipt Scanning)
+
+Receipt OCR runs **on-device** in the Flutter app (native text recognizer +
+a rule-based Vietnamese parser) — there is no backend endpoint for this
+feature. See [AI_OCR_LOCAL_REQUIREMENTS.md](../../AI_OCR_LOCAL_REQUIREMENTS.md)
+at the repo root for the spec, and
+`src/Clients/mobile/lib/features/expense/domain/services/vn_receipt_parser.dart`
+for the implementation.
+

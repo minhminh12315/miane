@@ -9,6 +9,7 @@ import '../../../auth/presentation/controllers/app_auth_provider.dart';
 import '../../../expense/domain/models/expense_models.dart';
 import '../../../expense/presentation/controllers/expense_controller.dart';
 import '../../../expense/presentation/controllers/pool_controller.dart';
+import '../../../expense/presentation/screens/scan_bill_screen.dart';
 import '../../data/repositories/trip_repository_impl.dart';
 import '../../domain/models/trip_models.dart';
 import '../controllers/trips_provider.dart';
@@ -1169,6 +1170,24 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                                 Text('Thêm chi tiêu',
                                     style: AppTheme.titleSm()),
                                 const Spacer(),
+                                CupertinoButton(
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () {
+                                    Navigator.of(sheetContext).pop();
+                                    Navigator.of(context).push(
+                                      CupertinoPageRoute(
+                                        builder: (_) => ScanBillScreen(
+                                          tripId: widget.tripId,
+                                          baseCurrency: widget.baseCurrency,
+                                          members: details.members,
+                                          destination: details.destinationCity,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: const Icon(CupertinoIcons.camera,
+                                      size: 20),
+                                ),
                                 CupertinoButton(
                                   padding: EdgeInsets.zero,
                                   onPressed: () => _submitExpense(
