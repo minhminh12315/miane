@@ -52,30 +52,41 @@ public class TripConfiguration : IEntityTypeConfiguration<TripEntity>
         builder.Property(t => t.Status)
             .HasConversion<int>();
 
+        // Members/Roles/Invitations/ShareLinks/Images are exposed as
+        // IReadOnlyCollection<T> wrapping a private List<T> via .AsReadOnly().
+        // That getter returns a new read-only wrapper on every call, so EF's
+        // query materializer must be forced to populate the backing field
+        // directly (PropertyAccessMode.Field) — otherwise Include() throws
+        // "Collection is read-only" when adding loaded rows.
         builder.HasMany(t => t.Members)
             .WithOne(m => m.Trip)
             .HasForeignKey(m => m.TripId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(t => t.Members).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.HasMany(t => t.Roles)
             .WithOne(r => r.Trip)
             .HasForeignKey(r => r.TripId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(t => t.Roles).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.HasMany(t => t.Invitations)
             .WithOne(i => i.Trip)
             .HasForeignKey(i => i.TripId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(t => t.Invitations).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.HasMany(t => t.ShareLinks)
             .WithOne(s => s.Trip)
             .HasForeignKey(s => s.TripId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(t => t.ShareLinks).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.HasMany(t => t.Images)
             .WithOne(i => i.Trip)
             .HasForeignKey(i => i.TripId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(t => t.Images).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.Property(t => t.Version)
             .IsConcurrencyToken();

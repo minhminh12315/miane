@@ -35,6 +35,9 @@ public class TripCollaborationConfiguration :
             .WithOne(p => p.Role)
             .HasForeignKey(p => p.TripRoleId)
             .OnDelete(DeleteBehavior.Cascade);
+        // See TripConfiguration for why Field access mode is required here.
+        // Backing field is "_permissions", not the convention-matched "_rolePermissions".
+        builder.Navigation(r => r.RolePermissions).HasField("_permissions").UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 
     public void Configure(EntityTypeBuilder<TripRolePermission> builder)
@@ -119,6 +122,8 @@ public class TripCollaborationConfiguration :
             .WithOne(a => a.Plan)
             .HasForeignKey(a => a.TripPlanId)
             .OnDelete(DeleteBehavior.Cascade);
+        // See TripConfiguration for why Field access mode is required here.
+        builder.Navigation(p => p.Activities).UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 
     public void Configure(EntityTypeBuilder<TripActivity> builder)
