@@ -1,7 +1,9 @@
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/subscription/presentation/controllers/pro_upgrade_controller.dart';
 import '../theme/app_theme.dart';
 
 Color iosGroupedBackground(BuildContext context) => AppTheme.canvasDark;
@@ -1114,22 +1116,53 @@ Future<void> showIosProSheet(
 }) {
   return showCupertinoModalPopup<void>(
     context: context,
-    builder: (context) => CupertinoActionSheet(
-      title: const Text('Mở khóa MIANE Pro'),
-      message: Text(
-        'Tính năng "$featureName" thuộc gói Pro: không giới hạn chuyến đi, thành viên, đa tiền tệ, AI OCR và trợ lý lịch trình.',
-      ),
-      actions: [
-        CupertinoActionSheetAction(
-          isDefaultAction: true,
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Nâng cấp 99.000 đ / tháng'),
-        ),
-      ],
-      cancelButton: CupertinoActionSheetAction(
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('Để sau'),
-      ),
+    builder: (sheetContext) => Consumer(
+      builder: (context, ref, _) {
+        final state = ref.watch(proUpgradeControllerProvider);
+        final isPurchasing = state.status == ProUpgradeStatus.purchasing;
+
+        ref.listen(proUpgradeControllerProvider, (previous, next) {
+          if (next.status == ProUpgradeStatus.success) {
+            ref.read(proUpgradeControllerProvider.notifier).reset();
+            Navigator.of(sheetContext).pop();
+            showIosMessage(context, message: 'Chào mừng bạn đến với MIANE Pro!');
+          }
+        });
+
+        return CupertinoActionSheet(
+          title: const Text('Mở khóa MIANE Pro'),
+          message: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Tính năng "$featureName" thuộc gói Pro: không giới hạn chuyến đi, thành viên, đa tiền tệ, AI OCR và trợ lý lịch trình.',
+              ),
+              if (state.status == ProUpgradeStatus.error && state.errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  state.errorMessage!,
+                  style: const TextStyle(color: CupertinoColors.systemRed),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            CupertinoActionSheetAction(
+              isDefaultAction: true,
+              onPressed: isPurchasing
+                  ? () {}
+                  : () => ref.read(proUpgradeControllerProvider.notifier).purchasePro(),
+              child: isPurchasing
+                  ? const CupertinoActivityIndicator()
+                  : const Text('Nâng cấp 99.000 đ / tháng'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: const Text('Để sau'),
+          ),
+        );
+      },
     ),
   );
 }

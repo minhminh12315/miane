@@ -132,6 +132,50 @@ namespace Identity.API.Controllers
             return NoContent();
         }
 
+        /// <summary>
+        /// Upgrades the authenticated user to MIANE Pro after a client-side
+        /// StoreKit/Play Billing purchase completes.
+        /// </summary>
+        /// <remarks>
+        /// DEV/TESTING NOTE: this trusts the client purchase result as-is —
+        /// there is no server-side App Store/Play receipt verification here.
+        /// Fine for StoreKit Testing in Simulator; before shipping this must
+        /// validate the receipt via the App Store Server API (iOS) / Play
+        /// Developer API (Android) before flipping UserTier.
+        /// </remarks>
+        [Authorize]
+        [HttpPost("upgrade-pro")]
+        public async Task<IActionResult> UpgradeToPro()
+        {
+            var userId = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var parsedUserId))
+            {
+                return Unauthorized(new { message = "Invalid token subject" });
+            }
+
+            var response = await _authService.UpgradeToProAsync(parsedUserId);
+
+            var accessCookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = !_env.IsDevelopment(),
+                SameSite = SameSiteMode.Strict,
+                Expires = response.ExpiresIn
+            };
+
+            var refreshCookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = !_env.IsDevelopment(),
+                SameSite = SameSiteMode.Strict,
+                Expires = DateTime.UtcNow.AddDays(7)
+            };
+
+            Response.Cookies.Append("access_token", response.AccessToken, accessCookieOptions);
+            Response.Cookies.Append("refresh_token", response.RefreshToken, refreshCookieOptions);
+            return Ok(response);
+        }
+
         [Authorize]
         [HttpGet("validate")]
         public async Task<IActionResult> ValidateToken()

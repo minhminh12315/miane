@@ -1,7 +1,7 @@
 class ApiEndpoints {
   static const String baseUrl = String.fromEnvironment(
     'API_URL',
-    defaultValue: 'http://localhost:5000',
+    defaultValue: 'http://localhost:8080',
   ); // Web gateway
 
   static const String register = '/auth/register';
@@ -9,6 +9,7 @@ class ApiEndpoints {
   static const String verifyRegistrationOtp = '/auth/register/verify-otp';
   static const String login = '/auth/login';
   static const String logout = '/auth/logout';
+  static const String upgradePro = '/auth/upgrade-pro';
   
   static const String trips = '/trips';
   static const String joinTrip = '/trips/join';

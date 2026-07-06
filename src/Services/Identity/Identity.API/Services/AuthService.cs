@@ -262,6 +262,23 @@ namespace Identity.API.Services
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
+        public async Task<AuthResponse> UpgradeToProAsync(Guid userId)
+        {
+            var user = await _userManager.FindByIdAsync(userId.ToString())
+                ?? throw new InvalidOperationException("User not found.");
+
+            if (user.UserTier != 1)
+            {
+                user.UserTier = 1;
+                await _userManager.UpdateAsync(user);
+            }
+
+            // Reissue tokens so the UserTier claim (and the X-User-Tier header
+            // the Gateway forwards from it) reflects Pro immediately, without
+            // requiring the client to log out and back in.
+            return await CreateAuthResponseAsync(user);
+        }
+
         public async Task LogoutAsync(string userId)
         {
             await _cacheService.RemoveAsync($"session_{userId}");

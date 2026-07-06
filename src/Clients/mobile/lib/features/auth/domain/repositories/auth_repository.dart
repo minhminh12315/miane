@@ -6,6 +6,7 @@ abstract class AuthRepository {
   Future<void> sendRegistrationOtp(String email, String password, String fullName);
   Future<AuthResponseModel> verifyRegistrationOtp(String email, String otpCode);
   Future<void> logout();
+  Future<AuthResponseModel> upgradeToPro();
   Future<UserModel?> getMe();
   Future<void> saveToken(String accessToken, String refreshToken);
   Future<String?> getToken();

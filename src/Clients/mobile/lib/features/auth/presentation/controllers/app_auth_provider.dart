@@ -96,3 +96,17 @@ final currentUserIdProvider = FutureProvider<String?>((ref) async {
   }
   return null;
 });
+
+/// 0 = Basic, 1 = Pro. Decoded from the JWT's `UserTier` claim — invalidate
+/// this provider after any call that reissues tokens (login, upgrade-pro).
+final currentUserTierProvider = FutureProvider<int>((ref) async {
+  final repo = ref.watch(authRepositoryProvider);
+  final token = await repo.getToken();
+  if (token != null && token.isNotEmpty) {
+    try {
+      final decoded = JwtDecoder.decode(token);
+      return int.tryParse(decoded['UserTier'].toString()) ?? 0;
+    } catch (_) {}
+  }
+  return 0;
+});
