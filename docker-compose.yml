@@ -136,7 +136,7 @@ services:
       - Jwt__Issuer=MianeIdentityService
       - Jwt__Audience=MianeClients
     ports:
-      - "5000:8080"
+      - "8080:8080"
     depends_on:
       - identity-api
       - trip-api
@@ -150,7 +150,7 @@ services:
       context: ./src/Clients/mobile
       dockerfile: Dockerfile
       args:
-        - API_URL=http://localhost:5000
+        - API_URL=http://localhost:8080
         - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
     container_name: Miane-mobile-client
     ports:
