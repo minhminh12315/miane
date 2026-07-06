@@ -65,7 +65,7 @@ public class TripEntity : AggregateRoot
         _images.Add(image);
     }
 
-    public static string GenerateInviteCode(int length = 6)
+    public static string GenerateInviteCode(int length = 8)
     {
         const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         var random = Random.Shared;
