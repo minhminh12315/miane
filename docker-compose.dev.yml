@@ -213,7 +213,7 @@ services:
       - ASPNETCORE_USE_POLLING_FILE_WATCHER=1
       - DOTNET_USE_POLLING_FILE_WATCHER=1
     ports:
-      - "5000:8080"
+      - "8080:8080"
     depends_on:
       - identity-api
       - trip-api
