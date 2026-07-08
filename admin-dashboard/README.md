@@ -51,6 +51,55 @@ Change these passwords (or deactivate the accounts) before this ever runs anywhe
 - `FRONTEND_ORIGIN` (default `http://localhost:5173`) — allowed CORS origin for the session cookie
 - `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` (default `localhost` / `5432` / `Miane` / `Miane_password`) — direct Postgres access for the schema browser only
 
+## Luồng hoạt động & danh sách file (ghi chú để học)
+
+### 1. Luồng đăng nhập (Login)
+
+1. `src/pages/Login.jsx` — user nhập email/password, gọi `api.login()`.
+2. `src/api.js` → `POST http://localhost:4000/api/auth/login` (server của dashboard, không phải Identity.API trực tiếp).
+3. `server/index.js` (`POST /api/auth/login`) nhận request, gọi thật tới `Identity.API`: `POST http://localhost:5127/auth/login` — endpoint có sẵn từ trước (`AuthController.cs`), không phải mới viết.
+4. Sai email/password → Identity.API trả 401 → dashboard server trả 401 → `Login.jsx` hiện lỗi.
+5. Đúng password nhưng response không có role `"Admin"` → dashboard server tự chặn, trả 403 (dù login đúng vẫn không cho vào, vì không phải tài khoản admin).
+6. Đúng và có role Admin → server tạo 1 session: lưu JWT thật vào biến `sessions` (một `Map` trong RAM), set cookie `admin_session` (httpOnly — JavaScript ở browser không đọc được cookie này), trả về `{email, fullName, roles}` cho frontend (không trả JWT thật về browser).
+7. Frontend lưu vào `AuthContext` (`src/AuthContext.jsx`), điều hướng vào Dashboard.
+
+### 2. Luồng gọi API sau khi đã đăng nhập (ví dụ trang Users)
+
+1. `src/pages/Users.jsx` gọi `api.getUsers()` → `GET http://localhost:4000/api/users` (cookie `admin_session` tự động gửi kèm vì `fetch(..., { credentials: 'include' })`).
+2. `server/index.js` có middleware `requireAuth` chặn trước mọi route `/api/*` (trừ 3 route auth) — đọc cookie, tìm session trong `Map`, lấy JWT thật ra; không có/hết hạn → trả 401.
+3. Server dùng JWT đó gọi thật tới `Identity.API`: `GET http://localhost:5127/users` — route mới (`UsersController.cs`), có `[Authorize(Roles = "Admin")]` nên phải đúng JWT + đúng role mới gọi được.
+4. Identity.API trả data thật từ Postgres → dashboard server đổi tên field cho gọn (`toDashboardUser`) → trả về frontend.
+
+Trang Dashboard (stats/activity) làm y hệt bước 2–4 nhưng gọi thêm `Trip.API` (`GET /trips/admin`) và `Expense.API` (`GET /expenses/admin`).
+
+### 3. Danh sách file đã tạo/sửa
+
+**Backend .NET (ngoài thư mục `admin-dashboard/`):**
+
+| File | Trạng thái | Việc nó làm |
+|---|---|---|
+| `src/Services/Identity/Identity.API/Controllers/UsersController.cs` | Mới | API quản lý user cho admin: list/create/update/deactivate, chỉ role Admin gọi được |
+| `src/Services/Trip/Trip.API/Controllers/AdminTripsController.cs` | Mới | `GET /trips/admin` — xem tất cả trip, không chỉ trip của mình |
+| `src/Services/Expense/Expense.API/Controllers/AdminExpensesController.cs` | Mới | `GET /expenses/admin` — xem tất cả expense |
+| `src/Services/Notification/Notification.API/Controllers/AdminNotificationsController.cs` | Mới | `GET /notifications/admin` |
+| `src/Services/Trip/Trip.API/Program.cs`, `appsettings.json` | Sửa | Thêm JWT bearer auth (trước đây Trip.API không kiểm tra token, chỉ tin header `X-User-Id`) |
+| `src/Services/Expense/Expense.API/Program.cs`, `appsettings.json` | Sửa | Tương tự Trip.API |
+| `src/Services/Notification/Notification.API/Program.cs`, `appsettings.json`, `.csproj` | Sửa | Tương tự Trip.API |
+| `docker-compose.yml`, `docker-compose.dev.yml` | Sửa | Thêm biến `Jwt__Key`/`Jwt__Issuer`/`Jwt__Audience` cho 3 service trên (cùng key với Identity.API nên 1 JWT dùng chung được) |
+
+**Frontend + server (trong `admin-dashboard/`):**
+
+| File | Trạng thái | Việc nó làm |
+|---|---|---|
+| `src/pages/Login.jsx` | Mới | Form đăng nhập |
+| `src/AuthContext.jsx` | Mới | Context lưu trạng thái đăng nhập (`user`, `login()`, `logout()`), tự kiểm tra session lúc mở web qua `api.me()` |
+| `src/App.jsx` | Sửa | Chưa login → hiện `Login`; đã login → hiện `Sidebar` + `Routes` |
+| `src/components/Sidebar.jsx` | Sửa | Thêm tên user đang đăng nhập + nút Logout |
+| `src/pages/Dashboard.jsx`, `Users.jsx`, `Databases.jsx` | Sửa | Đổi từ mock data sang gọi API thật |
+| `src/api.js` | Sửa | Thêm `login`/`logout`/`me`; mọi request thêm `credentials: 'include'` để cookie session được gửi đi |
+| `server/index.js` | Sửa (nhiều nhất) | Thêm session (`Map` + cookie), middleware `requireAuth`, 3 route `/api/auth/*`, và các hàm gọi thật tới Identity/Trip/Expense API thay vì query thẳng Postgres cho phần user/stats/activity |
+| `server/package.json` | Sửa | Thêm dependency `cookie-parser` |
+
 ## Known limits
 
 - No hard delete for users — only activate/deactivate, since related Trip/Expense data references user IDs without a cross-service cleanup story.
