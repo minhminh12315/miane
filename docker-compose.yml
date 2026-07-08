@@ -73,6 +73,9 @@ services:
       - ASPNETCORE_URLS=http://+:5128
       - ConnectionStrings__DefaultConnection=${TRIP_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=Miane_trip;Username=Miane;Password=Miane_password}
       - Redis__ConnectionString=redis:6379
+      - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
+      - Jwt__Issuer=MianeIdentityService
+      - Jwt__Audience=MianeClients
     depends_on:
       postgres:
         condition: service_healthy
@@ -95,6 +98,9 @@ services:
       - Redis__ConnectionString=redis:6379
       - AiServices__BaseUrl=${AI_SERVICE_URL:-http://localhost:8000}
       - AiServices__ApiKey=${AI_SERVICE_API_KEY:-}
+      - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
+      - Jwt__Issuer=MianeIdentityService
+      - Jwt__Audience=MianeClients
     depends_on:
       postgres:
         condition: service_healthy
@@ -116,6 +122,9 @@ services:
       - ConnectionStrings__DefaultConnection=${NOTIFICATION_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=Miane_notification;Username=Miane;Password=Miane_password}
       - Firebase__ServiceAccountPath=${FIREBASE_SERVICE_ACCOUNT_PATH:-}
       - Firebase__ProjectId=${FIREBASE_PROJECT_ID:-}
+      - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
+      - Jwt__Issuer=MianeIdentityService
+      - Jwt__Audience=MianeClients
     depends_on:
       postgres:
         condition: service_healthy
