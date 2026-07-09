@@ -8,6 +8,7 @@ namespace Identity.API.Services
     {
         Task<AuthResponse> RegisterAsync(RegisterRequest request);
         Task<AuthResponse?> LoginAsync(LoginRequest request);
+        Task<AuthResponse> LoginWithGoogleAsync(GoogleLoginRequest request);
         Task LogoutAsync(string userId);
     }
 }

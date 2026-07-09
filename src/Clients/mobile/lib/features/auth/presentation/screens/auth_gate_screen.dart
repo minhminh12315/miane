@@ -1,6 +1,8 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../controllers/app_auth_provider.dart';
 import 'login_screen.dart';
@@ -21,6 +23,247 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
   late final Animation<Offset> _textSlide;
   late final Animation<double> _subFade;
   late final Animation<Offset> _subSlide;
+  bool _isLoading = false;
+
+  Future<void> _handleGoogleSignIn() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        scopes: ['email', 'profile'],
+      );
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final String? idToken = googleAuth.idToken;
+      if (idToken == null) {
+        throw Exception('Không lấy được Google ID Token.');
+      }
+
+      await ref.read(appAuthProvider.notifier).loginWithGoogle(idToken);
+    } catch (e) {
+      if (context.mounted) {
+        _showMockLoginOptions(e.toString());
+      }
+    } finally {
+      if (context.mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _showMockLoginOptions(String originalError) {
+    final emailController = TextEditingController(text: 'miane.test@gmail.com');
+    bool isMockLoading = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: AppTheme.surfaceDark,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(32),
+                  ),
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppTheme.iosLight.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.build_circle_outlined,
+                          color: AppTheme.iosGold,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Chế độ Phát triển / Thử nghiệm',
+                          style: GoogleFonts.inter(
+                            color: AppTheme.iosLight,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Google Sign-In trên thiết bị này chưa được cấu hình Client ID. Bạn có muốn sử dụng tài khoản thử nghiệm để tiếp tục không?',
+                      style: GoogleFonts.beVietnamPro(
+                        color: AppTheme.iosLight.withOpacity(0.7),
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Lỗi chi tiết: $originalError',
+                      style: GoogleFonts.beVietnamPro(
+                        color: Colors.redAccent.withOpacity(0.8),
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Nhập Email thử nghiệm:',
+                      style: GoogleFonts.beVietnamPro(
+                        color: AppTheme.iosLight.withOpacity(0.8),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.canvasDark,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppTheme.iosBlue.withOpacity(0.4),
+                          width: 1.0,
+                        ),
+                      ),
+                      child: TextField(
+                        controller: emailController,
+                        style: GoogleFonts.beVietnamPro(
+                          color: AppTheme.iosLight,
+                          fontSize: 14,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'user@example.com',
+                          hintStyle: GoogleFonts.beVietnamPro(
+                            color: AppTheme.iosLight.withOpacity(0.3),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.alternate_email,
+                            color: AppTheme.iosBlue,
+                            size: 20,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 16,
+                            horizontal: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text(
+                              'Hủy',
+                              style: GoogleFonts.beVietnamPro(
+                                color: AppTheme.iosLight.withOpacity(0.6),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 2,
+                          child: GestureDetector(
+                            onTap: isMockLoading
+                                ? null
+                                : () async {
+                                    final email = emailController.text.trim();
+                                    if (email.isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Vui lòng nhập email hợp lệ'),
+                                          backgroundColor: Colors.redAccent,
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    setModalState(() => isMockLoading = true);
+                                    try {
+                                      final mockToken = 'mock_google_token_$email';
+                                      await ref.read(appAuthProvider.notifier).loginWithGoogle(mockToken);
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                      }
+                                    } catch (err) {
+                                      setModalState(() => isMockLoading = false);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Thử nghiệm thất bại: $err'),
+                                            backgroundColor: Colors.redAccent,
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                            child: Container(
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: AppTheme.iosBlue,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Center(
+                                child: isMockLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          color: AppTheme.iosLight,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Text(
+                                        'Đăng nhập Mock',
+                                        style: GoogleFonts.beVietnamPro(
+                                          color: AppTheme.iosLight,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -204,7 +447,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                     context: context,
                     icon: Icons.apple_rounded,
                     label: 'Tiếp tục với Apple',
-                    onTap: () => ref.read(appAuthProvider.notifier).loginFake(),
+                    onTap: _isLoading ? () {} : () => ref.read(appAuthProvider.notifier).loginFake(),
                     color: Colors.white,
                     textColor: Colors.black,
                   ),
@@ -219,7 +462,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                       ),
                     ),
                     label: 'Tiếp tục với Google',
-                    onTap: () => ref.read(appAuthProvider.notifier).loginFake(),
+                    onTap: _isLoading ? () {} : _handleGoogleSignIn,
                     color: Colors.transparent,
                     textColor: kLight,
                     borderColor: kAzure.withOpacity(0.4),
@@ -261,12 +504,14 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                     context: context,
                     icon: Icons.email_rounded,
                     label: 'Sử dụng Email',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const LoginScreen()),
-                      );
-                    },
+                    onTap: _isLoading
+                        ? () {}
+                        : () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const LoginScreen()),
+                            );
+                          },
                     color: Colors.transparent,
                     textColor: kLight,
                     borderColor: kAzure.withOpacity(0.4),
@@ -284,12 +529,14 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
                         ),
                       ),
                       GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const RegisterScreen()),
-                          );
-                        },
+                        onTap: _isLoading
+                            ? null
+                            : () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                                );
+                              },
                         child: Text(
                           'Đăng ký ngay',
                           style: GoogleFonts.beVietnamPro(
@@ -306,6 +553,48 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> with SingleTick
               ),
             ),
           ),
+          if (_isLoading)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.4),
+                child: Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                        decoration: BoxDecoration(
+                          color: kNavy.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: kAzure.withOpacity(0.2),
+                            width: 1,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(
+                              color: kAzure,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Đang kết nối...',
+                              style: GoogleFonts.beVietnamPro(
+                                color: kLight,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

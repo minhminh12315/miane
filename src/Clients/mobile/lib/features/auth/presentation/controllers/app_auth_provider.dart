@@ -45,6 +45,12 @@ class AppAuth extends _$AppAuth {
     state = AppAuthStatus.authenticated;
   }
 
+  Future<void> loginWithGoogle(String idToken) async {
+    final repo = ref.read(authRepositoryProvider);
+    await repo.loginWithGoogle(idToken);
+    state = AppAuthStatus.authenticated;
+  }
+
   void completeSetup() {
     state = AppAuthStatus.authenticated;
   }
