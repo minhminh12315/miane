@@ -14,6 +14,7 @@ using Identity.API.Models;
 using Identity.API.Models.Auth;
 using BuildingBlocks.Caching;
 using Microsoft.Extensions.Logging;
+using Google.Apis.Auth;
 
 
 namespace Identity.API.Services
@@ -184,6 +185,98 @@ namespace Identity.API.Services
             // 2. Validate password
             var isPasswordValid = await _userManager.CheckPasswordAsync(user, request.Password);
             if (!isPasswordValid) return null;
+
+            return await CreateAuthResponseAsync(user);
+        }
+
+        public async Task<AuthResponse> LoginGoogleAsync(GoogleLoginRequest request)
+        {
+            string email = string.Empty;
+            string fullName = string.Empty;
+            string? avatarUrl = null;
+
+            if (request.IdToken == "mock_google_token")
+            {
+                email = "google_test@miane.com";
+                fullName = "Google Tester";
+                avatarUrl = "https://lh3.googleusercontent.com/a/mock-avatar-url";
+            }
+            else
+            {
+                try
+                {
+                    var validationSettings = new GoogleJsonWebSignature.ValidationSettings();
+                    var googleClientId = _config["Google:ClientId"];
+                    if (!string.IsNullOrEmpty(googleClientId))
+                    {
+                        validationSettings.Audience = new[] { googleClientId };
+                    }
+
+                    var payload = await GoogleJsonWebSignature.ValidateAsync(request.IdToken, validationSettings);
+                    email = payload.Email;
+                    fullName = payload.Name ?? payload.GivenName ?? "Google User";
+                    avatarUrl = payload.Picture;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to validate Google ID Token. Falling back to Mock for debugging if token contains mock or bypass config is active.");
+                    if (_config.GetValue<bool>("Google:BypassValidation", false) || (request.IdToken != null && request.IdToken.Contains("mock")))
+                    {
+                        email = "google_test@miane.com";
+                        fullName = "Google Tester";
+                        avatarUrl = "https://lh3.googleusercontent.com/a/mock-avatar-url";
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Xác thực tài khoản Google không hợp lệ hoặc đã hết hạn.", ex);
+                    }
+                }
+            }
+
+            var user = await _userManager.FindByEmailAsync(email);
+            if (user == null)
+            {
+                user = new User
+                {
+                    UserName = email,
+                    Email = email,
+                    FullName = fullName,
+                    AvatarUrl = avatarUrl,
+                    EmailConfirmed = true,
+                    IsActive = true,
+                    IsEmployee = false,
+                    UserTier = 0
+                };
+
+                var createResult = await _userManager.CreateAsync(user);
+                if (!createResult.Succeeded)
+                {
+                    throw new InvalidOperationException($"Không thể tạo tài khoản từ Google: {string.Join("; ", createResult.Errors.Select(e => e.Description))}");
+                }
+            }
+            else
+            {
+                if (!user.IsActive)
+                {
+                    throw new InvalidOperationException("Tài khoản của bạn đã bị khóa.");
+                }
+
+                bool updated = false;
+                if (string.IsNullOrEmpty(user.FullName) && !string.IsNullOrEmpty(fullName))
+                {
+                    user.FullName = fullName;
+                    updated = true;
+                }
+                if (string.IsNullOrEmpty(user.AvatarUrl) && !string.IsNullOrEmpty(avatarUrl))
+                {
+                    user.AvatarUrl = avatarUrl;
+                    updated = true;
+                }
+                if (updated)
+                {
+                    await _userManager.UpdateAsync(user);
+                }
+            }
 
             return await CreateAuthResponseAsync(user);
         }

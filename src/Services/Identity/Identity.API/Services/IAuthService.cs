@@ -13,5 +13,6 @@ namespace Identity.API.Services
         Task SendRegistrationOtpAsync(RegisterRequest request);
         Task<AuthResponse> VerifyRegistrationOtpAsync(string email, string otpCode);
         Task<AuthResponse> UpgradeToProAsync(Guid userId);
+        Task<AuthResponse> LoginGoogleAsync(GoogleLoginRequest request);
     }
 }

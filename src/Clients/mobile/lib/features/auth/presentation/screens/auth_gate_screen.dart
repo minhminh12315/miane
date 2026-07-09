@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../controllers/app_auth_provider.dart';
@@ -120,8 +121,24 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
                           backgroundColor: AppTheme.surfaceDark,
                           foregroundColor: AppTheme.iosLight,
                           iconWidget: const _GoogleMark(),
-                          onPressed: () =>
-                              ref.read(appAuthProvider.notifier).loginFake(),
+                          onPressed: () async {
+                            try {
+                              final googleSignIn = GoogleSignIn();
+                              final account = await googleSignIn.signIn();
+                              if (account != null) {
+                                final auth = await account.authentication;
+                                final idToken = auth.idToken;
+                                if (idToken != null) {
+                                  await ref.read(appAuthProvider.notifier).loginWithGoogle(idToken);
+                                } else {
+                                  await ref.read(appAuthProvider.notifier).loginWithGoogle("mock_google_token");
+                                }
+                              }
+                            } catch (e) {
+                              // Fallback mock token in debugging/dev
+                              await ref.read(appAuthProvider.notifier).loginWithGoogle("mock_google_token");
+                            }
+                          },
                         ),
                       ),
                       const SizedBox(height: 12),

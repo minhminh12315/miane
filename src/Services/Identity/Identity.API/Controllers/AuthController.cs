@@ -117,6 +117,39 @@ namespace Identity.API.Controllers
 
         }
 
+        [HttpPost("google")]
+        public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
+        {
+            try
+            {
+                var response = await _authService.LoginGoogleAsync(request);
+
+                var accessCookieOptions = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = !_env.IsDevelopment(),
+                    SameSite = SameSiteMode.Strict,
+                    Expires = response.ExpiresIn
+                };
+
+                var refreshCookieOptions = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = !_env.IsDevelopment(),
+                    SameSite = SameSiteMode.Strict,
+                    Expires = DateTime.UtcNow.AddDays(7)
+                };
+
+                Response.Cookies.Append("access_token", response.AccessToken, accessCookieOptions);
+                Response.Cookies.Append("refresh_token", response.RefreshToken, refreshCookieOptions);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpPost("logout")]
         public async Task<IActionResult> Logout()
         {

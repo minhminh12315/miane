@@ -10,6 +10,7 @@ class ApiEndpoints {
   static const String login = '/auth/login';
   static const String logout = '/auth/logout';
   static const String upgradePro = '/auth/upgrade-pro';
+  static const String googleLogin = '/auth/google';
   
   static const String trips = '/trips';
   static const String joinTrip = '/trips/join';

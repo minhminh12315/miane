@@ -75,6 +75,18 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<AuthResponseModel> loginWithGoogle(String idToken) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.googleLogin,
+      body: {'idToken': idToken},
+      authenticated: false,
+    );
+    final authResponse = AuthResponseModel.fromJson(response);
+    await saveToken(authResponse.accessToken, authResponse.refreshToken);
+    return authResponse;
+  }
+
+  @override
   Future<void> logout() async {
     try {
       await _apiClient.post(ApiEndpoints.logout);
