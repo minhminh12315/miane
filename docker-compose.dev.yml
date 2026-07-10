@@ -239,6 +239,40 @@ services:
     networks:
       - Miane-network-dev
 
+  mobile-client:
+    image: miane-mobile-client-dev
+    build:
+      context: ./src/Clients/mobile
+      dockerfile: Dockerfile
+      target: dev
+    container_name: Miane-mobile-client-dev
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    environment:
+      - PUB_CACHE=/root/.pub-cache
+    ports: !override
+      - "3000:3000"
+    volumes:
+      - ./src/Clients/mobile:/app
+      - mobile_flutter_pub_cache:/root/.pub-cache
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        flutter create --platforms web . &&
+        flutter pub get &&
+        dart run build_runner build --delete-conflicting-outputs &&
+        rm -rf .dart_tool/flutter_build build/web &&
+        flutter run -d web-server \
+          --web-hostname 0.0.0.0 \
+          --web-port 3000 \
+          --dart-define=API_URL=${MOBILE_API_URL:-http://localhost:8080} \
+          --dart-define=GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+    depends_on:
+      - web-gateway
+    networks: !override
+      - Miane-network-dev
+
   ai-image:
     build:
       context: ./services/ai-image
@@ -258,6 +292,7 @@ volumes:
   postgres_dev_data:
   redis_dev_data:
   ai_image_dev_cache:
+  mobile_flutter_pub_cache:
 
 networks:
   Miane-network-dev:

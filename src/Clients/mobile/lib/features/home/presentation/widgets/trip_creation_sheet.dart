@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -20,258 +21,199 @@ class TripCreationSheet extends ConsumerStatefulWidget {
 }
 
 class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
-  static const _aiImageEndpoint = String.fromEnvironment(
+  static const _googlePlacesApiKey =
+      String.fromEnvironment('GOOGLE_MAPS_API_KEY');
+
+  static const _aiThumbnailEndpoint = String.fromEnvironment(
     'MIANE_AI_IMAGE_URL',
-    defaultValue: 'http://localhost:8000/api/generate-trip-image',
+    defaultValue: 'http://localhost:8000/api/v1/image/generate-trip-thumbnail',
   );
 
   final _nameController = TextEditingController();
-  final _destinationController = TextEditingController();
-  final _noteController = TextEditingController();
   final _picker = ImagePicker();
 
   DateTime _startDate = DateTime.now().add(const Duration(days: 14));
-  DateTime _endDate = DateTime.now().add(const Duration(days: 20));
+  DateTime _endDate = DateTime.now().add(const Duration(days: 17));
   Uint8List? _coverBytes;
-  String? _aiCoverUrl;
-  String? _coverStatus;
-  _PlaceSuggestion? _selectedPlace;
-  bool _showPlaceSuggestions = false;
+  _AiThumbnail? _aiThumbnail;
+  _TripPlace? _selectedPlace;
   bool _isGeneratingCover = false;
   bool _isSubmitting = false;
+  String? _coverError;
 
   @override
   void dispose() {
     _nameController.dispose();
-    _destinationController.dispose();
-    _noteController.dispose();
     super.dispose();
   }
 
   int get _durationDays => _endDate.difference(_startDate).inDays + 1;
 
-  List<_PlaceSuggestion> get _filteredPlaces {
-    final input = _destinationController.text.trim();
-    if (input.length < 2) return [];
-
-    final query = _normalize(input);
-    final matches = _popularPlaces
-        .where((place) => _normalize(place.searchText).contains(query))
-        .take(5)
-        .toList();
-
-    final hasExact =
-        matches.any((place) => _normalize(place.displayName) == query);
-    if (!hasExact) {
-      matches.add(
-        _PlaceSuggestion.manual(input),
-      );
-    }
-    return matches;
-  }
+  int get _durationNights => math.max(0, _durationDays - 1);
 
   @override
   Widget build(BuildContext context) {
-    final destinationText = _destinationController.text.trim();
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
 
-    return GlassBottomSheetScaffold(
-      title: 'Tạo chuyến đi',
-      child: ListView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+    return SafeArea(
+      top: false,
+      child: Column(
         children: [
-          _CreateTripHero(
-            name: _nameController.text.trim().isEmpty
-                ? 'Chuyến đi mới'
-                : _nameController.text.trim(),
-            destination:
-                destinationText.isEmpty ? 'Chọn điểm đến' : destinationText,
-            dateLabel: '${_formatDate(_startDate)} → ${_formatDate(_endDate)}',
-            durationLabel: '$_durationDays ngày',
-            coverBytes: _coverBytes,
-            coverUrl: _aiCoverUrl,
-            isGeneratingCover: _isGeneratingCover,
+          const SizedBox(height: 10),
+          Container(
+            width: 44,
+            height: 5,
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemGrey
+                  .resolveFrom(context)
+                  .withValues(alpha: 0.68),
+              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+            ),
           ),
-          const SizedBox(height: 18),
-          _SheetSection(
-            title: 'Thông tin chuyến đi',
-            children: [
-              IosTextField(
-                controller: _nameController,
-                label: 'Tên chuyến đi *',
-                placeholder: 'Mùa hè tại Đà Nẵng',
-                prefixIcon: CupertinoIcons.map_fill,
-                onChanged: (_) => setState(() {}),
+          Expanded(
+            child: ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                18,
+                14,
+                18,
+                math.max(26, keyboard + 26),
               ),
-              const SizedBox(height: 12),
-              IosTextField(
-                controller: _destinationController,
-                label: 'Địa điểm *',
-                placeholder: 'Nhập thành phố hoặc quốc gia',
-                prefixIcon: CupertinoIcons.location_solid,
-                onChanged: (value) {
-                  setState(() {
-                    _selectedPlace = null;
-                    _aiCoverUrl = null;
-                    _coverStatus = null;
-                    _showPlaceSuggestions = value.trim().length >= 2;
-                  });
-                },
-              ),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                child: _showPlaceSuggestions && _filteredPlaces.isNotEmpty
-                    ? Padding(
-                        key: const ValueKey('place-suggestions'),
-                        padding: const EdgeInsets.only(top: 10),
-                        child: _PlaceSuggestionPanel(
-                          places: _filteredPlaces,
-                          onSelected: _selectPlace,
-                        ),
-                      )
-                    : const SizedBox.shrink(key: ValueKey('empty-suggestions')),
-              ),
-              if (_selectedPlace != null) ...[
-                const SizedBox(height: 10),
-                _SelectedPlacePill(place: _selectedPlace!),
-              ],
-              const SizedBox(height: 12),
-              IosTextField(
-                controller: _noteController,
-                label: 'Ghi chú',
-                placeholder: 'Biển, đồ ăn, nghỉ dưỡng...',
-                prefixIcon: CupertinoIcons.text_bubble,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _SheetSection(
-            title: 'Thời gian',
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _DateTile(
-                      title: 'Ngày đi',
-                      value: _formatDate(_startDate),
-                      onTap: () => _pickDate(isStart: true),
-                    ),
+              children: [
+                IosAnimatedEntry(
+                  dy: 20,
+                  child: _CreateTripHero(
+                    title: _nameController.text.trim().isEmpty
+                        ? 'Tên chuyến đi'
+                        : _nameController.text.trim(),
+                    subtitle:
+                        '${_formatDate(_startDate)} → ${_formatDate(_endDate)}',
+                    coverBytes: _coverBytes,
+                    coverUrl:
+                        _coverBytes == null ? _aiThumbnail?.imageUrl : null,
+                    isGeneratingCover: _isGeneratingCover,
+                    onClose: () => Navigator.of(context).pop(),
+                    onSave: _isSubmitting ? null : _submit,
+                    onPickCover: _showCoverSourceSheet,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _DateTile(
-                      title: 'Ngày về',
-                      value: _formatDate(_endDate),
-                      onTap: () => _pickDate(isStart: false),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              ModernGlass(
-                radius: 20,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    const Icon(
-                      CupertinoIcons.clock,
-                      color: AppTheme.iosGold,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 10),
-                    Text('Thời lượng', style: AppTheme.bodySm()),
-                    const Spacer(),
-                    Text(
-                      '$_durationDays ngày',
-                      style: AppTheme.titleSm(color: AppTheme.iosGold),
-                    ),
-                  ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _SheetSection(
-            title: 'Ảnh bìa',
-            subtitle: _coverSubtitle,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _CoverAction(
-                      icon: CupertinoIcons.photo_on_rectangle,
-                      label: 'Thư viện',
-                      onTap: () => _pickCover(ImageSource.gallery),
-                    ),
+                const SizedBox(height: 20),
+                IosAnimatedEntry(
+                  delay: 0.08,
+                  child: _TripNameField(
+                    controller: _nameController,
+                    onChanged: (_) => setState(() {}),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _CoverAction(
-                      icon: CupertinoIcons.camera,
-                      label: 'Chụp ảnh',
-                      onTap: () => _pickCover(ImageSource.camera),
-                    ),
+                ),
+                const SizedBox(height: 14),
+                IosAnimatedEntry(
+                  delay: 0.14,
+                  child: _DestinationCard(
+                    place: _selectedPlace,
+                    googleApiKey: _googlePlacesApiKey,
+                    onTap: _openPlaceSearch,
                   ),
-                ],
-              ),
-              if (_coverStatus != null || _coverBytes != null) ...[
-                const SizedBox(height: 12),
-                _CoverStatusRow(
-                  isGenerating: _isGeneratingCover,
-                  hasUserCover: _coverBytes != null,
-                  text: _coverStatus ??
-                      (_coverBytes != null
-                          ? 'Đang dùng ảnh bạn đã chọn'
-                          : 'Ảnh bìa đã sẵn sàng'),
-                  onClear: _coverBytes == null ? null : _clearUserCover,
+                ),
+                const SizedBox(height: 14),
+                IosAnimatedEntry(
+                  delay: 0.20,
+                  child: _DateRangeCard(
+                    startDate: _startDate,
+                    endDate: _endDate,
+                    durationDays: _durationDays,
+                    durationNights: _durationNights,
+                    onTap: _openDateRangePicker,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 280),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  child: _coverStateWidget(context),
+                ),
+                const SizedBox(height: 20),
+                IosPrimaryButton(
+                  label: _isSubmitting ? 'Đang tạo...' : 'Tạo chuyến đi',
+                  isLoading: _isSubmitting,
+                  onPressed: _isSubmitting ? null : _submit,
                 ),
               ],
-            ],
-          ),
-          const SizedBox(height: 22),
-          IosPrimaryButton(
-            label: _isSubmitting ? 'Đang tạo...' : 'Tạo chuyến đi',
-            isLoading: _isSubmitting,
-            onPressed: _isSubmitting ? null : _submit,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Chọn địa điểm để MIANE tự tạo ảnh bìa bằng AI. Nếu bạn tải ảnh lên hoặc chụp ảnh, MIANE sẽ ưu tiên dùng ảnh của bạn.',
-            textAlign: TextAlign.center,
-            style: AppTheme.bodySm(
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-            ).copyWith(height: 1.35),
+            ),
           ),
         ],
       ),
     );
   }
 
-  String get _coverSubtitle {
-    if (_coverBytes != null) {
-      return 'Ảnh bạn chọn sẽ được dùng làm ảnh bìa chuyến đi.';
-    }
+  Widget _coverStateWidget(BuildContext context) {
     if (_isGeneratingCover) {
-      return 'MIANE đang tạo ảnh AI theo địa điểm đã chọn.';
+      return const _CoverInfoPanel(
+        key: ValueKey('cover-loading'),
+        icon: CupertinoIcons.sparkles,
+        iconColor: AppTheme.iosGold,
+        title: 'Đang tạo ảnh cho chuyến đi...',
+        message: 'Khoảng 5-10 giây. Bạn vẫn có thể thay ảnh thủ công.',
+        showActivity: true,
+      );
     }
-    if ((_aiCoverUrl ?? '').isNotEmpty) {
-      return 'Ảnh AI đã sẵn sàng. Bạn vẫn có thể thay bằng ảnh của mình.';
+
+    if (_coverError != null) {
+      return _CoverErrorPanel(
+        key: const ValueKey('cover-error'),
+        onRetry: _selectedPlace == null
+            ? null
+            : () => _generateAiCoverForPlace(_selectedPlace!),
+      );
     }
-    return 'Chọn một địa điểm để tạo ảnh AI, hoặc tự tải/chụp ảnh.';
+
+    if (_coverBytes != null) {
+      return _CoverInfoPanel(
+        key: const ValueKey('cover-manual'),
+        icon: CupertinoIcons.photo_fill_on_rectangle_fill,
+        iconColor: AppTheme.iosBlue,
+        title: 'Đang dùng ảnh bạn đã chọn',
+        message: 'Ảnh thủ công luôn được ưu tiên hơn ảnh AI.',
+        actionLabel: 'Xóa ảnh',
+        onAction: _clearUserCover,
+      );
+    }
+
+    if (_aiThumbnail != null) {
+      final landmark = _aiThumbnail!.landmark.trim();
+      return _CoverInfoPanel(
+        key: const ValueKey('cover-ready'),
+        icon: CupertinoIcons.check_mark_circled_solid,
+        iconColor: AppTheme.iosGreen,
+        title: 'Ảnh AI đã sẵn sàng',
+        message: landmark.isEmpty
+            ? 'Bạn vẫn có thể đổi sang ảnh trong thư viện hoặc camera.'
+            : 'Ưu tiên landmark: $landmark.',
+      );
+    }
+
+    return const SizedBox.shrink(key: ValueKey('cover-empty'));
   }
 
-  Future<void> _selectPlace(_PlaceSuggestion place) async {
-    _destinationController.text = place.displayName;
-    _destinationController.selection = TextSelection.collapsed(
-      offset: _destinationController.text.length,
+  Future<void> _openPlaceSearch() async {
+    final place = await showGlassBottomSheet<_TripPlace>(
+      context: context,
+      heightFactor: 0.92,
+      builder: (_) => _PlaceSearchSheet(
+        googleApiKey: _googlePlacesApiKey,
+        initialPlace: _selectedPlace,
+      ),
     );
+
+    if (place == null || !mounted) return;
+    await _selectPlace(place);
+  }
+
+  Future<void> _selectPlace(_TripPlace place) async {
     setState(() {
       _selectedPlace = place;
-      _showPlaceSuggestions = false;
-      _coverStatus = _coverBytes == null
-          ? 'Đang tạo ảnh AI cho ${place.displayName}...'
-          : 'Đang dùng ảnh bạn đã chọn';
+      _aiThumbnail = null;
+      _coverError = null;
     });
 
     if (_coverBytes == null) {
@@ -279,37 +221,122 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
     }
   }
 
-  Future<void> _generateAiCoverForPlace(_PlaceSuggestion place) async {
+  Future<void> _generateAiCoverForPlace(_TripPlace place) async {
     setState(() {
       _isGeneratingCover = true;
-      _coverStatus = 'Đang tạo ảnh AI cho ${place.displayName}...';
+      _coverError = null;
     });
 
-    final imageUrl = await _generateAiCoverUrl(place.displayName);
+    final thumbnail = await _requestAiThumbnail(place);
     if (!mounted) return;
 
     setState(() {
-      _aiCoverUrl = imageUrl;
+      _aiThumbnail = thumbnail;
       _isGeneratingCover = false;
-      _coverStatus = imageUrl == null
-          ? 'Chưa tạo được ảnh AI. Bạn vẫn có thể tạo chuyến đi hoặc tải ảnh lên.'
-          : 'Ảnh AI đã sẵn sàng';
+      _coverError = thumbnail == null ? 'Không thể tạo ảnh.' : null;
     });
+  }
+
+  Future<_AiThumbnail?> _requestAiThumbnail(_TripPlace place) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse(_aiThumbnailEndpoint),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'placeId': place.placeId,
+              'placeName': place.name,
+              'formattedAddress': place.formattedAddress,
+              'latitude': place.latitude,
+              'longitude': place.longitude,
+              'city': place.city,
+              'province': place.province,
+              'country': place.country,
+            }),
+          )
+          .timeout(const Duration(seconds: 24));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return null;
+      }
+
+      final body = jsonDecode(response.body);
+      if (body is! Map<String, dynamic>) return null;
+      return _AiThumbnail.fromJson(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _openDateRangePicker() async {
+    final range = await showGlassBottomSheet<_DateRange>(
+      context: context,
+      heightFactor: 0.72,
+      builder: (_) => _DateRangePickerSheet(
+        initialStart: _startDate,
+        initialEnd: _endDate,
+      ),
+    );
+
+    if (range == null || !mounted) return;
+    setState(() {
+      _startDate = range.start;
+      _endDate = range.end;
+    });
+  }
+
+  Future<void> _showCoverSourceSheet() async {
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: const Text('Ảnh nền chuyến đi'),
+        message: const Text('Chọn ảnh thủ công hoặc để MIANE dùng ảnh AI.'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _pickCover(ImageSource.gallery);
+            },
+            child: const Text('Thư viện'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _pickCover(ImageSource.camera);
+            },
+            child: const Text('Camera'),
+          ),
+          if (_coverBytes != null)
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () {
+                Navigator.of(context).pop();
+                _clearUserCover();
+              },
+              child: const Text('Xóa ảnh thủ công'),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Hủy'),
+        ),
+      ),
+    );
   }
 
   Future<void> _pickCover(ImageSource source) async {
     try {
       final image = await _picker.pickImage(
         source: source,
-        maxWidth: 2200,
-        imageQuality: 86,
+        maxWidth: 2400,
+        imageQuality: 88,
       );
       if (image == null) return;
       final bytes = await image.readAsBytes();
       if (!mounted) return;
       setState(() {
         _coverBytes = bytes;
-        _coverStatus = 'Đang dùng ảnh bạn đã chọn';
+        _coverError = null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -322,92 +349,50 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
   }
 
   Future<void> _clearUserCover() async {
-    setState(() {
-      _coverBytes = null;
-      _coverStatus = null;
-    });
+    setState(() => _coverBytes = null);
     final place = _selectedPlace;
-    if (place != null && (_aiCoverUrl ?? '').isEmpty) {
+    if (place != null && _aiThumbnail == null) {
       await _generateAiCoverForPlace(place);
     }
   }
 
-  Future<void> _pickDate({required bool isStart}) async {
-    var selected = isStart ? _startDate : _endDate;
-    await showCupertinoModalPopup<void>(
-      context: context,
-      builder: (context) {
-        return Container(
-          height: 330,
-          color: AppTheme.surfaceDark,
-          child: Column(
-            children: [
-              SizedBox(
-                height: 250,
-                child: CupertinoDatePicker(
-                  mode: CupertinoDatePickerMode.date,
-                  initialDateTime: selected,
-                  minimumYear: DateTime.now().year - 1,
-                  maximumYear: DateTime.now().year + 5,
-                  onDateTimeChanged: (value) => selected = value,
-                ),
-              ),
-              CupertinoButton(
-                child: const Text('Xong'),
-                onPressed: () {
-                  setState(() {
-                    if (isStart) {
-                      _startDate = selected;
-                      if (_endDate.isBefore(_startDate)) {
-                        _endDate = _startDate.add(const Duration(days: 1));
-                      }
-                    } else {
-                      _endDate =
-                          selected.isBefore(_startDate) ? _startDate : selected;
-                    }
-                  });
-                  Navigator.of(context).pop();
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _submit() async {
     final name = _nameController.text.trim();
-    final destination = _destinationController.text.trim();
+    final place = _selectedPlace;
 
-    if (name.isEmpty || destination.isEmpty) {
+    if (name.isEmpty) {
       await showIosMessage(
         context,
-        message: 'Vui lòng nhập tên chuyến đi và điểm đến.',
+        message: 'Vui lòng nhập tên chuyến đi.',
         isError: true,
       );
       return;
     }
 
-    final place = _selectedPlace ?? _PlaceSuggestion.manual(destination);
+    if (place == null) {
+      await showIosMessage(
+        context,
+        message: 'Vui lòng chọn địa điểm bằng Google Maps.',
+        isError: true,
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = true);
     try {
-      final coverImageUrl = _coverBytes == null
-          ? (_aiCoverUrl ?? await _generateAiCoverUrl(place.displayName))
-          : null;
-
       final result = await ref.read(tripsProvider.notifier).createTripDraft(
             TripCreationDraft(
               name: name,
-              destinationText: place.displayName,
-              description: _noteController.text.trim(),
+              place: place.toTripPlaceData(),
               startDate: _startDate,
               endDate: _endDate,
               baseCurrency: 'VND',
-              coverImageUrl: coverImageUrl,
-              latitude: place.latitude,
-              longitude: place.longitude,
+              coverImageUrl:
+                  _coverBytes == null ? _aiThumbnail?.imageUrl : null,
+              coverImagePrompt:
+                  _coverBytes == null ? _aiThumbnail?.prompt : null,
+              coverImageLandmark:
+                  _coverBytes == null ? _aiThumbnail?.landmark : null,
             ),
           );
 
@@ -430,263 +415,291 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
-
-  Future<String?> _generateAiCoverUrl(String destination) async {
-    try {
-      final response = await http
-          .post(
-            Uri.parse(_aiImageEndpoint),
-            headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode({'destination': destination}),
-          )
-          .timeout(const Duration(seconds: 18));
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        return null;
-      }
-      final body = jsonDecode(response.body);
-      if (body is! Map<String, dynamic>) return null;
-      final imageUrl = body['imageUrl']?.toString();
-      return (imageUrl ?? '').isEmpty ? null : imageUrl;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  String _formatDate(DateTime date) => '${date.day} thg ${date.month}';
 }
-
-class _PlaceSuggestion {
-  final String city;
-  final String? country;
-  final double? latitude;
-  final double? longitude;
-  final bool isManual;
-
-  const _PlaceSuggestion({
-    required this.city,
-    this.country,
-    this.latitude,
-    this.longitude,
-    this.isManual = false,
-  });
-
-  factory _PlaceSuggestion.manual(String value) {
-    return _PlaceSuggestion(city: value, isManual: true);
-  }
-
-  String get displayName => (country ?? '').isEmpty ? city : '$city, $country';
-
-  String get searchText => '$city ${country ?? ''}';
-}
-
-const _popularPlaces = [
-  _PlaceSuggestion(
-    city: 'Đà Nẵng',
-    country: 'Việt Nam',
-    latitude: 16.0471,
-    longitude: 108.2068,
-  ),
-  _PlaceSuggestion(
-    city: 'Hà Nội',
-    country: 'Việt Nam',
-    latitude: 21.0278,
-    longitude: 105.8342,
-  ),
-  _PlaceSuggestion(
-    city: 'TP. Hồ Chí Minh',
-    country: 'Việt Nam',
-    latitude: 10.8231,
-    longitude: 106.6297,
-  ),
-  _PlaceSuggestion(
-    city: 'Đà Lạt',
-    country: 'Việt Nam',
-    latitude: 11.9404,
-    longitude: 108.4583,
-  ),
-  _PlaceSuggestion(
-    city: 'Nha Trang',
-    country: 'Việt Nam',
-    latitude: 12.2388,
-    longitude: 109.1967,
-  ),
-  _PlaceSuggestion(
-    city: 'Phú Quốc',
-    country: 'Việt Nam',
-    latitude: 10.2899,
-    longitude: 103.9840,
-  ),
-  _PlaceSuggestion(
-    city: 'Hội An',
-    country: 'Việt Nam',
-    latitude: 15.8801,
-    longitude: 108.3380,
-  ),
-  _PlaceSuggestion(
-    city: 'Huế',
-    country: 'Việt Nam',
-    latitude: 16.4637,
-    longitude: 107.5909,
-  ),
-  _PlaceSuggestion(
-    city: 'Bangkok',
-    country: 'Thái Lan',
-    latitude: 13.7563,
-    longitude: 100.5018,
-  ),
-  _PlaceSuggestion(
-    city: 'Singapore',
-    country: 'Singapore',
-    latitude: 1.3521,
-    longitude: 103.8198,
-  ),
-  _PlaceSuggestion(
-    city: 'Tokyo',
-    country: 'Nhật Bản',
-    latitude: 35.6762,
-    longitude: 139.6503,
-  ),
-  _PlaceSuggestion(
-    city: 'Seoul',
-    country: 'Hàn Quốc',
-    latitude: 37.5665,
-    longitude: 126.9780,
-  ),
-  _PlaceSuggestion(
-    city: 'Paris',
-    country: 'Pháp',
-    latitude: 48.8566,
-    longitude: 2.3522,
-  ),
-  _PlaceSuggestion(
-    city: 'Bali',
-    country: 'Indonesia',
-    latitude: -8.3405,
-    longitude: 115.0920,
-  ),
-  _PlaceSuggestion(
-    city: 'New York',
-    country: 'Hoa Kỳ',
-    latitude: 40.7128,
-    longitude: -74.0060,
-  ),
-];
 
 class _CreateTripHero extends StatelessWidget {
-  final String name;
-  final String destination;
-  final String dateLabel;
-  final String durationLabel;
+  final String title;
+  final String subtitle;
   final Uint8List? coverBytes;
   final String? coverUrl;
   final bool isGeneratingCover;
+  final VoidCallback onClose;
+  final VoidCallback? onSave;
+  final VoidCallback onPickCover;
 
   const _CreateTripHero({
-    required this.name,
-    required this.destination,
-    required this.dateLabel,
-    required this.durationLabel,
+    required this.title,
+    required this.subtitle,
     required this.coverBytes,
     required this.coverUrl,
     required this.isGeneratingCover,
+    required this.onClose,
+    required this.onSave,
+    required this.onPickCover,
   });
+
+  bool get _hasCover => coverBytes != null || (coverUrl ?? '').isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(32),
       child: SizedBox(
-        height: 230,
+        height: 224,
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (coverBytes != null)
-              Image.memory(coverBytes!, fit: BoxFit.cover)
-            else if ((coverUrl ?? '').isNotEmpty)
-              Image.network(
-                coverUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => CustomPaint(
-                    painter: _GeneratedTravelCoverPainter(destination)),
-              )
-            else
-              CustomPaint(painter: _GeneratedTravelCoverPainter(destination)),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 520),
+              switchInCurve: Curves.easeOutCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween(begin: 1.035, end: 1.0).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+              child: _heroBackground(),
+            ),
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
+                    CupertinoColors.black.withValues(alpha: 0.10),
                     CupertinoColors.black.withValues(alpha: 0.12),
-                    CupertinoColors.black.withValues(alpha: 0.72),
+                    CupertinoColors.black.withValues(alpha: 0.78),
                   ],
                 ),
               ),
             ),
-            if (isGeneratingCover)
-              Positioned(
-                top: 14,
-                right: 14,
-                child: ModernGlass(
-                  radius: AppTheme.radiusPill,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CupertinoActivityIndicator(radius: 7),
-                      const SizedBox(width: 7),
-                      Text(
-                        'Đang tạo ảnh',
-                        style: AppTheme.labelSm(color: CupertinoColors.white),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            if (isGeneratingCover) const _CoverLoadingOverlay(),
             Positioned(
-              left: 18,
-              right: 18,
-              bottom: 18,
+              left: 14,
+              right: 14,
+              top: 14,
+              child: Row(
+                children: [
+                  _HeroCapsuleButton(
+                    label: 'Hủy',
+                    onTap: onClose,
+                  ),
+                  const Spacer(),
+                  _HeroCapsuleButton(
+                    label: 'Lưu',
+                    emphasized: true,
+                    onTap: onSave,
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 22,
+              right: 22,
+              bottom: 20,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    destination,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.labelSm(
-                      color: CupertinoColors.white.withValues(alpha: 0.76),
-                    ).copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    name,
+                    title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: CupertinoColors.white,
-                      fontSize: 30,
-                      height: 1.02,
+                      fontSize: 27,
+                      height: 1.08,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _HeroPill(
-                        icon: CupertinoIcons.calendar,
-                        label: dateLabel,
-                      ),
-                      const SizedBox(width: 8),
-                      _HeroPill(
-                        icon: CupertinoIcons.clock,
-                        label: durationLabel,
-                      ),
-                    ],
+                  const SizedBox(height: 7),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.bodySm(
+                      color: CupertinoColors.white.withValues(alpha: 0.78),
+                    ).copyWith(
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
                   ),
+                  const SizedBox(height: 13),
+                  _HeroCoverButton(onTap: onPickCover),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _heroBackground() {
+    if (coverBytes != null) {
+      return Image.memory(
+        coverBytes!,
+        key: const ValueKey('manual-cover'),
+        fit: BoxFit.cover,
+      );
+    }
+
+    if ((coverUrl ?? '').isNotEmpty) {
+      return Image.network(
+        coverUrl!,
+        key: ValueKey(coverUrl),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const _CoverPlaceholder(),
+      );
+    }
+
+    return _CoverPlaceholder(
+      key: ValueKey(_hasCover),
+    );
+  }
+}
+
+class _CoverPlaceholder extends StatelessWidget {
+  const _CoverPlaceholder({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF273442),
+            Color(0xFF22251F),
+            Color(0xFF111111),
+          ],
+        ),
+      ),
+      child: CustomPaint(
+        painter: _DestinationPlaceholderPainter(),
+        child: SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _DestinationPlaceholderPainter extends CustomPainter {
+  const _DestinationPlaceholderPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..color = CupertinoColors.white.withValues(alpha: 0.12);
+
+    for (var i = 0; i < 5; i++) {
+      final path = Path()..moveTo(-20, size.height * (0.28 + i * 0.12));
+      for (var x = -20.0; x <= size.width + 20; x += 28) {
+        path.lineTo(
+          x,
+          size.height * (0.28 + i * 0.12) + math.sin(x / 34 + i) * 10,
+        );
+      }
+      canvas.drawPath(path, paint);
+    }
+
+    final glow = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          AppTheme.iosGold.withValues(alpha: 0.38),
+          CupertinoColors.transparent,
+        ],
+      ).createShader(
+        Rect.fromCircle(
+          center: Offset(size.width * 0.78, size.height * 0.24),
+          radius: size.width * 0.46,
+        ),
+      );
+    canvas.drawCircle(
+      Offset(size.width * 0.78, size.height * 0.24),
+      size.width * 0.46,
+      glow,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _HeroCapsuleButton extends StatelessWidget {
+  final String label;
+  final bool emphasized;
+  final VoidCallback? onTap;
+
+  const _HeroCapsuleButton({
+    required this.label,
+    this.emphasized = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
+          decoration: BoxDecoration(
+            color: emphasized
+                ? CupertinoColors.white.withValues(alpha: 0.92)
+                : CupertinoColors.black.withValues(alpha: 0.30),
+            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+            border: Border.all(
+              color: CupertinoColors.white.withValues(alpha: 0.18),
+            ),
+          ),
+          child: Text(
+            label,
+            style: AppTheme.labelSm(
+              color: emphasized ? AppTheme.iosOrange : CupertinoColors.white,
+            ).copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroCoverButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _HeroCoverButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onTap,
+      child: ModernGlass(
+        radius: AppTheme.radiusPill,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              CupertinoIcons.photo,
+              color: CupertinoColors.white,
+              size: 17,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Nền',
+              style: AppTheme.labelSm(color: CupertinoColors.white).copyWith(
+                fontWeight: FontWeight.w800,
               ),
             ),
           ],
@@ -696,25 +709,104 @@ class _CreateTripHero extends StatelessWidget {
   }
 }
 
-class _HeroPill extends StatelessWidget {
-  final IconData icon;
-  final String label;
+class _CoverLoadingOverlay extends StatelessWidget {
+  const _CoverLoadingOverlay();
 
-  const _HeroPill({required this.icon, required this.label});
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: CupertinoColors.black.withValues(alpha: 0.24),
+        ),
+        child: Align(
+          alignment: Alignment.topRight,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 60, right: 14),
+            child: ModernGlass(
+              radius: AppTheme.radiusPill,
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CupertinoActivityIndicator(radius: 7),
+                  const SizedBox(width: 7),
+                  Text(
+                    'Đang tạo ảnh',
+                    style: AppTheme.labelSm(color: CupertinoColors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TripNameField extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  const _TripNameField({
+    required this.controller,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     return ModernGlass(
-      radius: AppTheme.radiusPill,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      radius: 24,
+      padding: const EdgeInsets.fromLTRB(16, 13, 16, 15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: CupertinoColors.white, size: 14),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: AppTheme.labelSm(color: CupertinoColors.white),
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: AppTheme.iosOrange,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                ),
+              ),
+              const SizedBox(width: 9),
+              Text(
+                'Tên chuyến đi',
+                style: AppTheme.labelSm(
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                ).copyWith(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          CupertinoTextField.borderless(
+            controller: controller,
+            placeholder: 'Ví dụ: Du lịch Đà Lạt cùng gia đình',
+            minLines: 1,
+            maxLines: 1,
+            textInputAction: TextInputAction.done,
+            clearButtonMode: OverlayVisibilityMode.editing,
+            onChanged: onChanged,
+            padding: EdgeInsets.zero,
+            style: const TextStyle(
+              color: CupertinoColors.white,
+              fontSize: 20,
+              height: 1.18,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0,
+            ),
+            placeholderStyle: TextStyle(
+              color: CupertinoColors.secondaryLabel
+                  .resolveFrom(context)
+                  .withValues(alpha: 0.74),
+              fontSize: 18,
+              height: 1.18,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0,
+            ),
           ),
         ],
       ),
@@ -722,176 +814,158 @@ class _HeroPill extends StatelessWidget {
   }
 }
 
-class _SheetSection extends StatelessWidget {
-  final String title;
-  final String? subtitle;
-  final List<Widget> children;
+class _DestinationCard extends StatelessWidget {
+  final _TripPlace? place;
+  final String googleApiKey;
+  final VoidCallback onTap;
 
-  const _SheetSection({
-    required this.title,
-    required this.children,
-    this.subtitle,
+  const _DestinationCard({
+    required this.place,
+    required this.googleApiKey,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onTap,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 320),
+        transitionBuilder: (child, animation) => SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.06, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+          child: FadeTransition(opacity: animation, child: child),
+        ),
+        child: place == null
+            ? const _EmptyDestinationContent(key: ValueKey('empty-place'))
+            : _SelectedDestinationContent(
+                key: ValueKey(place!.placeId ?? place!.name),
+                place: place!,
+                googleApiKey: googleApiKey,
+              ),
+      ),
+    );
+  }
+}
+
+class _EmptyDestinationContent extends StatelessWidget {
+  const _EmptyDestinationContent({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ModernGlass(
+      radius: 28,
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        children: [
+          const _IconBubble(
+            icon: CupertinoIcons.location_solid,
+            color: AppTheme.iosOrange,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Chọn địa điểm', style: AppTheme.titleSm()),
+                const SizedBox(height: 5),
+                Text(
+                  'Tìm bằng Google Maps để lấy tọa độ và metadata.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.bodySm(
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            CupertinoIcons.chevron_right,
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            size: 18,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SelectedDestinationContent extends StatelessWidget {
+  final _TripPlace place;
+  final String googleApiKey;
+
+  const _SelectedDestinationContent({
+    super.key,
+    required this.place,
+    required this.googleApiKey,
   });
 
   @override
   Widget build(BuildContext context) {
     return ModernGlass(
       radius: 28,
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: AppTheme.titleSm()),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              subtitle!,
-              style: AppTheme.bodySm(
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          ...children,
-        ],
-      ),
-    );
-  }
-}
-
-class _PlaceSuggestionPanel extends StatelessWidget {
-  final List<_PlaceSuggestion> places;
-  final ValueChanged<_PlaceSuggestion> onSelected;
-
-  const _PlaceSuggestionPanel({
-    required this.places,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ModernGlass(
-      radius: 22,
-      padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          for (var i = 0; i < places.length; i++) ...[
-            _PlaceSuggestionTile(
-              place: places[i],
-              onTap: () => onSelected(places[i]),
-            ),
-            if (i != places.length - 1)
-              Container(
-                height: 1,
-                margin: const EdgeInsets.only(left: 52),
-                color: CupertinoColors.separator
-                    .resolveFrom(context)
-                    .withValues(alpha: 0.22),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _PlaceSuggestionTile extends StatelessWidget {
-  final _PlaceSuggestion place;
-  final VoidCallback onTap;
-
-  const _PlaceSuggestionTile({
-    required this.place,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-        child: Row(
-          children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: AppTheme.iosBlue.withValues(alpha: 0.16),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                place.isManual
-                    ? CupertinoIcons.pencil
-                    : CupertinoIcons.location_solid,
-                color: AppTheme.iosBlue,
-                size: 16,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    place.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.labelSm(),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    place.isManual
-                        ? 'Sử dụng địa điểm bạn đã nhập'
-                        : 'Chọn để tạo ảnh AI',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.labelXs(
-                      color: CupertinoColors.secondaryLabel.resolveFrom(
-                        context,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              CupertinoIcons.chevron_right,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              size: 16,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SelectedPlacePill extends StatelessWidget {
-  final _PlaceSuggestion place;
-
-  const _SelectedPlacePill({required this.place});
-
-  @override
-  Widget build(BuildContext context) {
-    return ModernGlass(
-      radius: AppTheme.radiusPill,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          const Icon(
-            CupertinoIcons.check_mark_circled_solid,
-            color: AppTheme.iosGreen,
-            size: 18,
+          _MiniMapPreview(place: place, googleApiKey: googleApiKey),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      CupertinoIcons.location_solid,
+                      color: AppTheme.iosOrange,
+                      size: 17,
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        place.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.titleSm(),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  place.shortAddress,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.bodySm(
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                ),
+                const SizedBox(height: 9),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    if ((place.city ?? '').isNotEmpty)
+                      _TinyChip(label: place.city!),
+                    if ((place.country ?? '').isNotEmpty)
+                      _TinyChip(label: place.country!),
+                    if (place.latitude != null && place.longitude != null)
+                      const _TinyChip(label: 'Đã có tọa độ'),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Đã chọn ${place.displayName}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTheme.labelSm(),
-            ),
+          Icon(
+            CupertinoIcons.chevron_right,
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            size: 18,
           ),
         ],
       ),
@@ -899,161 +973,65 @@ class _SelectedPlacePill extends StatelessWidget {
   }
 }
 
-class _DateTile extends StatelessWidget {
-  final String title;
-  final String value;
-  final VoidCallback onTap;
+class _MiniMapPreview extends StatelessWidget {
+  final _TripPlace place;
+  final String googleApiKey;
 
-  const _DateTile({
-    required this.title,
-    required this.value,
-    required this.onTap,
+  const _MiniMapPreview({
+    required this.place,
+    required this.googleApiKey,
   });
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: onTap,
-      child: ModernGlass(
-        radius: 20,
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            const Icon(
-              CupertinoIcons.calendar,
-              color: AppTheme.iosBlue,
-              size: 19,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: AppTheme.labelXs(
-                      color: CupertinoColors.secondaryLabel.resolveFrom(
-                        context,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(value, style: AppTheme.titleSm()),
-                ],
-              ),
-            ),
-          ],
-        ),
+    final lat = place.latitude;
+    final lng = place.longitude;
+    final canLoadStaticMap =
+        googleApiKey.isNotEmpty && lat != null && lng != null;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: SizedBox(
+        width: 86,
+        height: 86,
+        child: canLoadStaticMap
+            ? Image.network(
+                _staticMapUrl(lat, lng, googleApiKey),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    CustomPaint(painter: _MiniMapPainter(place.name)),
+              )
+            : CustomPaint(painter: _MiniMapPainter(place.name)),
       ),
     );
   }
-}
 
-class _CoverAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _CoverAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: onTap,
-      child: ModernGlass(
-        radius: 20,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: AppTheme.iosBlue, size: 20),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: AppTheme.titleSm(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  String _staticMapUrl(double lat, double lng, String apiKey) {
+    return Uri.https(
+      'maps.googleapis.com',
+      '/maps/api/staticmap',
+      {
+        'center': '$lat,$lng',
+        'zoom': '12',
+        'size': '220x220',
+        'scale': '2',
+        'maptype': 'roadmap',
+        'markers': 'color:orange|$lat,$lng',
+        'key': apiKey,
+      },
+    ).toString();
   }
 }
 
-class _CoverStatusRow extends StatelessWidget {
-  final bool isGenerating;
-  final bool hasUserCover;
-  final String text;
-  final VoidCallback? onClear;
+class _MiniMapPainter extends CustomPainter {
+  final String seed;
 
-  const _CoverStatusRow({
-    required this.isGenerating,
-    required this.hasUserCover,
-    required this.text,
-    this.onClear,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ModernGlass(
-      radius: 20,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-      child: Row(
-        children: [
-          if (isGenerating)
-            const CupertinoActivityIndicator(radius: 8)
-          else
-            Icon(
-              hasUserCover
-                  ? CupertinoIcons.photo_fill_on_rectangle_fill
-                  : CupertinoIcons.sparkles,
-              color: hasUserCover ? AppTheme.iosBlue : AppTheme.iosGold,
-              size: 18,
-            ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTheme.bodySm(),
-            ),
-          ),
-          if (onClear != null)
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(30, 30),
-              onPressed: onClear,
-              child: const Icon(
-                CupertinoIcons.xmark_circle_fill,
-                color: AppTheme.iosGray,
-                size: 20,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GeneratedTravelCoverPainter extends CustomPainter {
-  final String destination;
-
-  const _GeneratedTravelCoverPainter(this.destination);
+  const _MiniMapPainter(this.seed);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final seed = destination.codeUnits.fold<int>(0, (a, b) => a + b);
-    final t = seed % 360;
-
+    final code = seed.codeUnits.fold<int>(0, (sum, value) => sum + value);
+    final baseHue = (code % 70) + 170;
     final rect = Offset.zero & size;
     canvas.drawRect(
       rect,
@@ -1062,50 +1040,1461 @@ class _GeneratedTravelCoverPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            HSVColor.fromAHSV(1, t.toDouble(), 0.58, 0.80).toColor(),
-            const Color(0xFF12304B),
-            const Color(0xFF080808),
+            HSVColor.fromAHSV(1, baseHue.toDouble(), 0.32, 0.44).toColor(),
+            const Color(0xFF1B241E),
           ],
         ).createShader(rect),
     );
 
-    final sunPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          AppTheme.iosGold.withValues(alpha: 0.72),
-          AppTheme.iosOrange.withValues(alpha: 0.12),
-          CupertinoColors.transparent,
-        ],
-      ).createShader(
-        Rect.fromCircle(
-          center: Offset(size.width * 0.78, size.height * 0.26),
-          radius: size.width * 0.32,
-        ),
-      );
-    canvas.drawCircle(
-      Offset(size.width * 0.78, size.height * 0.26),
-      size.width * 0.32,
-      sunPaint,
-    );
-
-    final wavePaint = Paint()
+    final roadPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round
+      ..color = CupertinoColors.white.withValues(alpha: 0.30);
+    final orangePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
-      ..color = CupertinoColors.white.withValues(alpha: 0.18);
+      ..strokeCap = StrokeCap.round
+      ..color = AppTheme.iosOrange.withValues(alpha: 0.84);
 
-    for (var i = 0; i < 5; i++) {
-      final y = size.height * (0.56 + i * 0.08);
-      final path = Path()..moveTo(-20, y);
-      for (var x = -20.0; x <= size.width + 20; x += 24) {
-        path.lineTo(x, y + math.sin((x / 32) + i) * 8);
-      }
-      canvas.drawPath(path, wavePaint);
+    for (var i = 0; i < 4; i++) {
+      final path = Path()
+        ..moveTo(-8, size.height * (0.24 + i * 0.18))
+        ..cubicTo(
+          size.width * 0.24,
+          size.height * (0.08 + i * 0.12),
+          size.width * 0.70,
+          size.height * (0.38 + i * 0.10),
+          size.width + 8,
+          size.height * (0.22 + i * 0.19),
+        );
+      canvas.drawPath(path, roadPaint);
+      canvas.drawPath(path, orangePaint);
     }
+
+    canvas.drawCircle(
+      Offset(size.width * 0.58, size.height * 0.48),
+      10,
+      Paint()..color = AppTheme.iosOrange,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.58, size.height * 0.48),
+      4,
+      Paint()..color = CupertinoColors.white,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _GeneratedTravelCoverPainter oldDelegate) =>
-      oldDelegate.destination != destination;
+  bool shouldRepaint(covariant _MiniMapPainter oldDelegate) =>
+      oldDelegate.seed != seed;
+}
+
+class _DateRangeCard extends StatelessWidget {
+  final DateTime startDate;
+  final DateTime endDate;
+  final int durationDays;
+  final int durationNights;
+  final VoidCallback onTap;
+
+  const _DateRangeCard({
+    required this.startDate,
+    required this.endDate,
+    required this.durationDays,
+    required this.durationNights,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onTap,
+      child: ModernGlass(
+        radius: 24,
+        padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+        child: Row(
+          children: [
+            const _IconBubble(
+              icon: CupertinoIcons.calendar,
+              color: AppTheme.iosBlue,
+              size: 42,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 260),
+                child: Column(
+                  key: ValueKey('${startDate.toIso8601String()}$endDate'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Thời gian', style: AppTheme.titleSm()),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text(
+                          _formatFullDate(startDate),
+                          style: AppTheme.bodyMd(),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Icon(
+                            CupertinoIcons.arrow_right,
+                            color: AppTheme.iosBlue.withValues(alpha: 0.9),
+                            size: 14,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            _formatFullDate(endDate),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.bodyMd(),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '$durationDays ngày • $durationNights đêm',
+                      style: AppTheme.bodySm(
+                        color:
+                            CupertinoColors.secondaryLabel.resolveFrom(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Icon(
+              CupertinoIcons.chevron_right,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              size: 18,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CoverInfoPanel extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String message;
+  final bool showActivity;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _CoverInfoPanel({
+    super.key,
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.message,
+    this.showActivity = false,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ModernGlass(
+      radius: 24,
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          if (showActivity)
+            const CupertinoActivityIndicator(radius: 9)
+          else
+            Icon(icon, color: iconColor, size: 21),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppTheme.titleSm()),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.bodySm(
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ).copyWith(height: 1.35),
+                ),
+              ],
+            ),
+          ),
+          if (onAction != null && actionLabel != null) ...[
+            const SizedBox(width: 10),
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              minimumSize: const Size(32, 32),
+              onPressed: onAction,
+              child: Text(
+                actionLabel!,
+                style: AppTheme.labelSm(color: AppTheme.iosBlue),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CoverErrorPanel extends StatelessWidget {
+  final VoidCallback? onRetry;
+
+  const _CoverErrorPanel({
+    super.key,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ModernGlass(
+      radius: 24,
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          const Icon(
+            CupertinoIcons.exclamationmark_triangle_fill,
+            color: AppTheme.iosRed,
+            size: 21,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Không thể tạo ảnh.', style: AppTheme.titleSm()),
+                const SizedBox(height: 4),
+                Text(
+                  'Bạn vẫn có thể tạo chuyến đi bình thường.',
+                  style: AppTheme.bodySm(
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onRetry != null)
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              minimumSize: const Size(34, 34),
+              onPressed: onRetry,
+              child: Text(
+                'Thử lại',
+                style: AppTheme.labelSm(color: AppTheme.iosBlue),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlaceSearchSheet extends StatefulWidget {
+  final String googleApiKey;
+  final _TripPlace? initialPlace;
+
+  const _PlaceSearchSheet({
+    required this.googleApiKey,
+    this.initialPlace,
+  });
+
+  @override
+  State<_PlaceSearchSheet> createState() => _PlaceSearchSheetState();
+}
+
+class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
+  final _controller = TextEditingController();
+  final _sessionToken = DateTime.now().microsecondsSinceEpoch.toString();
+  Timer? _debounce;
+  List<_TripPlacePreview> _suggestions = const [];
+  bool _isLoading = false;
+  String? _error;
+
+  bool get _hasGoogleKey => widget.googleApiKey.trim().isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialPlace;
+    if (initial != null) {
+      _controller.text = initial.name;
+    }
+    _suggestions = _fallbackSuggestions(_controller.text);
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassBottomSheetScaffold(
+      title: 'Chọn địa điểm',
+      child: ListView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 28),
+        children: [
+          ModernGlass(
+            radius: 26,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            child: CupertinoTextField.borderless(
+              controller: _controller,
+              autofocus: true,
+              placeholder: 'Đà Lạt, Tokyo Tower, Eiffel Tower...',
+              prefix: const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: Icon(
+                  CupertinoIcons.search,
+                  color: AppTheme.iosBlue,
+                  size: 19,
+                ),
+              ),
+              clearButtonMode: OverlayVisibilityMode.editing,
+              textInputAction: TextInputAction.search,
+              onChanged: _onQueryChanged,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _GooglePlacesStatus(configured: _hasGoogleKey),
+          const SizedBox(height: 16),
+          if (_isLoading)
+            const _PlaceSearchLoading()
+          else if (_error != null)
+            _PlaceSearchError(
+              message: _error!,
+              onRetry: () => _search(_controller.text.trim()),
+            )
+          else
+            for (final suggestion in _suggestions)
+              _PlaceResultTile(
+                suggestion: suggestion,
+                onTap: () => _selectSuggestion(suggestion),
+              ),
+          if (!_isLoading && _controller.text.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _ManualDestinationButton(
+              query: _controller.text.trim(),
+              onTap: () => Navigator.of(context).pop(
+                _TripPlace.manual(_controller.text.trim()),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _onQueryChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 360), () {
+      if (!mounted) return;
+      _search(value.trim());
+    });
+  }
+
+  Future<void> _search(String query) async {
+    if (query.length < 2) {
+      setState(() {
+        _error = null;
+        _isLoading = false;
+        _suggestions = _fallbackSuggestions(query);
+      });
+      return;
+    }
+
+    if (!_hasGoogleKey) {
+      setState(() {
+        _error = null;
+        _isLoading = false;
+        _suggestions = _fallbackSuggestions(query);
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final uri = Uri.https(
+        'maps.googleapis.com',
+        '/maps/api/place/autocomplete/json',
+        {
+          'input': query,
+          'language': 'vi',
+          'sessiontoken': _sessionToken,
+          'key': widget.googleApiKey,
+        },
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final status = (body['status'] ?? '').toString();
+      if (status != 'OK' && status != 'ZERO_RESULTS') {
+        throw Exception(body['error_message'] ?? status);
+      }
+      final predictions = (body['predictions'] as List<dynamic>? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(_TripPlacePreview.fromPrediction)
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _suggestions =
+            predictions.isEmpty ? _fallbackSuggestions(query) : predictions;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = 'Không thể tải Google Places. Đang dùng gợi ý mẫu.';
+        _suggestions = _fallbackSuggestions(query);
+      });
+    }
+  }
+
+  Future<void> _selectSuggestion(_TripPlacePreview suggestion) async {
+    final fallback = suggestion.fallbackPlace;
+    if (!_hasGoogleKey || suggestion.placeId == null) {
+      Navigator.of(context)
+          .pop(fallback ?? _TripPlace.manual(suggestion.title));
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final uri = Uri.https(
+        'maps.googleapis.com',
+        '/maps/api/place/details/json',
+        {
+          'place_id': suggestion.placeId!,
+          'language': 'vi',
+          'sessiontoken': _sessionToken,
+          'fields':
+              'place_id,name,formatted_address,geometry,address_components,types',
+          'key': widget.googleApiKey,
+        },
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 12));
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final status = (body['status'] ?? '').toString();
+      if (status != 'OK') {
+        throw Exception(body['error_message'] ?? status);
+      }
+      final place = _TripPlace.fromDetails(
+        body['result'] as Map<String, dynamic>,
+        fallbackTitle: suggestion.title,
+        fallbackAddress: suggestion.subtitle,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(place);
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context)
+          .pop(fallback ?? _TripPlace.manual(suggestion.title));
+    }
+  }
+
+  List<_TripPlacePreview> _fallbackSuggestions(String query) {
+    final normalized = _normalize(query);
+    final places = _popularPlaces
+        .where((place) =>
+            normalized.isEmpty ||
+            _normalize(place.searchText).contains(normalized))
+        .take(8)
+        .map(_TripPlacePreview.fromPlace)
+        .toList();
+
+    return places.isEmpty ? [_TripPlacePreview.manual(query)] : places;
+  }
+}
+
+class _GooglePlacesStatus extends StatelessWidget {
+  final bool configured;
+
+  const _GooglePlacesStatus({required this.configured});
+
+  @override
+  Widget build(BuildContext context) {
+    return ModernGlass(
+      radius: 22,
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+      child: Row(
+        children: [
+          Icon(
+            configured
+                ? CupertinoIcons.check_mark_circled_solid
+                : CupertinoIcons.info_circle_fill,
+            color: configured ? AppTheme.iosGreen : AppTheme.iosGold,
+            size: 18,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              configured
+                  ? 'Google Places đã sẵn sàng'
+                  : 'Chưa có GOOGLE_MAPS_API_KEY nên đang dùng gợi ý mẫu.',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.bodySm(
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlaceResultTile extends StatelessWidget {
+  final _TripPlacePreview suggestion;
+  final VoidCallback onTap;
+
+  const _PlaceResultTile({
+    required this.suggestion,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        onPressed: onTap,
+        child: ModernGlass(
+          radius: 24,
+          padding: const EdgeInsets.all(13),
+          child: Row(
+            children: [
+              _IconBubble(
+                icon: suggestion.isManual
+                    ? CupertinoIcons.pencil
+                    : CupertinoIcons.location_solid,
+                color:
+                    suggestion.isManual ? AppTheme.iosBlue : AppTheme.iosOrange,
+                size: 42,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      suggestion.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.titleSm(),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      suggestion.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.bodySm(
+                        color:
+                            CupertinoColors.secondaryLabel.resolveFrom(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                CupertinoIcons.chevron_right,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                size: 18,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaceSearchLoading extends StatelessWidget {
+  const _PlaceSearchLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: List.generate(
+        4,
+        (index) => const Padding(
+          padding: EdgeInsets.only(bottom: 10),
+          child: ModernGlass(
+            radius: 24,
+            padding: EdgeInsets.all(14),
+            child: Row(
+              children: [
+                _SkeletonBox(width: 42, height: 42, radius: 21),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SkeletonBox(width: 160, height: 14, radius: 7),
+                      SizedBox(height: 9),
+                      _SkeletonBox(
+                          width: double.infinity, height: 11, radius: 6),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaceSearchError extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _PlaceSearchError({
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ModernGlass(
+      radius: 24,
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          const Icon(
+            CupertinoIcons.exclamationmark_circle,
+            color: AppTheme.iosGold,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTheme.bodySm(
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ),
+          ),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(36, 36),
+            onPressed: onRetry,
+            child: Text('Thử lại', style: AppTheme.labelSm()),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ManualDestinationButton extends StatelessWidget {
+  final String query;
+  final VoidCallback onTap;
+
+  const _ManualDestinationButton({
+    required this.query,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onTap,
+      child: ModernGlass(
+        radius: 22,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            const Icon(CupertinoIcons.pencil,
+                color: AppTheme.iosBlue, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Dùng "$query"',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.bodyMd(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DateRangePickerSheet extends StatefulWidget {
+  final DateTime initialStart;
+  final DateTime initialEnd;
+
+  const _DateRangePickerSheet({
+    required this.initialStart,
+    required this.initialEnd,
+  });
+
+  @override
+  State<_DateRangePickerSheet> createState() => _DateRangePickerSheetState();
+}
+
+class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
+  late DateTime _visibleMonth;
+  late DateTime _draftStart;
+  late DateTime _draftEnd;
+  bool _selectingEnd = false;
+
+  int get _days => _draftEnd.difference(_draftStart).inDays + 1;
+
+  int get _nights => math.max(0, _days - 1);
+
+  @override
+  void initState() {
+    super.initState();
+    _draftStart = _dateOnly(widget.initialStart);
+    _draftEnd = _dateOnly(widget.initialEnd);
+    _visibleMonth = DateTime(_draftStart.year, _draftStart.month);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        Container(
+          width: 44,
+          height: 5,
+          decoration: BoxDecoration(
+            color: CupertinoColors.systemGrey.resolveFrom(context),
+            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+          child: Row(
+            children: [
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(42, 42),
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text('Hủy',
+                    style: AppTheme.titleSm(color: AppTheme.iosOrange)),
+              ),
+              Expanded(
+                child: Text(
+                  '${_formatShortDate(_draftStart)} → ${_formatShortDate(_draftEnd)}',
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.headlineMd(),
+                ),
+              ),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(42, 42),
+                onPressed: () {
+                  Navigator.of(context).pop(
+                    _DateRange(start: _draftStart, end: _draftEnd),
+                  );
+                },
+                child: Text(
+                  'Xác nhận',
+                  style: AppTheme.titleSm(color: AppTheme.iosOrange),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          height: 1,
+          color: CupertinoColors.separator
+              .resolveFrom(context)
+              .withValues(alpha: 0.16),
+        ),
+        Expanded(
+          child: ListView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+            children: [
+              Row(
+                children: [
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(38, 38),
+                    onPressed: () => setState(() {
+                      _visibleMonth =
+                          DateTime(_visibleMonth.year, _visibleMonth.month - 1);
+                    }),
+                    child: const Icon(CupertinoIcons.chevron_left),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'tháng ${_visibleMonth.month} năm ${_visibleMonth.year}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 25,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0,
+                        color: CupertinoColors.white,
+                      ),
+                    ),
+                  ),
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(38, 38),
+                    onPressed: () => setState(() {
+                      _visibleMonth =
+                          DateTime(_visibleMonth.year, _visibleMonth.month + 1);
+                    }),
+                    child: const Icon(CupertinoIcons.chevron_right),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const Row(
+                children: [
+                  _WeekdayLabel('TH 2'),
+                  _WeekdayLabel('TH 3'),
+                  _WeekdayLabel('TH 4'),
+                  _WeekdayLabel('TH 5'),
+                  _WeekdayLabel('TH 6'),
+                  _WeekdayLabel('TH 7'),
+                  _WeekdayLabel('CN'),
+                ],
+              ),
+              const SizedBox(height: 10),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 7,
+                  mainAxisExtent: 54,
+                ),
+                itemCount: _calendarCellCount,
+                itemBuilder: (context, index) {
+                  final day = _dayForCell(index);
+                  if (day == null) return const SizedBox.shrink();
+                  return _CalendarDayCell(
+                    day: day,
+                    selectedStart: _isSameDay(day, _draftStart),
+                    selectedEnd: _isSameDay(day, _draftEnd),
+                    inRange: _isInRange(day),
+                    connectsLeft: _connectsLeft(day),
+                    connectsRight: _connectsRight(day),
+                    onTap: () => _selectDay(day),
+                  );
+                },
+              ),
+              const SizedBox(height: 18),
+              ModernGlass(
+                radius: 24,
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    const Icon(
+                      CupertinoIcons.moon_stars_fill,
+                      color: AppTheme.iosGold,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _selectingEnd
+                            ? 'Chọn ngày kết thúc'
+                            : 'Chọn ngày bắt đầu',
+                        style: AppTheme.bodyMd(),
+                      ),
+                    ),
+                    Text(
+                      '$_days ngày • $_nights đêm',
+                      style: AppTheme.titleSm(color: AppTheme.iosGold),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  int get _leadingEmptyCells {
+    final first = DateTime(_visibleMonth.year, _visibleMonth.month, 1);
+    return (first.weekday - DateTime.monday) % 7;
+  }
+
+  int get _daysInVisibleMonth =>
+      DateTime(_visibleMonth.year, _visibleMonth.month + 1, 0).day;
+
+  int get _calendarCellCount {
+    final total = _leadingEmptyCells + _daysInVisibleMonth;
+    return (total / 7).ceil() * 7;
+  }
+
+  DateTime? _dayForCell(int index) {
+    final dayNumber = index - _leadingEmptyCells + 1;
+    if (dayNumber < 1 || dayNumber > _daysInVisibleMonth) return null;
+    return DateTime(_visibleMonth.year, _visibleMonth.month, dayNumber);
+  }
+
+  void _selectDay(DateTime day) {
+    final selected = _dateOnly(day);
+    setState(() {
+      if (!_selectingEnd || selected.isBefore(_draftStart)) {
+        _draftStart = selected;
+        _draftEnd = selected;
+        _selectingEnd = true;
+      } else {
+        _draftEnd = selected;
+        _selectingEnd = false;
+      }
+    });
+  }
+
+  bool _isInRange(DateTime day) =>
+      !day.isBefore(_draftStart) && !day.isAfter(_draftEnd);
+
+  bool _connectsLeft(DateTime day) {
+    if (!_isInRange(day) || day.weekday == DateTime.monday) return false;
+    return _isInRange(day.subtract(const Duration(days: 1)));
+  }
+
+  bool _connectsRight(DateTime day) {
+    if (!_isInRange(day) || day.weekday == DateTime.sunday) return false;
+    return _isInRange(day.add(const Duration(days: 1)));
+  }
+}
+
+class _WeekdayLabel extends StatelessWidget {
+  final String label;
+
+  const _WeekdayLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: AppTheme.labelSm(
+          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        ).copyWith(fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
+class _CalendarDayCell extends StatelessWidget {
+  final DateTime day;
+  final bool selectedStart;
+  final bool selectedEnd;
+  final bool inRange;
+  final bool connectsLeft;
+  final bool connectsRight;
+  final VoidCallback onTap;
+
+  const _CalendarDayCell({
+    required this.day,
+    required this.selectedStart,
+    required this.selectedEnd,
+    required this.inRange,
+    required this.connectsLeft,
+    required this.connectsRight,
+    required this.onTap,
+  });
+
+  bool get _isEndpoint => selectedStart || selectedEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(42, 42),
+      onPressed: onTap,
+      child: SizedBox.expand(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (inRange)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                height: 38,
+                margin: EdgeInsets.only(
+                  left: connectsLeft ? 0 : 27,
+                  right: connectsRight ? 0 : 27,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.iosOrange.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.horizontal(
+                    left: Radius.circular(connectsLeft ? 0 : 19),
+                    right: Radius.circular(connectsRight ? 0 : 19),
+                  ),
+                ),
+              ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              width: _isEndpoint ? 48 : 42,
+              height: _isEndpoint ? 48 : 42,
+              decoration: BoxDecoration(
+                color: _isEndpoint
+                    ? AppTheme.iosOrange
+                    : CupertinoColors.transparent,
+                shape: BoxShape.circle,
+                boxShadow: _isEndpoint
+                    ? [
+                        BoxShadow(
+                          color: AppTheme.iosOrange.withValues(alpha: 0.30),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Center(
+                child: Text(
+                  '${day.day}',
+                  style: TextStyle(
+                    color: _isEndpoint
+                        ? CupertinoColors.white
+                        : CupertinoColors.label.resolveFrom(context),
+                    fontSize: 17,
+                    fontWeight: inRange ? FontWeight.w800 : FontWeight.w500,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IconBubble extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final double size;
+
+  const _IconBubble({
+    required this.icon,
+    required this.color,
+    this.size = 48,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        shape: BoxShape.circle,
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Icon(icon, color: color, size: size * 0.45),
+    );
+  }
+}
+
+class _TinyChip extends StatelessWidget {
+  final String label;
+
+  const _TinyChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: CupertinoColors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+        border: Border.all(
+          color: CupertinoColors.white.withValues(alpha: 0.08),
+        ),
+      ),
+      child: Text(
+        label,
+        style: AppTheme.labelXs(
+          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonBox extends StatefulWidget {
+  final double width;
+  final double height;
+  final double radius;
+
+  const _SkeletonBox({
+    required this.width,
+    required this.height,
+    required this.radius,
+  });
+
+  @override
+  State<_SkeletonBox> createState() => _SkeletonBoxState();
+}
+
+class _SkeletonBoxState extends State<_SkeletonBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1300),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          width: widget.width,
+          height: widget.height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(widget.radius),
+            gradient: LinearGradient(
+              begin: Alignment(-1 + _controller.value * 2, 0),
+              end: Alignment(0.2 + _controller.value * 2, 0),
+              colors: [
+                CupertinoColors.white.withValues(alpha: 0.08),
+                CupertinoColors.white.withValues(alpha: 0.20),
+                CupertinoColors.white.withValues(alpha: 0.08),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AiThumbnail {
+  final String imageUrl;
+  final String prompt;
+  final String landmark;
+  final bool cached;
+
+  const _AiThumbnail({
+    required this.imageUrl,
+    required this.prompt,
+    required this.landmark,
+    required this.cached,
+  });
+
+  factory _AiThumbnail.fromJson(Map<String, dynamic> json) {
+    return _AiThumbnail(
+      imageUrl: (json['imageUrl'] ?? '').toString(),
+      prompt: (json['prompt'] ?? '').toString(),
+      landmark: (json['landmark'] ?? '').toString(),
+      cached: json['cached'] == true,
+    );
+  }
+}
+
+class _DateRange {
+  final DateTime start;
+  final DateTime end;
+
+  const _DateRange({required this.start, required this.end});
+}
+
+class _TripPlacePreview {
+  final String? placeId;
+  final String title;
+  final String subtitle;
+  final _TripPlace? fallbackPlace;
+  final bool isManual;
+
+  const _TripPlacePreview({
+    required this.placeId,
+    required this.title,
+    required this.subtitle,
+    this.fallbackPlace,
+    this.isManual = false,
+  });
+
+  factory _TripPlacePreview.fromPrediction(Map<String, dynamic> json) {
+    final formatting =
+        json['structured_formatting'] as Map<String, dynamic>? ?? const {};
+    return _TripPlacePreview(
+      placeId: json['place_id']?.toString(),
+      title: (formatting['main_text'] ?? json['description'] ?? '').toString(),
+      subtitle: (formatting['secondary_text'] ?? json['description'] ?? '')
+          .toString(),
+    );
+  }
+
+  factory _TripPlacePreview.fromPlace(_TripPlace place) {
+    return _TripPlacePreview(
+      placeId: place.placeId,
+      title: place.name,
+      subtitle: place.shortAddress,
+      fallbackPlace: place,
+    );
+  }
+
+  factory _TripPlacePreview.manual(String query) {
+    final value = query.trim().isEmpty ? 'Địa điểm mới' : query.trim();
+    return _TripPlacePreview(
+      placeId: null,
+      title: value,
+      subtitle: 'Sử dụng địa điểm bạn đã nhập',
+      fallbackPlace: _TripPlace.manual(value),
+      isManual: true,
+    );
+  }
+}
+
+class _TripPlace {
+  final String? placeId;
+  final String name;
+  final String? formattedAddress;
+  final double? latitude;
+  final double? longitude;
+  final String? country;
+  final String? city;
+  final String? province;
+  final List<String> types;
+  final Map<String, dynamic>? viewport;
+
+  const _TripPlace({
+    required this.placeId,
+    required this.name,
+    this.formattedAddress,
+    this.latitude,
+    this.longitude,
+    this.country,
+    this.city,
+    this.province,
+    this.types = const [],
+    this.viewport,
+  });
+
+  factory _TripPlace.manual(String value) {
+    return _TripPlace(
+      placeId: null,
+      name: value.trim(),
+      formattedAddress: value.trim(),
+      city: value.trim(),
+    );
+  }
+
+  factory _TripPlace.fromDetails(
+    Map<String, dynamic> json, {
+    required String fallbackTitle,
+    required String fallbackAddress,
+  }) {
+    final geometry = json['geometry'] as Map<String, dynamic>? ?? const {};
+    final location = geometry['location'] as Map<String, dynamic>? ?? const {};
+    final components =
+        (json['address_components'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+
+    final country = _component(components, 'country');
+    final province = _component(components, 'administrative_area_level_1');
+    final city = _component(components, 'locality') ??
+        _component(components, 'administrative_area_level_2') ??
+        _component(components, 'sublocality') ??
+        (json['name'] ?? fallbackTitle).toString();
+
+    return _TripPlace(
+      placeId: json['place_id']?.toString(),
+      name: (json['name'] ?? fallbackTitle).toString(),
+      formattedAddress:
+          (json['formatted_address'] ?? fallbackAddress).toString(),
+      latitude: (location['lat'] as num?)?.toDouble(),
+      longitude: (location['lng'] as num?)?.toDouble(),
+      country: country,
+      city: city,
+      province: province,
+      types: (json['types'] as List<dynamic>? ?? const [])
+          .map((type) => type.toString())
+          .toList(),
+      viewport: geometry['viewport'] as Map<String, dynamic>?,
+    );
+  }
+
+  String get shortAddress {
+    final pieces = [
+      if ((province ?? '').isNotEmpty && province != city) province,
+      if ((country ?? '').isNotEmpty) country,
+    ].whereType<String>().toList();
+    if (pieces.isNotEmpty) return pieces.join(', ');
+    return formattedAddress ?? 'Đã chọn địa điểm';
+  }
+
+  String get searchText =>
+      '$name ${formattedAddress ?? ''} ${city ?? ''} ${country ?? ''}';
+
+  TripPlaceData toTripPlaceData() {
+    return TripPlaceData(
+      placeId: placeId,
+      name: name,
+      formattedAddress: formattedAddress,
+      latitude: latitude,
+      longitude: longitude,
+      country: country,
+      city: city,
+      province: province,
+      types: types,
+      viewport: viewport,
+    );
+  }
+}
+
+String? _component(List<Map<String, dynamic>> components, String type) {
+  for (final component in components) {
+    final types = (component['types'] as List<dynamic>? ?? const [])
+        .map((entry) => entry.toString())
+        .toList();
+    if (types.contains(type)) {
+      return component['long_name']?.toString();
+    }
+  }
+  return null;
+}
+
+final _popularPlaces = <_TripPlace>[
+  const _TripPlace(
+    placeId: 'fallback-da-lat',
+    name: 'Đà Lạt',
+    formattedAddress: 'Đà Lạt, Lâm Đồng, Việt Nam',
+    city: 'Đà Lạt',
+    province: 'Lâm Đồng',
+    country: 'Việt Nam',
+    latitude: 11.9404,
+    longitude: 108.4583,
+    types: ['locality', 'tourist_destination'],
+  ),
+  const _TripPlace(
+    placeId: 'fallback-da-nang',
+    name: 'Đà Nẵng',
+    formattedAddress: 'Đà Nẵng, Việt Nam',
+    city: 'Đà Nẵng',
+    country: 'Việt Nam',
+    latitude: 16.0471,
+    longitude: 108.2068,
+    types: ['locality', 'tourist_destination'],
+  ),
+  const _TripPlace(
+    placeId: 'fallback-ba-na-hills',
+    name: 'Sun World Bà Nà Hills',
+    formattedAddress: 'Hòa Vang, Đà Nẵng, Việt Nam',
+    city: 'Đà Nẵng',
+    country: 'Việt Nam',
+    latitude: 15.9970,
+    longitude: 107.9881,
+    types: ['tourist_attraction'],
+  ),
+  const _TripPlace(
+    placeId: 'fallback-phu-quoc',
+    name: 'Bãi Sao Phú Quốc',
+    formattedAddress: 'Phú Quốc, Kiên Giang, Việt Nam',
+    city: 'Phú Quốc',
+    province: 'Kiên Giang',
+    country: 'Việt Nam',
+    latitude: 10.0552,
+    longitude: 104.0357,
+    types: ['natural_feature', 'tourist_attraction'],
+  ),
+  const _TripPlace(
+    placeId: 'fallback-tokyo-tower',
+    name: 'Tokyo Tower',
+    formattedAddress: 'Minato City, Tokyo, Nhật Bản',
+    city: 'Tokyo',
+    country: 'Nhật Bản',
+    latitude: 35.6586,
+    longitude: 139.7454,
+    types: ['tourist_attraction', 'landmark'],
+  ),
+  const _TripPlace(
+    placeId: 'fallback-eiffel',
+    name: 'Eiffel Tower',
+    formattedAddress: 'Paris, Pháp',
+    city: 'Paris',
+    country: 'Pháp',
+    latitude: 48.8584,
+    longitude: 2.2945,
+    types: ['tourist_attraction', 'landmark'],
+  ),
+  const _TripPlace(
+    placeId: 'fallback-ninh-binh',
+    name: 'Ninh Bình',
+    formattedAddress: 'Ninh Bình, Việt Nam',
+    city: 'Ninh Bình',
+    country: 'Việt Nam',
+    latitude: 20.2506,
+    longitude: 105.9745,
+    types: ['administrative_area_level_1', 'tourist_destination'],
+  ),
+  const _TripPlace(
+    placeId: 'fallback-bangkok',
+    name: 'Bangkok',
+    formattedAddress: 'Bangkok, Thái Lan',
+    city: 'Bangkok',
+    country: 'Thái Lan',
+    latitude: 13.7563,
+    longitude: 100.5018,
+    types: ['locality'],
+  ),
+];
+
+DateTime _dateOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
+
+bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+String _formatDate(DateTime date) =>
+    '${date.day.toString().padLeft(2, '0')} thg ${date.month}, ${date.year}';
+
+String _formatShortDate(DateTime date) =>
+    '${date.day.toString().padLeft(2, '0')} thg ${date.month}';
+
+String _formatFullDate(DateTime date) {
+  final day = date.day.toString().padLeft(2, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  return '$day/$month/${date.year}';
 }
 
 String _normalize(String value) {

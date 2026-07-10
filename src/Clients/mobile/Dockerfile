@@ -41,6 +41,12 @@ RUN flutter create --platforms web . 2>/dev/null || true
 # Generate Riverpod/Freezed files
 RUN flutter pub run build_runner build --delete-conflicting-outputs
 
+FROM build AS dev
+EXPOSE 3000
+CMD ["flutter", "run", "-d", "web-server", "--web-hostname", "0.0.0.0", "--web-port", "3000"]
+
+FROM build AS release-build
+
 # Build the web app with the target API URL
 ARG API_URL=http://localhost:5000
 ARG GOOGLE_MAPS_API_KEY=
@@ -48,7 +54,7 @@ RUN flutter build web --release --dart-define=API_URL=${API_URL} --dart-define=G
 
 # Stage 2: Serve using Nginx
 FROM nginx:alpine
-COPY --from=build /app/build/web /usr/share/nginx/html
+COPY --from=release-build /app/build/web /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

@@ -57,6 +57,12 @@ final tripDetailsProvider =
   return repo.getTrip(tripId);
 });
 
+final tripFilesProvider =
+    FutureProvider.family<List<TripFileModel>, String>((ref, tripId) async {
+  final repo = ref.watch(tripRepositoryProvider);
+  return repo.getTripFiles(tripId);
+});
+
 class TripCoverMemory extends StateNotifier<Map<String, Uint8List>> {
   TripCoverMemory() : super(const {});
 

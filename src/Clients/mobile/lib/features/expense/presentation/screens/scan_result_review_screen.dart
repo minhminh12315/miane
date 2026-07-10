@@ -1,6 +1,7 @@
 import 'dart:io';
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart' as cupertino;
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme.dart';
@@ -42,8 +43,7 @@ class _ItemControllers {
 
   _ItemControllers(ScannedItem item)
       : name = TextEditingController(text: item.name),
-        price = TextEditingController(
-            text: item.unitPrice.toStringAsFixed(0)),
+        price = TextEditingController(text: item.unitPrice.toStringAsFixed(0)),
         quantity = TextEditingController(text: item.quantity.toString());
 
   void dispose() {
@@ -118,8 +118,7 @@ class _ScanResultReviewScreenState
     }
     if (widget.members.isEmpty) {
       await showIosMessage(context,
-          message: 'Chuyến đi chưa có thành viên để chia tiền.',
-          isError: true);
+          message: 'Chuyến đi chưa có thành viên để chia tiền.', isError: true);
       return;
     }
 
@@ -175,9 +174,9 @@ class _ScanResultReviewScreenState
     final total = _calculatedTotal;
     final hasDiscrepancy = widget.initialResult.hasDiscrepancy;
 
-    return CupertinoPageScaffold(
+    return cupertino.CupertinoPageScaffold(
       backgroundColor: AppTheme.canvasDark,
-      navigationBar: const CupertinoNavigationBar(
+      navigationBar: const cupertino.CupertinoNavigationBar(
         middle: Text('Xác nhận hóa đơn'),
       ),
       child: SafeArea(
@@ -198,14 +197,14 @@ class _ScanResultReviewScreenState
                     controller: _descController,
                     label: 'Nội dung',
                     placeholder: 'Ăn tối, taxi, khách sạn...',
-                    prefixIcon: CupertinoIcons.doc_text,
+                    prefixIcon: cupertino.CupertinoIcons.doc_text,
                   ),
                   const SizedBox(height: 18),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Danh sách món', style: AppTheme.titleSm()),
-                      CupertinoButton(
+                      cupertino.CupertinoButton(
                         padding: EdgeInsets.zero,
                         onPressed: _addItem,
                         child: const Text('+ Thêm mục'),
@@ -228,7 +227,7 @@ class _ScanResultReviewScreenState
                       child: Text(
                         'Không nhận diện được món nào. Bạn có thể thêm thủ công.',
                         style: AppTheme.bodySm(
-                          color: CupertinoColors.secondaryLabel
+                          color: cupertino.CupertinoColors.secondaryLabel
                               .resolveFrom(context),
                         ),
                       ),
@@ -244,8 +243,10 @@ class _ScanResultReviewScreenState
                       ),
                       child: Row(
                         children: [
-                          const Icon(CupertinoIcons.exclamationmark_triangle,
-                              color: AppTheme.iosGold, size: 18),
+                          const Icon(
+                              cupertino.CupertinoIcons.exclamationmark_triangle,
+                              color: AppTheme.iosGold,
+                              size: 18),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -334,10 +335,10 @@ class _ItemEditor extends StatelessWidget {
                   onChanged: (_) => onChanged(),
                 ),
               ),
-              CupertinoButton(
+              cupertino.CupertinoButton(
                 padding: const EdgeInsets.only(left: 8),
                 onPressed: onDelete,
-                child: const Icon(CupertinoIcons.trash,
+                child: const Icon(cupertino.CupertinoIcons.trash,
                     color: AppTheme.iosRed, size: 18),
               ),
             ],

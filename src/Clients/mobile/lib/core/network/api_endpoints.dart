@@ -15,14 +15,20 @@ class ApiEndpoints {
   static const String trips = '/trips';
   static const String joinTrip = '/trips/join';
   static String leaveTrip(String tripId) => '/trips/$tripId/leave';
-  
+  static String tripFiles(String tripId) => '/trips/$tripId/files';
+  static String uploadTripFile(String tripId) => '/trips/$tripId/files/upload';
+  static String tripNotes(String tripId) => '/trips/$tripId/files/notes';
+  static String tripFile(String tripId, String fileId) =>
+      '/trips/$tripId/files/$fileId';
+
   static const String expenses = '/expenses';
   static String tripExpenses(String tripId) => '/expenses/trip/$tripId';
-  static String tripBalances(String tripId) => '/expenses/trip/$tripId/balances';
+  static String tripBalances(String tripId) =>
+      '/expenses/trip/$tripId/balances';
   static const String settleDebt = '/expenses/settle';
-  
+
   static const String contributeToPool = '/expenses/pool/contribute';
   static String getPool(String tripId) => '/expenses/pool/$tripId';
-  
+
   static const String notifications = '/notifications';
 }

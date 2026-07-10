@@ -69,6 +69,64 @@ class TripRepositoryImpl implements TripRepository {
   Future<void> leaveTrip(String tripId) async {
     await _apiClient.post(ApiEndpoints.leaveTrip(tripId));
   }
+
+  @override
+  Future<List<TripFileModel>> getTripFiles(String tripId) async {
+    final response = await _apiClient.get(ApiEndpoints.tripFiles(tripId));
+    if (response is List) {
+      return response
+          .map((json) => TripFileModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    }
+    return [];
+  }
+
+  @override
+  Future<TripFileModel> addTripFile(
+    String tripId,
+    TripFileDraft draft,
+  ) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.tripFiles(tripId),
+      body: draft.toApiJson(),
+    );
+    return TripFileModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  @override
+  Future<TripFileModel> uploadTripFile(
+    String tripId,
+    TripLocalFileDraft draft,
+  ) async {
+    final response = await _apiClient.postMultipart(
+      ApiEndpoints.uploadTripFile(tripId),
+      filePath: draft.filePath,
+      fileBytes: draft.fileBytes,
+      fileName: draft.fileName,
+      fields: {
+        'folder': draft.folder,
+        if (draft.tags.isNotEmpty) 'tags': draft.tags.join(','),
+      },
+    );
+    return TripFileModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  @override
+  Future<TripFileModel> addTripNote(
+    String tripId,
+    TripNoteDraft draft,
+  ) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.tripNotes(tripId),
+      body: draft.toApiJson(),
+    );
+    return TripFileModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  @override
+  Future<void> deleteTripFile(String tripId, String fileId) async {
+    await _apiClient.delete(ApiEndpoints.tripFile(tripId, fileId));
+  }
 }
 
 final tripRepositoryProvider = Provider<TripRepository>((ref) {

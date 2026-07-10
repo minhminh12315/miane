@@ -18,14 +18,32 @@ public sealed class CreateTripValidator : AbstractValidator<CreateTripCommand>
         RuleFor(x => x.Destination)
             .MaximumLength(240).WithMessage("Destination cannot exceed 240 characters.");
 
+        RuleFor(x => x.PlaceId)
+            .MaximumLength(256).WithMessage("Place ID cannot exceed 256 characters.");
+
+        RuleFor(x => x.FormattedAddress)
+            .MaximumLength(500).WithMessage("Formatted address cannot exceed 500 characters.");
+
         RuleFor(x => x.DestinationCity)
             .MaximumLength(160).WithMessage("Destination city cannot exceed 160 characters.");
+
+        RuleFor(x => x.DestinationProvince)
+            .MaximumLength(160).WithMessage("Destination province cannot exceed 160 characters.");
 
         RuleFor(x => x.DestinationCountry)
             .MaximumLength(120).WithMessage("Destination country cannot exceed 120 characters.");
 
+        RuleFor(x => x.PlaceMetadataJson)
+            .MaximumLength(2000).WithMessage("Place metadata cannot exceed 2000 characters.");
+
         RuleFor(x => x.CoverImageUrl)
             .MaximumLength(1000).WithMessage("Cover image URL cannot exceed 1000 characters.");
+
+        RuleFor(x => x.CoverImagePrompt)
+            .MaximumLength(1000).WithMessage("Cover image prompt cannot exceed 1000 characters.");
+
+        RuleFor(x => x.CoverImageLandmark)
+            .MaximumLength(160).WithMessage("Cover image landmark cannot exceed 160 characters.");
 
         RuleFor(x => x)
             .Must(x => !x.StartDate.HasValue || !x.EndDate.HasValue || x.EndDate.Value.Date >= x.StartDate.Value.Date)

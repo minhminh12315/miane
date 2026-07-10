@@ -33,12 +33,14 @@ public class TripEntity : AggregateRoot
     private readonly List<TripInvitation> _invitations = new();
     private readonly List<TripShareLink> _shareLinks = new();
     private readonly List<TripImage> _images = new();
+    private readonly List<TripLocation> _locations = new();
 
     public IReadOnlyCollection<TripMember> Members => _members.AsReadOnly();
     public IReadOnlyCollection<TripRole> Roles => _roles.AsReadOnly();
     public IReadOnlyCollection<TripInvitation> Invitations => _invitations.AsReadOnly();
     public IReadOnlyCollection<TripShareLink> ShareLinks => _shareLinks.AsReadOnly();
     public IReadOnlyCollection<TripImage> Images => _images.AsReadOnly();
+    public IReadOnlyCollection<TripLocation> Locations => _locations.AsReadOnly();
 
     public void AddMember(TripMember member)
     {
@@ -65,7 +67,12 @@ public class TripEntity : AggregateRoot
         _images.Add(image);
     }
 
-    public static string GenerateInviteCode(int length = 8)
+    public void AddLocation(TripLocation location)
+    {
+        _locations.Add(location);
+    }
+
+    public static string GenerateInviteCode(int length = 6)
     {
         const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         var random = Random.Shared;

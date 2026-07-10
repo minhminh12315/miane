@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../features/subscription/presentation/controllers/pro_upgrade_controller.dart';
 import '../theme/app_theme.dart';
@@ -1000,6 +1001,7 @@ class IosTextField extends StatelessWidget {
   final IconData? prefixIcon;
   final bool obscureText;
   final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
   final int maxLines;
   final ValueChanged<String>? onChanged;
 
@@ -1011,6 +1013,7 @@ class IosTextField extends StatelessWidget {
     this.prefixIcon,
     this.obscureText = false,
     this.keyboardType,
+    this.inputFormatters,
     this.maxLines = 1,
     this.onChanged,
   });
@@ -1038,6 +1041,7 @@ class IosTextField extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           obscureText: obscureText,
           keyboardType: keyboardType,
+          inputFormatters: inputFormatters,
           maxLines: maxLines,
           clearButtonMode: OverlayVisibilityMode.editing,
           onChanged: onChanged,
@@ -1168,7 +1172,35 @@ Future<void> showIosProSheet(
 }
 
 String formatMoney(double amount) {
-  final value = amount.round().toString();
+  final roundedAmount = amount.round();
+  final isNegative = roundedAmount < 0;
+  final value = roundedAmount.abs().toString();
   final reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
-  return value.replaceAllMapped(reg, (match) => '${match[1]}.');
+  final formatted = value.replaceAllMapped(reg, (match) => '${match[1]}.');
+  return isNegative ? '-$formatted' : formatted;
+}
+
+double? parseMoneyInput(String input) {
+  final digitsOnly = input.replaceAll(RegExp(r'[^0-9]'), '');
+  if (digitsOnly.isEmpty) return null;
+  return double.tryParse(digitsOnly);
+}
+
+class MoneyInputFormatter extends TextInputFormatter {
+  const MoneyInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digitsOnly.isEmpty) return TextEditingValue.empty;
+
+    final formatted = formatMoney(double.parse(digitsOnly));
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
 }

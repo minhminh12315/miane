@@ -226,7 +226,7 @@ public class TripCollaborationConfiguration :
         builder.Property(l => l.Longitude).HasPrecision(9, 6);
 
         builder.HasOne(l => l.Trip)
-            .WithMany()
+            .WithMany(t => t.Locations)
             .HasForeignKey(l => l.TripId)
             .OnDelete(DeleteBehavior.Cascade);
     }

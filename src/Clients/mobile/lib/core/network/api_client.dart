@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,21 +45,84 @@ class ApiClient {
     return _processResponse(response);
   }
 
-  Future<dynamic> post(String endpoint, {dynamic body, bool authenticated = true}) async {
+  Future<Uint8List> getBytes(String endpoint,
+      {bool authenticated = true}) async {
+    final uri = endpoint.startsWith('http')
+        ? Uri.parse(endpoint)
+        : Uri.parse('${ApiEndpoints.baseUrl}$endpoint');
+    final headers = await _getHeaders(authenticated: authenticated)
+      ..remove('Accept')
+      ..remove('Content-Type');
+
+    final response = await _client.get(uri, headers: headers);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return response.bodyBytes;
+    }
+
+    _processResponse(response);
+    throw ApiException(response.statusCode, 'Unable to download file.');
+  }
+
+  Future<dynamic> post(String endpoint,
+      {dynamic body, bool authenticated = true}) async {
     final uri = Uri.parse('${ApiEndpoints.baseUrl}$endpoint');
     final headers = await _getHeaders(authenticated: authenticated);
     final encodedBody = body != null ? jsonEncode(body) : null;
 
-    final response = await _client.post(uri, headers: headers, body: encodedBody);
+    final response =
+        await _client.post(uri, headers: headers, body: encodedBody);
     return _processResponse(response);
   }
 
-  Future<dynamic> put(String endpoint, {dynamic body, bool authenticated = true}) async {
+  Future<dynamic> postMultipart(
+    String endpoint, {
+    String? filePath,
+    List<int>? fileBytes,
+    String fileField = 'file',
+    String? fileName,
+    Map<String, String>? fields,
+    bool authenticated = true,
+  }) async {
+    final uri = Uri.parse('${ApiEndpoints.baseUrl}$endpoint');
+    final headers = await _getHeaders(authenticated: authenticated)
+      ..remove('Content-Type');
+
+    final request = http.MultipartRequest('POST', uri)
+      ..headers.addAll(headers)
+      ..fields.addAll(fields ?? const {});
+    if (fileBytes != null) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          fileField,
+          fileBytes,
+          filename: fileName,
+        ),
+      );
+    } else if (filePath != null && filePath.isNotEmpty) {
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          fileField,
+          filePath,
+          filename: fileName,
+        ),
+      );
+    } else {
+      throw ArgumentError('Either fileBytes or filePath is required.');
+    }
+
+    final streamedResponse = await _client.send(request);
+    final response = await http.Response.fromStream(streamedResponse);
+    return _processResponse(response);
+  }
+
+  Future<dynamic> put(String endpoint,
+      {dynamic body, bool authenticated = true}) async {
     final uri = Uri.parse('${ApiEndpoints.baseUrl}$endpoint');
     final headers = await _getHeaders(authenticated: authenticated);
     final encodedBody = body != null ? jsonEncode(body) : null;
 
-    final response = await _client.put(uri, headers: headers, body: encodedBody);
+    final response =
+        await _client.put(uri, headers: headers, body: encodedBody);
     return _processResponse(response);
   }
 
@@ -72,7 +136,7 @@ class ApiClient {
 
   dynamic _processResponse(http.Response response) {
     final statusCode = response.statusCode;
-    
+
     if (statusCode == 204) {
       return null;
     }

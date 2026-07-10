@@ -39,13 +39,20 @@ public class TripsController : ControllerBase
             request.Description,
             request.BaseCurrency ?? "VND",
             request.Destination,
+            request.PlaceId,
+            request.FormattedAddress,
             request.DestinationCity,
+            request.DestinationProvince,
             request.DestinationCountry,
+            request.PlaceTypes,
+            request.PlaceMetadataJson,
             request.Latitude,
             request.Longitude,
             request.StartDate,
             request.EndDate,
             request.CoverImageUrl,
+            request.CoverImagePrompt,
+            request.CoverImageLandmark,
             GetUserId(),
             GetUserTier()), ct);
 
@@ -112,12 +119,19 @@ public sealed record CreateTripRequest(
     string? Description,
     string? BaseCurrency,
     string? Destination,
+    string? PlaceId,
+    string? FormattedAddress,
     string? DestinationCity,
+    string? DestinationProvince,
     string? DestinationCountry,
+    IReadOnlyCollection<string>? PlaceTypes,
+    string? PlaceMetadataJson,
     double? Latitude,
     double? Longitude,
     DateTime? StartDate,
     DateTime? EndDate,
-    string? CoverImageUrl);
+    string? CoverImageUrl,
+    string? CoverImagePrompt,
+    string? CoverImageLandmark);
 public sealed record JoinTripRequest(string InviteCode, string? NickName);
 public sealed record UpdateTripRequest(string? Name, string? Description, Trip.API.Domain.Enums.TripStatus? Status);

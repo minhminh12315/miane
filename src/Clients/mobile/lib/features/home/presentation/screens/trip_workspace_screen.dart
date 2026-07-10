@@ -1,8 +1,15 @@
-import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:flutter/cupertino.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/network/api_client.dart';
+import '../../../../core/network/api_endpoints.dart';
+import '../../../../core/platform/document_open.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
 import '../../../auth/presentation/controllers/app_auth_provider.dart';
@@ -39,6 +46,7 @@ class TripWorkspaceScreen extends ConsumerStatefulWidget {
 class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
   int _selectedTab = 0;
   int _selectedDayIndex = 0;
+  final ImagePicker _documentImagePicker = ImagePicker();
   final Map<int, List<_TripActivityDraft>> _dayActivities = {};
 
   @override
@@ -47,6 +55,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
     final balancesState = ref.watch(tripBalancesProvider(widget.tripId));
     final poolState = ref.watch(tripPoolControllerProvider(widget.tripId));
     final detailsState = ref.watch(tripDetailsProvider(widget.tripId));
+    final filesState = ref.watch(tripFilesProvider(widget.tripId));
     final userIdState = ref.watch(currentUserIdProvider);
     final coverBytes = ref.watch(tripCoverMemoryProvider)[widget.tripId];
     final details = detailsState.valueOrNull;
@@ -99,15 +108,16 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                       key: ValueKey(_selectedTab),
                       child: switch (_selectedTab) {
                         0 => _buildOverviewTab(
-                            expensesState,
-                            detailsState,
-                            coverBytes,
-                          ),
+                          expensesState,
+                          detailsState,
+                          filesState,
+                          coverBytes,
+                        ),
                         1 => _buildBalancesTab(
-                            balancesState,
-                            detailsState,
-                            userIdState,
-                          ),
+                          balancesState,
+                          detailsState,
+                          userIdState,
+                        ),
                         2 => _buildPoolTab(poolState, detailsState),
                         _ => _buildMembersTab(detailsState),
                       },
@@ -125,31 +135,38 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
   Widget _buildOverviewTab(
     AsyncValue<List<ExpenseModel>> expensesState,
     AsyncValue<TripDetailModel> detailsState,
+    AsyncValue<List<TripFileModel>> filesState,
     Uint8List? coverBytes,
   ) {
     final expenses = expensesState.valueOrNull ?? const <ExpenseModel>[];
-    final totalSpent =
-        expenses.fold<double>(0, (sum, expense) => sum + expense.amount);
+    final totalSpent = expenses.fold<double>(
+      0,
+      (sum, expense) => sum + expense.amount,
+    );
     final details = detailsState.valueOrNull;
     final tripName = details?.name ?? widget.tripName;
     final destination = details?.destinationLabel ?? widget.destination;
     final baseCurrency = details?.baseCurrency ?? widget.baseCurrency;
     final days = _buildTripDays(details);
-    final selectedIndex =
-        _selectedDayIndex >= days.length ? days.length - 1 : _selectedDayIndex;
+    final selectedIndex = _selectedDayIndex >= days.length
+        ? days.length - 1
+        : _selectedDayIndex;
     final selectedDay = days[selectedIndex];
-    final selectedActivities =
-        _sortedActivities(_dayActivities[selectedIndex] ?? const []);
+    final selectedActivities = _sortedActivities(
+      _dayActivities[selectedIndex] ?? const [],
+    );
 
     return CustomScrollView(
-      physics:
-          const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
       slivers: [
         CupertinoSliverRefreshControl(
           onRefresh: () async {
             ref.invalidate(tripDetailsProvider(widget.tripId));
             ref.invalidate(tripExpensesProvider(widget.tripId));
             ref.invalidate(tripPoolControllerProvider(widget.tripId));
+            ref.invalidate(tripFilesProvider(widget.tripId));
           },
         ),
         SliverList(
@@ -206,9 +223,9 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                     _TripModuleCard(
                       icon: CupertinoIcons.folder_fill,
                       title: 'Tài liệu',
-                      subtitle: 'Vé, booking, ghi chú và file đặt chỗ',
+                      subtitle: _documentsSubtitle(filesState),
                       color: AppTheme.iosIndigo,
-                      onTap: () => _showModuleComingSoon('Tài liệu'),
+                      onTap: () => _showDocumentsSheet(),
                     ),
                     const SizedBox(height: 12),
                     _TripModuleCard(
@@ -281,14 +298,17 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                   children: balances.unsettledDebts.map((debt) {
                     final isOwedByMe =
                         debt.fromUserId.toLowerCase() == currentUserId;
-                    final fromName =
-                        _getMemberName(debt.fromUserId, detailsState);
+                    final fromName = _getMemberName(
+                      debt.fromUserId,
+                      detailsState,
+                    );
                     final toName = _getMemberName(debt.toUserId, detailsState);
 
                     return IosListTile(
                       icon: CupertinoIcons.arrow_right_arrow_left,
-                      iconColor:
-                          isOwedByMe ? AppTheme.iosRed : AppTheme.iosBlue,
+                      iconColor: isOwedByMe
+                          ? AppTheme.iosRed
+                          : AppTheme.iosBlue,
                       title:
                           '${isOwedByMe ? 'Bạn' : fromName} nợ ${debt.toUserId.toLowerCase() == currentUserId ? 'Bạn' : toName}',
                       subtitle: '${formatMoney(debt.amount)} ${debt.currency}',
@@ -407,7 +427,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                 IosListTile(
                   icon: CupertinoIcons.qrcode,
                   title: details.inviteCode,
-                  subtitle: details.shareUrl ??
+                  subtitle:
+                      details.shareUrl ??
                       'https://miane.app/trip/${details.inviteCode}',
                   onTap: () => _showShareSheet(context, details),
                 ),
@@ -419,7 +440,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                 return IosListTile(
                   icon: CupertinoIcons.person,
                   title: member.nickName ?? 'Thành viên',
-                  subtitle: member.roleName ??
+                  subtitle:
+                      member.roleName ??
                       (member.role == 0 ? 'Chủ chuyến đi' : 'Thành viên'),
                   value: member.userTier == 1 ? 'PRO' : null,
                   onTap: () => _showMemberActions(member),
@@ -484,7 +506,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
       TripCreationResult(
         tripId: details?.id ?? widget.tripId,
         inviteCode: inviteCode,
-        shareUrl: details?.shareUrl ??
+        shareUrl:
+            details?.shareUrl ??
             (inviteCode.isEmpty
                 ? 'https://miane.app/trip/${widget.tripId}'
                 : 'https://miane.app/trip/$inviteCode'),
@@ -510,9 +533,11 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
           builder: (context, setSheetState) {
             final keyword = searchController.text.trim().toLowerCase();
             final templates = _activityTemplates.where((template) {
-              final matchCategory = template.group == selectedCategory ||
+              final matchCategory =
+                  template.group == selectedCategory ||
                   selectedCategory == 'Tất cả';
-              final matchSearch = keyword.isEmpty ||
+              final matchSearch =
+                  keyword.isEmpty ||
                   template.title.toLowerCase().contains(keyword) ||
                   template.subtitle.toLowerCase().contains(keyword);
               return matchCategory && matchSearch;
@@ -699,7 +724,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
 
   void _showDayDetailSheet(int dayIndex, DateTime day, String destination) {
     final activities = _sortedActivities(
-        _dayActivities[dayIndex] ?? const <_TripActivityDraft>[]);
+      _dayActivities[dayIndex] ?? const <_TripActivityDraft>[],
+    );
 
     showGlassBottomSheet<void>(
       context: context,
@@ -760,7 +786,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
                 children: [
                   _GooglePlacesNotice(
-                      configured: _googlePlacesApiKey.isNotEmpty),
+                    configured: _googlePlacesApiKey.isNotEmpty,
+                  ),
                   const SizedBox(height: 14),
                   _ActivityTimeSelector(
                     timeLabel: _formatActivityTime(currentTime),
@@ -778,8 +805,11 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                     prefixIcon: CupertinoIcons.search,
                     onChanged: (value) {
                       setSheetState(() {
-                        suggestions =
-                            _mockPlaceSuggestions(template, destination, value);
+                        suggestions = _mockPlaceSuggestions(
+                          template,
+                          destination,
+                          value,
+                        );
                       });
                     },
                   ),
@@ -840,28 +870,30 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
   ]) {
     final base = switch (template.title) {
       'Nhà hàng' => [
-          _PlaceSuggestion('Nhà hàng địa phương', destination, '4.6'),
-          _PlaceSuggestion('Quán ăn gần trung tâm', destination, '4.4'),
-          _PlaceSuggestion('Bữa tối view đẹp', destination, '4.7'),
-        ],
+        _PlaceSuggestion('Nhà hàng địa phương', destination, '4.6'),
+        _PlaceSuggestion('Quán ăn gần trung tâm', destination, '4.4'),
+        _PlaceSuggestion('Bữa tối view đẹp', destination, '4.7'),
+      ],
       'Cà phê' => [
-          _PlaceSuggestion('Cà phê gần khách sạn', destination, '4.5'),
-          _PlaceSuggestion('Quán cà phê yên tĩnh', destination, '4.6'),
-          _PlaceSuggestion('Cà phê ngắm hoàng hôn', destination, '4.7'),
-        ],
+        _PlaceSuggestion('Cà phê gần khách sạn', destination, '4.5'),
+        _PlaceSuggestion('Quán cà phê yên tĩnh', destination, '4.6'),
+        _PlaceSuggestion('Cà phê ngắm hoàng hôn', destination, '4.7'),
+      ],
       _ => [
-          _PlaceSuggestion('Điểm tham quan nổi bật', destination, '4.7'),
-          _PlaceSuggestion('Khu phố đáng đi', destination, '4.5'),
-          _PlaceSuggestion('Điểm chụp ảnh đẹp', destination, '4.6'),
-        ],
+        _PlaceSuggestion('Điểm tham quan nổi bật', destination, '4.7'),
+        _PlaceSuggestion('Khu phố đáng đi', destination, '4.5'),
+        _PlaceSuggestion('Điểm chụp ảnh đẹp', destination, '4.6'),
+      ],
     };
 
     final cleanKeyword = keyword.trim().toLowerCase();
     if (cleanKeyword.isEmpty) return base;
     return base
-        .where((place) =>
-            place.name.toLowerCase().contains(cleanKeyword) ||
-            place.address.toLowerCase().contains(cleanKeyword))
+        .where(
+          (place) =>
+              place.name.toLowerCase().contains(cleanKeyword) ||
+              place.address.toLowerCase().contains(cleanKeyword),
+        )
         .toList();
   }
 
@@ -935,7 +967,9 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                   icon: CupertinoIcons.doc_on_doc,
                   title: 'Sao chép chuyến đi',
                   onTap: () => _showSettingPlaceholder(
-                      sheetContext, 'Sao chép chuyến đi'),
+                    sheetContext,
+                    'Sao chép chuyến đi',
+                  ),
                 ),
                 _SettingsActionTile(
                   icon: CupertinoIcons.bell_slash,
@@ -986,7 +1020,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
             children: [
               _InviteCodeCard(
                 inviteCode: details.inviteCode,
-                shareUrl: details.shareUrl ??
+                shareUrl:
+                    details.shareUrl ??
                     'https://miane.app/trip/${details.inviteCode}',
                 onShare: () => _showShareSheet(context, details),
               ),
@@ -1042,6 +1077,756 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
     );
   }
 
+  String _documentsSubtitle(AsyncValue<List<TripFileModel>> filesState) {
+    if (filesState.isLoading) return 'Đang tải vé, booking và ghi chú';
+    if (filesState.hasError) return 'Chưa tải được tài liệu';
+
+    final count = filesState.valueOrNull?.length ?? 0;
+    if (count == 0) return 'Vé, booking, ghi chú và file đặt chỗ';
+    return '$count tài liệu đã lưu cho chuyến đi';
+  }
+
+  void _showDocumentsSheet() {
+    showGlassBottomSheet<void>(
+      context: context,
+      heightFactor: 0.88,
+      builder: (sheetContext) {
+        return GlassBottomSheetScaffold(
+          title: 'Tài liệu',
+          trailing: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(40, 40),
+            onPressed: () => _showAddDocumentSheet(),
+            child: const Icon(CupertinoIcons.add_circled),
+          ),
+          child: Consumer(
+            builder: (context, ref, _) {
+              final filesState = ref.watch(tripFilesProvider(widget.tripId));
+              return filesState.when(
+                loading: () => const IosLoading(),
+                error: (err, stack) => IosEmptyState(
+                  icon: CupertinoIcons.exclamationmark_circle,
+                  title: 'Không tải được tài liệu',
+                  message: err.toString().replaceAll('ApiException: ', ''),
+                ),
+                data: (files) {
+                  final grouped = _groupTripFiles(files);
+                  return ListView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+                    children: [
+                      _DocumentVaultHeader(files: files),
+                      const SizedBox(height: 14),
+                      if (files.isEmpty)
+                        const IosEmptyState(
+                          icon: CupertinoIcons.folder,
+                          title: 'Chưa có tài liệu',
+                          message:
+                              'Lưu link vé máy bay, booking khách sạn, bảo hiểm hoặc ghi chú quan trọng ở đây.',
+                        )
+                      else
+                        for (final entry in grouped.entries)
+                          _DocumentFolderBlock(
+                            folder: entry.key,
+                            files: entry.value,
+                            onOpenFile: _openDocument,
+                            onCopyFile: _copyDocumentLink,
+                            onDeleteFile: _deleteTripFile,
+                          ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAddDocumentSheet() {
+    showGlassBottomSheet<void>(
+      context: context,
+      heightFactor: 0.66,
+      builder: (sheetContext) {
+        return GlassBottomSheetScaffold(
+          title: 'Thêm tài liệu',
+          child: ListView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+            children: [
+              _DocumentSourceTile(
+                icon: CupertinoIcons.camera_fill,
+                color: AppTheme.iosBlue,
+                title: 'Chụp ảnh',
+                subtitle: 'Chụp hộ chiếu, vé, hóa đơn, biển chỉ dẫn...',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _pickDocumentImage(ImageSource.camera);
+                },
+              ),
+              const SizedBox(height: 10),
+              _DocumentSourceTile(
+                icon: CupertinoIcons.photo_fill_on_rectangle_fill,
+                color: AppTheme.iosGreen,
+                title: 'Chọn ảnh từ thư viện',
+                subtitle: 'Thêm ảnh đã có trong máy vào chuyến đi',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _pickDocumentImage(ImageSource.gallery);
+                },
+              ),
+              const SizedBox(height: 10),
+              _DocumentSourceTile(
+                icon: CupertinoIcons.doc_fill,
+                color: AppTheme.iosOrange,
+                title: 'Nhập tài liệu',
+                subtitle: 'PDF, Word, Excel, CSV, text, PowerPoint',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _pickImportedDocument();
+                },
+              ),
+              const SizedBox(height: 10),
+              _DocumentSourceTile(
+                icon: CupertinoIcons.square_pencil,
+                color: AppTheme.iosIndigo,
+                title: 'Ghi chú',
+                subtitle: 'Viết note nhanh rồi lưu cùng tài liệu chuyến đi',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _showNoteDocumentSheet();
+                },
+              ),
+              const SizedBox(height: 10),
+              _DocumentSourceTile(
+                icon: CupertinoIcons.text_badge_checkmark,
+                color: AppTheme.iosIndigo,
+                title: 'Chọn từ Ghi chú iPhone',
+                subtitle: 'Chọn ghi chú đã lưu/xuất trong Files',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _pickIphoneNoteDocument();
+                },
+              ),
+              const SizedBox(height: 10),
+              _DocumentSourceTile(
+                icon: CupertinoIcons.link,
+                color: AppTheme.iosBlue,
+                title: 'Thêm bằng liên kết',
+                subtitle: 'Dán link booking, drive hoặc tài liệu online',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _showLinkDocumentSheet();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showLinkDocumentSheet() {
+    final nameController = TextEditingController();
+    final urlController = TextEditingController();
+    final tagsController = TextEditingController();
+    var folder = _documentFolders.first;
+    var isSaving = false;
+
+    showGlassBottomSheet<void>(
+      context: context,
+      heightFactor: 0.78,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return GlassBottomSheetScaffold(
+              title: 'Thêm tài liệu',
+              trailing: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(44, 40),
+                onPressed: isSaving
+                    ? null
+                    : () => _submitTripFile(
+                        sheetContext: sheetContext,
+                        nameController: nameController,
+                        urlController: urlController,
+                        tagsController: tagsController,
+                        folder: folder,
+                        setSaving: (value) =>
+                            setSheetState(() => isSaving = value),
+                      ),
+                child: isSaving
+                    ? const CupertinoActivityIndicator()
+                    : const Text('Lưu'),
+              ),
+              child: ListView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+                children: [
+                  _DocumentFolderChips(
+                    selected: folder,
+                    onSelected: (value) => setSheetState(() => folder = value),
+                  ),
+                  const SizedBox(height: 18),
+                  IosTextField(
+                    controller: nameController,
+                    label: 'Tên tài liệu',
+                    placeholder: 'Vé máy bay, booking khách sạn...',
+                    prefixIcon: CupertinoIcons.doc_text,
+                  ),
+                  const SizedBox(height: 14),
+                  IosTextField(
+                    controller: urlController,
+                    label: 'Liên kết',
+                    placeholder: 'https://...',
+                    prefixIcon: CupertinoIcons.link,
+                    keyboardType: TextInputType.url,
+                  ),
+                  const SizedBox(height: 14),
+                  IosTextField(
+                    controller: tagsController,
+                    label: 'Nhãn',
+                    placeholder: 'visa, vé, khách sạn',
+                    prefixIcon: CupertinoIcons.tag,
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showNoteDocumentSheet() {
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+    final tagsController = TextEditingController();
+    var folder = 'Ghi chú';
+    var isSaving = false;
+
+    showGlassBottomSheet<void>(
+      context: context,
+      heightFactor: 0.82,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return GlassBottomSheetScaffold(
+              title: 'Ghi chú mới',
+              trailing: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(44, 40),
+                onPressed: isSaving
+                    ? null
+                    : () => _submitTripNote(
+                        sheetContext: sheetContext,
+                        titleController: titleController,
+                        contentController: contentController,
+                        tagsController: tagsController,
+                        folder: folder,
+                        setSaving: (value) =>
+                            setSheetState(() => isSaving = value),
+                      ),
+                child: isSaving
+                    ? const CupertinoActivityIndicator()
+                    : const Text('Lưu'),
+              ),
+              child: ListView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+                children: [
+                  _DocumentFolderChips(
+                    selected: folder,
+                    onSelected: (value) => setSheetState(() => folder = value),
+                  ),
+                  const SizedBox(height: 18),
+                  IosTextField(
+                    controller: titleController,
+                    label: 'Tiêu đề',
+                    placeholder: 'Lịch nhận phòng, số hotline...',
+                    prefixIcon: CupertinoIcons.textformat,
+                  ),
+                  const SizedBox(height: 14),
+                  IosTextField(
+                    controller: contentController,
+                    label: 'Nội dung',
+                    placeholder: 'Nhập ghi chú cho chuyến đi',
+                    prefixIcon: CupertinoIcons.square_pencil,
+                    maxLines: 8,
+                  ),
+                  const SizedBox(height: 14),
+                  IosTextField(
+                    controller: tagsController,
+                    label: 'Nhãn',
+                    placeholder: 'khách sạn, visa, cần nhớ',
+                    prefixIcon: CupertinoIcons.tag,
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _pickDocumentImage(ImageSource source) async {
+    try {
+      final image = await _documentImagePicker.pickImage(
+        source: source,
+        maxWidth: 2400,
+        maxHeight: 2400,
+        imageQuality: 88,
+      );
+      if (image == null) return;
+      final bytes = await image.readAsBytes();
+
+      await _uploadLocalTripFile(
+        TripLocalFileDraft(
+          filePath: image.path,
+          fileBytes: bytes,
+          fileName: image.name.isEmpty ? _fallbackImageFileName() : image.name,
+          folder: 'Ảnh',
+          tags: const ['ảnh'],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message: 'Không thể thêm ảnh: $e',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _pickImportedDocument() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowMultiple: true,
+        withData: true,
+        allowedExtensions: const [
+          'pdf',
+          'txt',
+          'md',
+          'rtf',
+          'doc',
+          'docx',
+          'xls',
+          'xlsx',
+          'csv',
+          'ppt',
+          'pptx',
+        ],
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      var uploadedCount = 0;
+      for (final file in result.files) {
+        final path = file.path;
+        final bytes = file.bytes;
+        if ((path == null || path.isEmpty) && bytes == null) continue;
+
+        await _uploadLocalTripFile(
+          TripLocalFileDraft(
+            filePath: path,
+            fileBytes: bytes,
+            fileName: file.name,
+            folder: 'Giấy tờ',
+            tags: const ['tài liệu'],
+          ),
+          showSuccess: false,
+        );
+        uploadedCount++;
+      }
+
+      if (mounted && uploadedCount > 0) {
+        await showIosMessage(
+          context,
+          title: 'Đã thêm tài liệu',
+          message: '$uploadedCount tài liệu đã được lưu vào chuyến đi.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message: 'Không thể nhập tài liệu: $e',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _pickIphoneNoteDocument() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowMultiple: true,
+        withData: true,
+        allowedExtensions: const [
+          'txt',
+          'md',
+          'rtf',
+          'pdf',
+        ],
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      var uploadedCount = 0;
+      for (final file in result.files) {
+        final path = file.path;
+        final bytes = file.bytes;
+        if ((path == null || path.isEmpty) && bytes == null) continue;
+
+        await _uploadLocalTripFile(
+          TripLocalFileDraft(
+            filePath: path,
+            fileBytes: bytes,
+            fileName: file.name,
+            folder: 'Ghi chú',
+            tags: const ['ghi chú'],
+          ),
+          showSuccess: false,
+        );
+        uploadedCount++;
+      }
+
+      if (mounted && uploadedCount > 0) {
+        await showIosMessage(
+          context,
+          title: 'Đã thêm ghi chú',
+          message: '$uploadedCount ghi chú đã được lưu vào chuyến đi.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message: 'Không thể nhập ghi chú: $e',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _uploadLocalTripFile(
+    TripLocalFileDraft draft, {
+    bool showSuccess = true,
+  }) async {
+    try {
+      await ref
+          .read(tripRepositoryProvider)
+          .uploadTripFile(
+            widget.tripId,
+            draft,
+          );
+      ref.invalidate(tripFilesProvider(widget.tripId));
+
+      if (mounted && showSuccess) {
+        await showIosMessage(
+          context,
+          title: 'Đã thêm tài liệu',
+          message: '"${draft.fileName}" đã được lưu vào chuyến đi.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message:
+              'Không thể tải tài liệu lên: ${e.toString().replaceAll('ApiException: ', '')}',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _submitTripNote({
+    required BuildContext sheetContext,
+    required TextEditingController titleController,
+    required TextEditingController contentController,
+    required TextEditingController tagsController,
+    required String folder,
+    required ValueChanged<bool> setSaving,
+  }) async {
+    final title = titleController.text.trim();
+    final content = contentController.text.trim();
+
+    if (title.isEmpty || content.isEmpty) {
+      await showIosMessage(
+        context,
+        message: 'Vui lòng nhập tiêu đề và nội dung ghi chú.',
+        isError: true,
+      );
+      return;
+    }
+
+    setSaving(true);
+    try {
+      final tags = tagsController.text
+          .split(',')
+          .map((tag) => tag.trim())
+          .where((tag) => tag.isNotEmpty)
+          .toList(growable: false);
+
+      await ref
+          .read(tripRepositoryProvider)
+          .addTripNote(
+            widget.tripId,
+            TripNoteDraft(
+              title: title,
+              content: content,
+              folder: folder,
+              tags: tags,
+            ),
+          );
+      ref.invalidate(tripFilesProvider(widget.tripId));
+
+      if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+    } catch (e) {
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message:
+              'Không thể lưu ghi chú: ${e.toString().replaceAll('ApiException: ', '')}',
+          isError: true,
+        );
+      }
+    } finally {
+      if (sheetContext.mounted) setSaving(false);
+    }
+  }
+
+  Future<void> _submitTripFile({
+    required BuildContext sheetContext,
+    required TextEditingController nameController,
+    required TextEditingController urlController,
+    required TextEditingController tagsController,
+    required String folder,
+    required ValueChanged<bool> setSaving,
+  }) async {
+    final fileName = nameController.text.trim();
+    final fileUrl = urlController.text.trim();
+    final parsedUrl = Uri.tryParse(fileUrl);
+
+    if (fileName.isEmpty || parsedUrl == null || !parsedUrl.hasScheme) {
+      await showIosMessage(
+        context,
+        message: 'Vui lòng nhập tên tài liệu và một liên kết hợp lệ.',
+        isError: true,
+      );
+      return;
+    }
+
+    setSaving(true);
+    try {
+      final tags = tagsController.text
+          .split(',')
+          .map((tag) => tag.trim())
+          .where((tag) => tag.isNotEmpty)
+          .toList(growable: false);
+
+      await ref
+          .read(tripRepositoryProvider)
+          .addTripFile(
+            widget.tripId,
+            TripFileDraft(
+              fileName: fileName,
+              fileUrl: fileUrl,
+              folder: folder,
+              contentType: _inferContentType(fileName, fileUrl),
+              tags: tags,
+            ),
+          );
+      ref.invalidate(tripFilesProvider(widget.tripId));
+
+      if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+    } catch (e) {
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message:
+              'Không thể lưu tài liệu: ${e.toString().replaceAll('ApiException: ', '')}',
+          isError: true,
+        );
+      }
+    } finally {
+      if (sheetContext.mounted) setSaving(false);
+    }
+  }
+
+  Future<void> _openDocument(TripFileModel file) async {
+    final documentUrl = _absoluteDocumentUrl(file.fileUrl);
+    final endpoint = _documentApiEndpoint(file.fileUrl);
+
+    if (endpoint == null) {
+      final opened = await openDocumentUrl(documentUrl);
+      if (!opened && mounted) await _showDocumentActions(file);
+      return;
+    }
+
+    try {
+      final bytes = await ref.read(apiClientProvider).getBytes(endpoint);
+      final contentType = _documentContentType(file);
+
+      if (_isImageDocument(file)) {
+        if (mounted) _showImageDocumentPreview(file, bytes);
+        return;
+      }
+
+      if (_isTextDocument(file)) {
+        final text = utf8.decode(bytes, allowMalformed: true);
+        if (mounted) _showTextDocumentPreview(file, text);
+        return;
+      }
+
+      final opened = await openDocumentBytes(
+        bytes: bytes,
+        fileName: file.fileName,
+        contentType: contentType,
+      );
+
+      if (!opened && mounted) {
+        await Clipboard.setData(ClipboardData(text: documentUrl));
+        if (!mounted) return;
+        await showIosMessage(
+          context,
+          title: 'Chưa mở được tài liệu',
+          message:
+              'Thiết bị này chưa hỗ trợ xem trực tiếp loại tài liệu này. Liên kết đã được sao chép để bạn mở thủ công.',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      await showIosMessage(
+        context,
+        message:
+            'Không thể mở tài liệu: ${e.toString().replaceAll('ApiException: ', '')}',
+        isError: true,
+      );
+    }
+  }
+
+  Future<void> _copyDocumentLink(TripFileModel file) async {
+    await Clipboard.setData(
+      ClipboardData(text: _absoluteDocumentUrl(file.fileUrl)),
+    );
+    if (!mounted) return;
+    await showIosMessage(
+      context,
+      title: 'Đã sao chép',
+      message: 'Liên kết tài liệu đã được sao chép.',
+    );
+  }
+
+  void _showImageDocumentPreview(TripFileModel file, Uint8List bytes) {
+    showGlassBottomSheet<void>(
+      context: context,
+      heightFactor: 0.9,
+      builder: (_) => GlassBottomSheetScaffold(
+        title: file.fileName,
+        child: InteractiveViewer(
+          minScale: 0.7,
+          maxScale: 4,
+          child: Center(
+            child: Image.memory(bytes, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showTextDocumentPreview(TripFileModel file, String text) {
+    showGlassBottomSheet<void>(
+      context: context,
+      heightFactor: 0.88,
+      builder: (_) => GlassBottomSheetScaffold(
+        title: file.fileName,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+          child: Text(
+            text,
+            style: AppTheme.bodyMd().copyWith(height: 1.45),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDocumentActions(TripFileModel file) {
+    final documentUrl = _absoluteDocumentUrl(file.fileUrl);
+    return showCupertinoModalPopup<void>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: Text(file.fileName),
+        message: Text(documentUrl),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await Clipboard.setData(ClipboardData(text: documentUrl));
+              if (mounted) {
+                await showIosMessage(
+                  this.context,
+                  title: 'Đã sao chép',
+                  message: 'Liên kết tài liệu đã được sao chép.',
+                );
+              }
+            },
+            child: const Text('Sao chép liên kết'),
+          ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.of(context).pop();
+              _deleteTripFile(file);
+            },
+            child: const Text('Xóa khỏi chuyến đi'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Đóng'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteTripFile(TripFileModel file) async {
+    final confirmed = await showIosConfirm(
+      context,
+      title: 'Xóa tài liệu?',
+      message: 'Tài liệu "${file.fileName}" sẽ được gỡ khỏi chuyến đi.',
+      confirmLabel: 'Xóa',
+      destructive: true,
+    );
+    if (!confirmed) return;
+
+    try {
+      await ref
+          .read(tripRepositoryProvider)
+          .deleteTripFile(
+            widget.tripId,
+            file.id,
+          );
+      ref.invalidate(tripFilesProvider(widget.tripId));
+    } catch (e) {
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message:
+              'Không thể xóa tài liệu: ${e.toString().replaceAll('ApiException: ', '')}',
+          isError: true,
+        );
+      }
+    }
+  }
+
   void _showModuleComingSoon(String module) {
     showIosMessage(
       context,
@@ -1089,6 +1874,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
             placeholder: 'Số tiền (${widget.baseCurrency})',
             prefixIcon: CupertinoIcons.money_dollar,
             keyboardType: TextInputType.number,
+            inputFormatters: const [MoneyInputFormatter()],
           ),
         ),
         actions: [
@@ -1099,7 +1885,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
           CupertinoDialogAction(
             isDefaultAction: true,
             onPressed: () async {
-              final amount = double.tryParse(amountController.text.trim());
+              final amount = parseMoneyInput(amountController.text.trim());
               if (amount == null || amount <= 0) return;
 
               try {
@@ -1138,8 +1924,9 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
         final descController = TextEditingController();
         final amountController = TextEditingController();
         var selectedSplitType = 0;
-        final selectedUserIds =
-            details.members.map((member) => member.userId).toSet();
+        final selectedUserIds = details.members
+            .map((member) => member.userId)
+            .toSet();
         final customAmountControllers = {
           for (final member in details.members)
             member.userId: TextEditingController(),
@@ -1167,8 +1954,10 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                                   child: const Text('Hủy'),
                                 ),
                                 const Spacer(),
-                                Text('Thêm chi tiêu',
-                                    style: AppTheme.titleSm()),
+                                Text(
+                                  'Thêm chi tiêu',
+                                  style: AppTheme.titleSm(),
+                                ),
                                 const Spacer(),
                                 CupertinoButton(
                                   padding: EdgeInsets.zero,
@@ -1185,8 +1974,10 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                                       ),
                                     );
                                   },
-                                  child: const Icon(CupertinoIcons.camera,
-                                      size: 20),
+                                  child: const Icon(
+                                    CupertinoIcons.camera,
+                                    size: 20,
+                                  ),
                                 ),
                                 CupertinoButton(
                                   padding: EdgeInsets.zero,
@@ -1223,6 +2014,21 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                                   placeholder: '0 ${widget.baseCurrency}',
                                   prefixIcon: CupertinoIcons.money_dollar,
                                   keyboardType: TextInputType.number,
+                                  inputFormatters: const [
+                                    MoneyInputFormatter(),
+                                  ],
+                                  onChanged: (_) => setSheetState(() {}),
+                                ),
+                                _AmountSuggestionChips(
+                                  input: amountController.text,
+                                  currency: widget.baseCurrency,
+                                  onSelected: (amount) {
+                                    _setMoneyInputValue(
+                                      amountController,
+                                      amount,
+                                    );
+                                    setSheetState(() {});
+                                  },
                                 ),
                                 const SizedBox(height: 18),
                                 Text(
@@ -1237,25 +2043,29 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                                   groupValue: selectedSplitType,
                                   children: const {
                                     0: Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(horizontal: 8),
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
                                       child: Text('Đều'),
                                     ),
                                     1: Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(horizontal: 8),
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
                                       child: Text('Tùy chỉnh'),
                                     ),
                                     3: Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(horizontal: 8),
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
                                       child: Text('Quỹ'),
                                     ),
                                   },
                                   onValueChanged: (value) {
                                     if (value != null) {
                                       setSheetState(
-                                          () => selectedSplitType = value);
+                                        () => selectedSplitType = value,
+                                      );
                                     }
                                   },
                                 ),
@@ -1264,8 +2074,9 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                                   IosSection(
                                     header: 'Người tham gia chia đều',
                                     children: details.members.map((member) {
-                                      final checked = selectedUserIds
-                                          .contains(member.userId);
+                                      final checked = selectedUserIds.contains(
+                                        member.userId,
+                                      );
                                       return IosListTile(
                                         icon: CupertinoIcons.person,
                                         title: member.nickName ?? 'Thành viên',
@@ -1274,11 +2085,13 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                                           onChanged: (value) {
                                             setSheetState(() {
                                               if (value) {
-                                                selectedUserIds
-                                                    .add(member.userId);
+                                                selectedUserIds.add(
+                                                  member.userId,
+                                                );
                                               } else {
-                                                selectedUserIds
-                                                    .remove(member.userId);
+                                                selectedUserIds.remove(
+                                                  member.userId,
+                                                );
                                               }
                                             });
                                           },
@@ -1290,17 +2103,22 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                                   Column(
                                     children: details.members.map((member) {
                                       return Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 12),
+                                        padding: const EdgeInsets.only(
+                                          bottom: 12,
+                                        ),
                                         child: IosTextField(
-                                          controller: customAmountControllers[
-                                              member.userId]!,
+                                          controller:
+                                              customAmountControllers[member
+                                                  .userId]!,
                                           label:
                                               member.nickName ?? 'Thành viên',
                                           placeholder: '0',
                                           prefixIcon:
                                               CupertinoIcons.money_dollar,
                                           keyboardType: TextInputType.number,
+                                          inputFormatters: const [
+                                            MoneyInputFormatter(),
+                                          ],
                                         ),
                                       );
                                     }).toList(),
@@ -1344,7 +2162,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
     required Map<String, TextEditingController> customAmountControllers,
   }) async {
     final desc = descController.text.trim();
-    final totalAmount = double.tryParse(amountController.text.trim());
+    final totalAmount = parseMoneyInput(amountController.text.trim());
     if (desc.isEmpty || totalAmount == null || totalAmount <= 0) {
       await showIosMessage(
         context,
@@ -1376,7 +2194,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
     } else if (selectedSplitType == 1) {
       var customTotal = 0.0;
       for (final member in details.members) {
-        final amount = double.tryParse(
+        final amount = parseMoneyInput(
           customAmountControllers[member.userId]?.text.trim() ?? '',
         );
         if (amount != null && amount > 0) {
@@ -1464,7 +2282,9 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
   }
 
   String _getMemberName(
-      String userId, AsyncValue<TripDetailModel> detailsState) {
+    String userId,
+    AsyncValue<TripDetailModel> detailsState,
+  ) {
     return detailsState.maybeWhen(
       data: (details) {
         final member = details.members.firstWhere(
@@ -1488,6 +2308,609 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
     final hour = dt.hour.toString().padLeft(2, '0');
     final minute = dt.minute.toString().padLeft(2, '0');
     return '$day/$month $hour:$minute';
+  }
+}
+
+const _documentFolders = <String>[
+  'General',
+  'Ảnh',
+  'Vé',
+  'Booking',
+  'Giấy tờ',
+  'Ghi chú',
+];
+
+Map<String, List<TripFileModel>> _groupTripFiles(List<TripFileModel> files) {
+  final grouped = <String, List<TripFileModel>>{};
+  for (final file in files) {
+    grouped.putIfAbsent(file.displayFolder, () => []).add(file);
+  }
+  return grouped;
+}
+
+String? _inferContentType(String fileName, String fileUrl) {
+  final source = '$fileName $fileUrl'.toLowerCase();
+  if (source.contains('.pdf')) return 'application/pdf';
+  if (source.contains('.png')) return 'image/png';
+  if (source.contains('.webp')) return 'image/webp';
+  if (source.contains('.heic')) return 'image/heic';
+  if (source.contains('.jpg') || source.contains('.jpeg')) return 'image/jpeg';
+  if (source.contains('.txt')) return 'text/plain';
+  if (source.contains('.md')) return 'text/markdown';
+  if (source.contains('.csv')) return 'text/csv';
+  if (source.contains('.doc') || source.contains('.docx')) {
+    return 'application/msword';
+  }
+  if (source.contains('.xls') || source.contains('.xlsx')) {
+    return 'application/vnd.ms-excel';
+  }
+  if (source.contains('.ppt') || source.contains('.pptx')) {
+    return 'application/vnd.ms-powerpoint';
+  }
+  return null;
+}
+
+IconData _documentIcon(TripFileModel file) {
+  final contentType = (file.contentType ?? '').toLowerCase();
+  final extension = file.extension.toLowerCase();
+  if (contentType.contains('image') ||
+      ['jpg', 'jpeg', 'png', 'webp', 'heic'].contains(extension)) {
+    return CupertinoIcons.photo;
+  }
+  if (contentType.contains('pdf') || extension == 'pdf') {
+    return CupertinoIcons.doc_richtext;
+  }
+  if (extension == 'doc' || extension == 'docx') {
+    return CupertinoIcons.doc_text;
+  }
+  if (extension == 'xls' || extension == 'xlsx') {
+    return CupertinoIcons.table;
+  }
+  if (extension == 'ppt' || extension == 'pptx') {
+    return CupertinoIcons.rectangle_stack;
+  }
+  if (extension == 'txt' || extension == 'md' || extension == 'rtf') {
+    return CupertinoIcons.text_alignleft;
+  }
+  return CupertinoIcons.link;
+}
+
+Color _documentColor(TripFileModel file) {
+  final folder = file.displayFolder.toLowerCase();
+  if (folder.contains('ảnh')) return AppTheme.iosGreen;
+  if (folder.contains('vé')) return AppTheme.iosBlue;
+  if (folder.contains('booking')) return AppTheme.iosGreen;
+  if (folder.contains('giấy')) return AppTheme.iosOrange;
+  if (folder.contains('ghi')) return AppTheme.iosIndigo;
+  return AppTheme.iosBlue;
+}
+
+String _fallbackImageFileName() {
+  final now = DateTime.now();
+  return 'trip-photo-${now.millisecondsSinceEpoch}.jpg';
+}
+
+String _absoluteDocumentUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri != null && uri.hasScheme) return value;
+
+  final separator = value.startsWith('/') ? '' : '/';
+  return '${ApiEndpoints.baseUrl}$separator$value';
+}
+
+String? _documentApiEndpoint(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null) return null;
+  if (!uri.hasScheme) return value;
+
+  final base = Uri.tryParse(ApiEndpoints.baseUrl);
+  if (base == null) return null;
+  if (uri.scheme != base.scheme ||
+      uri.host != base.host ||
+      uri.port != base.port) {
+    return null;
+  }
+
+  return uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path;
+}
+
+String _documentContentType(TripFileModel file) {
+  final inferred = _inferContentType(file.fileName, file.fileUrl);
+  return file.contentType ?? inferred ?? 'application/octet-stream';
+}
+
+bool _isImageDocument(TripFileModel file) {
+  final contentType = _documentContentType(file).toLowerCase();
+  final extension = file.extension.toLowerCase();
+  return contentType.startsWith('image/') ||
+      ['jpg', 'jpeg', 'png', 'webp', 'heic'].contains(extension);
+}
+
+bool _isTextDocument(TripFileModel file) {
+  final contentType = _documentContentType(file).toLowerCase();
+  final extension = file.extension.toLowerCase();
+  return contentType.startsWith('text/') ||
+      ['txt', 'md', 'rtf'].contains(extension);
+}
+
+String _documentSubtitle(TripFileModel file) {
+  final pieces = [
+    file.displayFolder,
+    _formatFileSize(file.fileSizeBytes),
+    _formatDocumentDate(file.createdAt),
+    if (file.tags.isNotEmpty) file.tags.take(2).join(', '),
+  ].whereType<String>().where((value) => value.isNotEmpty).toList();
+  return pieces.join(' • ');
+}
+
+String? _formatFileSize(int? bytes) {
+  if (bytes == null || bytes <= 0) return null;
+  if (bytes < 1024) return '$bytes B';
+  final kb = bytes / 1024;
+  if (kb < 1024) return '${kb.toStringAsFixed(kb >= 100 ? 0 : 1)} KB';
+  final mb = kb / 1024;
+  return '${mb.toStringAsFixed(mb >= 100 ? 0 : 1)} MB';
+}
+
+String _formatDocumentDate(DateTime date) {
+  final day = date.day.toString().padLeft(2, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  return '$day/$month/${date.year}';
+}
+
+class _DocumentSourceTile extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _DocumentSourceTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      onPressed: onTap,
+      child: ModernGlass(
+        radius: 24,
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTheme.titleSm()),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.bodySm(
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              CupertinoIcons.chevron_right,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              size: 18,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DocumentVaultHeader extends StatelessWidget {
+  final List<TripFileModel> files;
+
+  const _DocumentVaultHeader({required this.files});
+
+  @override
+  Widget build(BuildContext context) {
+    final folderCount = _groupTripFiles(files).length;
+    final latest = files.isEmpty
+        ? 'Chưa có'
+        : _formatDocumentDate(
+            files
+                .map((file) => file.createdAt)
+                .reduce(
+                  (a, b) => a.isAfter(b) ? a : b,
+                ),
+          );
+
+    return ModernGlass(
+      radius: 28,
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppTheme.iosIndigo.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              CupertinoIcons.folder_fill,
+              color: AppTheme.iosIndigo,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: _DocumentHeaderMetric(
+                    value: files.length.toString(),
+                    label: 'Tài liệu',
+                  ),
+                ),
+                Expanded(
+                  child: _DocumentHeaderMetric(
+                    value: folderCount.toString(),
+                    label: 'Thư mục',
+                  ),
+                ),
+                Expanded(
+                  child: _DocumentHeaderMetric(
+                    value: latest,
+                    label: 'Mới nhất',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DocumentHeaderMetric extends StatelessWidget {
+  final String value;
+  final String label;
+
+  const _DocumentHeaderMetric({
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTheme.titleSm(),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTheme.labelXs(
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DocumentFolderChips extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  const _DocumentFolderChips({
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 42,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: _documentFolders.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final folder = _documentFolders[index];
+          final isSelected = selected == folder;
+          return CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(0, 40),
+            onPressed: () => onSelected(folder),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppTheme.iosIndigo.withValues(alpha: 0.22)
+                    : CupertinoColors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected
+                      ? AppTheme.iosIndigo.withValues(alpha: 0.34)
+                      : CupertinoColors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  folder,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.labelSm(
+                    color: isSelected
+                        ? AppTheme.iosIndigo
+                        : CupertinoColors.label.resolveFrom(context),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DocumentFolderBlock extends StatelessWidget {
+  final String folder;
+  final List<TripFileModel> files;
+  final ValueChanged<TripFileModel> onOpenFile;
+  final ValueChanged<TripFileModel> onCopyFile;
+  final ValueChanged<TripFileModel> onDeleteFile;
+
+  const _DocumentFolderBlock({
+    required this.folder,
+    required this.files,
+    required this.onOpenFile,
+    required this.onCopyFile,
+    required this.onDeleteFile,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IosSection(
+      header: '$folder (${files.length})',
+      children: files.map((file) {
+        return Slidable(
+          key: ValueKey(file.id),
+          endActionPane: ActionPane(
+            motion: const DrawerMotion(),
+            extentRatio: 0.32,
+            children: [
+              SlidableAction(
+                onPressed: (_) {
+                  onCopyFile(file);
+                },
+                backgroundColor: AppTheme.iosBlue,
+                foregroundColor: CupertinoColors.white,
+                icon: CupertinoIcons.link,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              SlidableAction(
+                onPressed: (_) {
+                  onDeleteFile(file);
+                },
+                backgroundColor: AppTheme.iosRed,
+                foregroundColor: CupertinoColors.white,
+                icon: CupertinoIcons.trash,
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ],
+          ),
+          child: _DocumentFileTile(
+            file: file,
+            onTap: () => onOpenFile(file),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _DocumentFileTile extends StatelessWidget {
+  final TripFileModel file;
+  final VoidCallback onTap;
+
+  const _DocumentFileTile({
+    required this.file,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final extension = file.extension.isEmpty ? 'LINK' : file.extension;
+
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 58),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        color: CupertinoColors.transparent,
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: _documentColor(file).withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _documentIcon(file),
+                color: _documentColor(file),
+                size: 19,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    file.fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.bodyMd().copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _documentSubtitle(file),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.bodySm(color: secondary),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 46,
+              child: Text(
+                extension,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: AppTheme.labelSm(color: secondary).copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(CupertinoIcons.chevron_right, color: secondary, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+void _setMoneyInputValue(TextEditingController controller, int amount) {
+  final text = formatMoney(amount.toDouble());
+  controller.value = TextEditingValue(
+    text: text,
+    selection: TextSelection.collapsed(offset: text.length),
+  );
+}
+
+List<int> _moneySuggestions(String input) {
+  final amount = parseMoneyInput(input)?.round();
+  if (amount == null || amount <= 0) return const [];
+
+  final factors = amount < 1000
+      ? const [1000, 10000, 100000]
+      : const [10, 100, 1000];
+
+  final suggestions = <int>[];
+  for (final factor in factors) {
+    final candidate = amount * factor;
+    if (candidate > amount &&
+        candidate <= 999999999 &&
+        !suggestions.contains(candidate)) {
+      suggestions.add(candidate);
+    }
+  }
+  return suggestions;
+}
+
+class _AmountSuggestionChips extends StatelessWidget {
+  final String input;
+  final String currency;
+  final ValueChanged<int> onSelected;
+
+  const _AmountSuggestionChips({
+    required this.input,
+    required this.currency,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final suggestions = _moneySuggestions(input);
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: SizedBox(
+        height: 36,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: suggestions.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final amount = suggestions[index];
+            return CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 34),
+              onPressed: () => onSelected(amount),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppTheme.iosBlue.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: AppTheme.iosBlue.withValues(alpha: 0.28),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Text(
+                    '${formatMoney(amount.toDouble())} $currency',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.iosBlue,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }
 
@@ -1777,7 +3200,10 @@ class _MapTexturePainter extends CustomPainter {
 
     final pinPaint = Paint()..color = AppTheme.iosBlue;
     canvas.drawCircle(
-        Offset(size.width * 0.72, size.height * 0.43), 7, pinPaint);
+      Offset(size.width * 0.72, size.height * 0.43),
+      7,
+      pinPaint,
+    );
     canvas.drawCircle(
       Offset(size.width * 0.72, size.height * 0.43),
       13,
@@ -1894,7 +3320,9 @@ class _WorkspaceSegmentedTabs extends StatelessWidget {
         children: const {
           0: _SegmentLabel(icon: CupertinoIcons.calendar, label: 'Lịch trình'),
           1: _SegmentLabel(
-              icon: CupertinoIcons.arrow_right_arrow_left, label: 'Nợ'),
+            icon: CupertinoIcons.arrow_right_arrow_left,
+            label: 'Nợ',
+          ),
           2: _SegmentLabel(icon: CupertinoIcons.creditcard, label: 'Quỹ'),
           3: _SegmentLabel(icon: CupertinoIcons.person_2, label: 'Khách'),
         },
@@ -2004,10 +3432,14 @@ class _TripHeroWorkspaceCard extends StatelessWidget {
                 child: Row(
                   children: [
                     _HeroAction(
-                        icon: CupertinoIcons.square_arrow_up, onTap: onShare),
+                      icon: CupertinoIcons.square_arrow_up,
+                      onTap: onShare,
+                    ),
                     const Spacer(),
                     _HeroAction(
-                        icon: CupertinoIcons.gear_solid, onTap: onSettings),
+                      icon: CupertinoIcons.gear_solid,
+                      onTap: onSettings,
+                    ),
                   ],
                 ),
               ),
@@ -2095,8 +3527,9 @@ class _HeroAction extends StatelessWidget {
         decoration: BoxDecoration(
           color: CupertinoColors.black.withValues(alpha: 0.36),
           shape: BoxShape.circle,
-          border:
-              Border.all(color: CupertinoColors.white.withValues(alpha: 0.14)),
+          border: Border.all(
+            color: CupertinoColors.white.withValues(alpha: 0.14),
+          ),
         ),
         child: Icon(icon, color: CupertinoColors.white, size: 20),
       ),
@@ -2268,8 +3701,9 @@ class _DayPlanPanel extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTheme.bodySm(
-                        color:
-                            CupertinoColors.secondaryLabel.resolveFrom(context),
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
                       ),
                     ),
                   ],
@@ -2332,8 +3766,9 @@ class _EmptyItineraryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: CupertinoColors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(26),
-        border:
-            Border.all(color: CupertinoColors.white.withValues(alpha: 0.10)),
+        border: Border.all(
+          color: CupertinoColors.white.withValues(alpha: 0.10),
+        ),
       ),
       child: Column(
         children: [
@@ -2356,7 +3791,10 @@ class _EmptyItineraryCard extends StatelessWidget {
             onPressed: onAdd,
             child: const Text(
               'Thêm hoạt động',
-              style: TextStyle(fontWeight: FontWeight.w800),
+              style: TextStyle(
+                color: CupertinoColors.white,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
@@ -2418,8 +3856,9 @@ class _TimelineActivityRow extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: AppTheme.bodySm(
-                      color:
-                          CupertinoColors.secondaryLabel.resolveFrom(context),
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                   ),
                 ],
@@ -2478,8 +3917,9 @@ class _TripModuleCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTheme.labelSm(
-                      color:
-                          CupertinoColors.secondaryLabel.resolveFrom(context),
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                   ),
                 ],
@@ -2509,8 +3949,10 @@ class _InlineWarning extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       child: Row(
         children: [
-          const Icon(CupertinoIcons.exclamationmark_triangle,
-              color: AppTheme.iosBlue),
+          const Icon(
+            CupertinoIcons.exclamationmark_triangle,
+            color: AppTheme.iosBlue,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -2535,8 +3977,9 @@ class _GlassTabScroll extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
-      physics:
-          const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
       slivers: [
         CupertinoSliverRefreshControl(onRefresh: onRefresh),
         SliverToBoxAdapter(
@@ -2746,8 +4189,9 @@ class _PlaceSuggestionTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTheme.bodySm(
-                      color:
-                          CupertinoColors.secondaryLabel.resolveFrom(context),
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                   ),
                 ],
@@ -2833,8 +4277,9 @@ class _ActivityTemplateTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTheme.bodySm(
-                      color:
-                          CupertinoColors.secondaryLabel.resolveFrom(context),
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                   ),
                 ],
@@ -2881,16 +4326,19 @@ class _DetailedActivityCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(activity.timeLabel,
-                      style: AppTheme.labelSm(color: activity.color)),
+                  Text(
+                    activity.timeLabel,
+                    style: AppTheme.labelSm(color: activity.color),
+                  ),
                   const SizedBox(height: 4),
                   Text(activity.title, style: AppTheme.titleSm()),
                   const SizedBox(height: 4),
                   Text(
                     activity.subtitle,
                     style: AppTheme.bodySm(
-                      color:
-                          CupertinoColors.secondaryLabel.resolveFrom(context),
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                   ),
                 ],
@@ -2928,18 +4376,22 @@ class _TripSettingsHeader extends StatelessWidget {
               color: AppTheme.iosBlue.withValues(alpha: 0.18),
               shape: BoxShape.circle,
             ),
-            child:
-                const Icon(CupertinoIcons.flag_fill, color: AppTheme.iosBlue),
+            child: const Icon(
+              CupertinoIcons.flag_fill,
+              color: AppTheme.iosBlue,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.titleSm()),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.titleSm(),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
@@ -3012,15 +4464,18 @@ class _SettingsActionTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Icon(icon,
-                color: destructive ? AppTheme.iosRed : AppTheme.iosBlue,
-                size: 22),
+            Icon(
+              icon,
+              color: destructive ? AppTheme.iosRed : AppTheme.iosBlue,
+              size: 22,
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
                 title,
-                style: AppTheme.bodyMd(color: color)
-                    .copyWith(fontWeight: FontWeight.w600),
+                style: AppTheme.bodyMd(
+                  color: color,
+                ).copyWith(fontWeight: FontWeight.w600),
               ),
             ),
             Icon(
@@ -3059,8 +4514,10 @@ class _InviteCodeCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(inviteCode.isEmpty ? 'Chưa có mã' : inviteCode,
-                    style: AppTheme.headlineMd()),
+                Text(
+                  inviteCode.isEmpty ? 'Chưa có mã' : inviteCode,
+                  style: AppTheme.headlineMd(),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   shareUrl,
@@ -3122,15 +4579,18 @@ class _MemberManageCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(member.nickName ?? 'Thành viên',
-                        style: AppTheme.titleSm()),
+                    Text(
+                      member.nickName ?? 'Thành viên',
+                      style: AppTheme.titleSm(),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       member.roleName ??
                           (isOwner ? 'Chủ chuyến đi' : 'Thành viên'),
                       style: AppTheme.bodySm(
-                        color:
-                            CupertinoColors.secondaryLabel.resolveFrom(context),
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
                       ),
                     ),
                   ],
@@ -3138,8 +4598,10 @@ class _MemberManageCard extends StatelessWidget {
               ),
               if (member.userTier == 1)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: AppTheme.iosBlue,
                     borderRadius: BorderRadius.circular(10),
@@ -3224,17 +4686,18 @@ class _WorkspaceCoverPainter extends CustomPainter {
     );
 
     final glow = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          AppTheme.iosBlue.withValues(alpha: 0.48),
-          CupertinoColors.transparent,
-        ],
-      ).createShader(
-        Rect.fromCircle(
-          center: Offset(size.width * 0.72, size.height * 0.28),
-          radius: size.width * 0.45,
-        ),
-      );
+      ..shader =
+          RadialGradient(
+            colors: [
+              AppTheme.iosBlue.withValues(alpha: 0.48),
+              CupertinoColors.transparent,
+            ],
+          ).createShader(
+            Rect.fromCircle(
+              center: Offset(size.width * 0.72, size.height * 0.28),
+              radius: size.width * 0.45,
+            ),
+          );
     canvas.drawCircle(
       Offset(size.width * 0.72, size.height * 0.28),
       size.width * 0.45,

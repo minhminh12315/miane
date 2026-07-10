@@ -11,6 +11,12 @@
 *.sln.docstates
 *.userprefs
 
+# Local secrets / environment overrides
+.env
+.env.*
+!.env.example
+*.local.env
+
 # Mono auto generated files
 mono_crash.*
 
@@ -230,3 +236,6 @@ node_modules/
 # Rider / JetBrains
 .idea/
 *.sln.iml
+
+# Runtime uploads
+src/Services/Trip/Trip.API/uploads/

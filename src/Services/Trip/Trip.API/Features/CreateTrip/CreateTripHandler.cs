@@ -121,9 +121,30 @@ public sealed class CreateTripHandler : ICommandHandler<CreateTripCommand, Creat
                 TripId = trip.Id,
                 ImageUrl = request.CoverImageUrl,
                 Destination = FirstNonEmpty(request.Destination, request.DestinationCity),
+                Prompt = TrimToMax(request.CoverImagePrompt, 1000),
+                CacheKey = TrimToMax(request.PlaceId, 128),
                 IsCover = true,
-                IsGenerated = false,
+                IsGenerated = !string.IsNullOrWhiteSpace(request.CoverImagePrompt)
+                    || !string.IsNullOrWhiteSpace(request.CoverImageLandmark),
                 UploadedByUserId = request.UserId
+            });
+        }
+
+        var latitude = ToDecimal(request.Latitude);
+        var longitude = ToDecimal(request.Longitude);
+        if (latitude.HasValue && longitude.HasValue)
+        {
+            trip.AddLocation(new TripLocation
+            {
+                TripId = trip.Id,
+                Name = TrimToMax(
+                    FirstNonEmpty(request.Destination, request.DestinationCity, request.FormattedAddress, trip.Name),
+                    220) ?? trip.Name,
+                Type = "Destination",
+                Latitude = latitude.Value,
+                Longitude = longitude.Value,
+                Address = TrimToMax(FirstNonEmpty(request.FormattedAddress, request.Destination), 500),
+                Notes = BuildPlaceMetadataJson(request)
             });
         }
 
@@ -166,6 +187,47 @@ public sealed class CreateTripHandler : ICommandHandler<CreateTripCommand, Creat
 
     private static decimal? ToDecimal(double? value) =>
         value.HasValue ? Convert.ToDecimal(value.Value) : null;
+
+    private static string? BuildPlaceMetadataJson(CreateTripCommand request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.PlaceMetadataJson))
+        {
+            return TrimToMax(request.PlaceMetadataJson, 2000);
+        }
+
+        var metadata = new Dictionary<string, object?>
+        {
+            ["placeId"] = request.PlaceId,
+            ["placeName"] = request.Destination,
+            ["formattedAddress"] = request.FormattedAddress,
+            ["city"] = request.DestinationCity,
+            ["province"] = request.DestinationProvince,
+            ["country"] = request.DestinationCountry,
+            ["latitude"] = request.Latitude,
+            ["longitude"] = request.Longitude,
+            ["types"] = request.PlaceTypes
+        };
+
+        foreach (var key in metadata
+            .Where(pair => pair.Value is null || pair.Value is string value && string.IsNullOrWhiteSpace(value))
+            .Select(pair => pair.Key)
+            .ToList())
+        {
+            metadata.Remove(key);
+        }
+
+        if (metadata.Count == 0) return null;
+        return TrimToMax(JsonSerializer.Serialize(metadata), 2000);
+    }
+
+    private static string? TrimToMax(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength
+            ? trimmed
+            : trimmed[..maxLength];
+    }
 
     private static DateTime? NormalizeUtcDate(DateTime? value)
     {
