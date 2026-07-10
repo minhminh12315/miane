@@ -11,8 +11,19 @@ public sealed record CreateExpenseCommand(
     string TripBaseCurrency,
     Guid PaidByUserId,
     SplitType SplitType,
-    List<ExpenseSplitDto> Splits) : ICommand<CreateExpenseResult>;
+    List<ExpenseSplitDto> Splits,
+    string? Title = null,
+    string? Category = null,
+    DateTime? PaidAt = null,
+    List<ExpensePaymentSourceDto>? PaymentSources = null) : ICommand<CreateExpenseResult>;
 
 public sealed record ExpenseSplitDto(Guid UserId, decimal? Amount, decimal? Percentage);
+
+public sealed record ExpensePaymentSourceDto(
+    Domain.Enums.ExpensePaymentSourceType SourceType,
+    Guid? TripWalletId,
+    Guid? UserId,
+    Guid? PaymentId,
+    decimal Amount);
 
 public sealed record CreateExpenseResult(Guid ExpenseId, decimal ConvertedAmount, string BaseCurrency);

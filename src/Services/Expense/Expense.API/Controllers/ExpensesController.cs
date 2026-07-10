@@ -33,7 +33,11 @@ public class ExpensesController : ControllerBase
             request.TripBaseCurrency ?? "VND",
             GetUserId(),
             request.SplitType,
-            request.Splits), ct);
+            request.Splits,
+            request.Title,
+            request.Category,
+            request.PaidAt,
+            request.PaymentSources), ct);
 
         return Created($"/expenses/{result.ExpenseId}", result);
     }
@@ -67,6 +71,10 @@ public sealed record CreateExpenseRequest(
     string? Currency,
     string? TripBaseCurrency,
     Domain.Enums.SplitType SplitType,
-    List<ExpenseSplitDto> Splits);
+    List<ExpenseSplitDto> Splits,
+    string? Title = null,
+    string? Category = null,
+    DateTime? PaidAt = null,
+    List<ExpensePaymentSourceDto>? PaymentSources = null);
 
 public sealed record SettleDebtRequest(Guid DebtRecordId);

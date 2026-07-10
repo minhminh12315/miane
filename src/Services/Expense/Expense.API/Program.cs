@@ -79,6 +79,9 @@ builder.Services.AddAiServices(builder.Configuration);
 builder.Services.AddSingleton<IExchangeRateProvider, StaticExchangeRateProvider>();
 builder.Services.AddScoped<CurrencyConversionService>();
 builder.Services.AddScoped<DebtSimplificationService>();
+builder.Services.AddScoped<WalletLedgerService>();
+builder.Services.AddScoped<SplitCalculationService>();
+builder.Services.AddScoped<DebtOptimizationServiceV2>();
 
 var app = builder.Build();
 
