@@ -6,62 +6,27 @@ was invoked with no client id configured. It throws an `NSException`
 it (`[e raise]`), which a Dart `try/catch` cannot intercept — so the whole app
 aborts.
 
-The scaffolding is now in place with **placeholders**. Follow the steps below
-to make real Google login work. Until you do, the app falls back to the
-backend's mock Google tester (`mock_google_token`) so the dev flow stays usable.
+**Status: wired up with a real iOS OAuth client (no separate Web client).**
+Bundle id `com.example.mobile` →
+`135347207127-oido4n87prcqp44lvjtiovfqafr5qkbe.apps.googleusercontent.com`,
+set in `ios/Runner/Info.plist` (`GIDClientID` + reversed `CFBundleURLSchemes`)
+and mirrored in `src/Services/Identity/Identity.API/appsettings.json`
+(`Google:ClientId`) so the backend validates the idToken against the same
+audience. No `GIDServerClientID` is set, so the idToken's audience is the iOS
+client id itself — that's why both sides must use the identical id.
 
----
+If you ever rotate this client id or add a separate **Web** OAuth client
+(recommended if multiple platforms/backends should share one audience),
+update both places again:
 
-## 1. Create an iOS OAuth client
-
-1. Go to <https://console.cloud.google.com/apis/credentials> (select or create a
-   project).
-2. **Create Credentials → OAuth client ID → iOS**.
-3. Bundle ID: `com.example.mobile` (current value in
-   `ios/Runner.xcodeproj`; change both if you rename the bundle).
-4. Copy the generated **iOS client ID**: `NNNNNN-xxxx.apps.googleusercontent.com`.
-
-If the backend should validate against a **Web** client (recommended for a
-shared audience), also create an **OAuth client ID → Web application** and copy
-that id too.
-
----
-
-## 2. Wire the iOS app
-
-Edit `src/Clients/mobile/ios/Runner/Info.plist` and replace the placeholders:
-
-| Key | Replace with |
-|-----|--------------|
-| `GIDClientID` | your **iOS** client id (`…apps.googleusercontent.com`) |
-| `GIDServerClientID` | your **Web** client id (or delete this key if unused) |
-| `CFBundleURLSchemes[0]` | the **reversed** iOS client id: `com.googleusercontent.apps.NNNNNN-xxxx` |
-
-> The reversed client id = take the iOS client id, drop the
-> `.apps.googleusercontent.com` suffix, and prefix with
-> `com.googleusercontent.apps.`.
-
-(Alternatively, drop a `GoogleService-Info.plist` from Firebase into
-`ios/Runner/` and add it to the Xcode target — it carries `CLIENT_ID` and the
-plugin reads it automatically. The Info.plist keys above are the no-Firebase
-path.)
-
----
-
-## 3. Wire the backend
-
-Set the audience the backend validates the idToken against in
-`src/Services/Identity/Identity.API/appsettings.json` (or via env
-`Google__ClientId`):
-
-```jsonc
-"Google": {
-  // If the Dart side sets GIDServerClientID -> use the WEB client id here.
-  // If not -> use the iOS client id (that's the idToken audience).
-  "ClientId": "NNNNNN-xxxx.apps.googleusercontent.com",
-  "BypassValidation": false
-}
-```
+1. Google Cloud Console → <https://console.cloud.google.com/apis/credentials> →
+   create the new client (iOS bundle id `com.example.mobile`, or Web type).
+2. `ios/Runner/Info.plist`: `GIDClientID` (iOS client id), reversed id in
+   `CFBundleURLSchemes[0]` (`com.googleusercontent.apps.<id-before-.apps...>`),
+   and optionally `GIDServerClientID` (Web client id, if using one).
+3. `src/Services/Identity/Identity.API/appsettings.json` → `Google:ClientId`:
+   the **Web** client id if `GIDServerClientID` is set, otherwise the **iOS**
+   client id — this must match whichever one the idToken's audience actually is.
 
 `AuthService.LoginGoogleAsync` validates the token with
 `GoogleJsonWebSignature.ValidateAsync` and this `Audience`.
