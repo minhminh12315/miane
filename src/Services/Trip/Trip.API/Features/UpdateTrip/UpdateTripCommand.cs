@@ -10,7 +10,9 @@ public sealed record UpdateTripCommand(
     Guid UserId,
     string? Name,
     string? Description,
-    TripStatus? Status) : ICommand;
+    TripStatus? Status,
+    DateTime? StartDate = null,
+    DateTime? EndDate = null) : ICommand;
 
 public sealed class UpdateTripHandler : ICommandHandler<UpdateTripCommand>
 {
@@ -41,6 +43,20 @@ public sealed class UpdateTripHandler : ICommandHandler<UpdateTripCommand>
 
         if (request.Status.HasValue)
             trip.Status = request.Status.Value;
+
+        if (request.StartDate.HasValue)
+            trip.StartDate = request.StartDate.Value;
+
+        if (request.EndDate.HasValue)
+            trip.EndDate = request.EndDate.Value;
+
+        if (trip.StartDate.HasValue && trip.EndDate.HasValue &&
+            trip.EndDate.Value < trip.StartDate.Value)
+        {
+            throw new DomainException(
+                "Trip end date cannot be before the start date.",
+                "INVALID_TRIP_DATE_RANGE");
+        }
 
         await _tripRepository.UpdateAsync(trip, cancellationToken);
         await _tripRepository.SaveChangesAsync(cancellationToken);

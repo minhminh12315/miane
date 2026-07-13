@@ -15,6 +15,13 @@ public class TripMemberConfiguration : IEntityTypeConfiguration<TripMember>
             .IsUnique()
             .HasDatabaseName("IX_TripMembers_TripId_UserId");
 
+        // Hot path: loading all trips for a user (GetTripsByUserIdAsync,
+        // GetActiveTripsByUserId) filters on UserId alone. The composite index
+        // above leads with TripId, so a UserId-only predicate can't seek it —
+        // this dedicated index covers that lookup.
+        builder.HasIndex(m => m.UserId)
+            .HasDatabaseName("IX_TripMembers_UserId");
+
         builder.Property(m => m.NickName)
             .HasMaxLength(100);
 

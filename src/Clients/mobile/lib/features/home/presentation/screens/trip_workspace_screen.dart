@@ -16,8 +16,10 @@ import '../../../auth/presentation/controllers/app_auth_provider.dart';
 import '../../../expense/domain/models/expense_models.dart';
 import '../../../expense/presentation/controllers/expense_controller.dart';
 import '../../../expense/presentation/controllers/pool_controller.dart';
+import '../../../expense/presentation/controllers/scan_bill_controller.dart';
 import '../../../expense/presentation/screens/scan_bill_screen.dart';
 import '../../data/repositories/trip_repository_impl.dart';
+import '../../domain/models/trip_leg_model.dart';
 import '../../domain/models/trip_models.dart';
 import '../controllers/trips_provider.dart';
 import '../widgets/trip_share_sheet.dart';
@@ -43,11 +45,43 @@ class TripWorkspaceScreen extends ConsumerStatefulWidget {
       _TripWorkspaceScreenState();
 }
 
-class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
+class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
+    with WidgetsBindingObserver {
   int _selectedTab = 0;
   int _selectedDayIndex = 0;
   final ImagePicker _documentImagePicker = ImagePicker();
   final Map<int, List<_TripActivityDraft>> _dayActivities = {};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // A member added on another device (or expenses they created) won't push
+    // to an already-open client. Re-fetch trip data whenever the app returns
+    // to the foreground so every member sees the shared expense list. The
+    // backend returns all trip expenses to any member, so a fresh fetch is
+    // all that's needed here.
+    if (state == AppLifecycleState.resumed) {
+      _refreshTripData();
+    }
+  }
+
+  void _refreshTripData() {
+    ref.invalidate(tripDetailsProvider(widget.tripId));
+    ref.invalidate(tripExpensesProvider(widget.tripId));
+    ref.invalidate(tripBalancesProvider(widget.tripId));
+    ref.invalidate(tripPoolControllerProvider(widget.tripId));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -897,6 +931,325 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
         .toList();
   }
 
+  /// Manages the legs (segments) of a multi-stop trip: shows the ordered list
+  /// and lets the owner/admin add or remove a leg. Each leg is a destination
+  /// with its own date range (e.g. Hà Nội → Đà Nẵng → Sài Gòn).
+  void _showLegsManager(BuildContext context) {
+    showGlassBottomSheet<void>(
+      context: context,
+      heightFactor: 0.72,
+      builder: (sheetContext) => GlassBottomSheetScaffold(
+        title: 'Các chặng của chuyến đi',
+        child: Consumer(
+          builder: (consumerContext, ref, _) {
+            final legsState = ref.watch(tripLegsProvider(widget.tripId));
+            return ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                legsState.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 30),
+                    child: Center(child: CupertinoActivityIndicator()),
+                  ),
+                  error: (err, _) => _InlineWarning(
+                    message:
+                        'Không tải được các chặng: ${err.toString().replaceAll('ApiException: ', '')}',
+                  ),
+                  data: (legs) {
+                    if (legs.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Text(
+                          'Chưa có chặng nào. Thêm chặng để chia chuyến đi thành nhiều điểm đến.',
+                          textAlign: TextAlign.center,
+                          style: AppTheme.bodySm(
+                            color: CupertinoColors.secondaryLabel
+                                .resolveFrom(consumerContext),
+                          ),
+                        ),
+                      );
+                    }
+                    return Column(
+                      children: [
+                        for (var i = 0; i < legs.length; i++)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _LegCard(
+                              index: i,
+                              leg: legs[i],
+                              dateLabel: _formatLegDates(legs[i]),
+                              onDelete: () async {
+                                try {
+                                  await ref
+                                      .read(tripLegsActionsProvider)
+                                      .delete(widget.tripId, legs[i].id);
+                                } catch (e) {
+                                  if (consumerContext.mounted) {
+                                    await showIosMessage(
+                                      consumerContext,
+                                      message:
+                                          'Không thể xóa chặng: ${e.toString().replaceAll('ApiException: ', '')}',
+                                      isError: true,
+                                    );
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: IosPrimaryButton(
+                    label: '+ Thêm chặng',
+                    onPressed: () => _showAddLegSheet(consumerContext, ref),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  String _formatLegDates(TripLegModel leg) {
+    if (leg.startDate == null && leg.endDate == null) return '';
+    final start = leg.startDate != null ? _formatShortDate(leg.startDate!) : '?';
+    final end = leg.endDate != null ? _formatShortDate(leg.endDate!) : '?';
+    return '$start → $end';
+  }
+
+  Future<void> _showAddLegSheet(BuildContext context, WidgetRef ref) async {
+    final nameController = TextEditingController();
+    final cityController = TextEditingController();
+    DateTime? start;
+    DateTime? end;
+
+    await showGlassBottomSheet<void>(
+      context: context,
+      heightFactor: 0.62,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => GlassBottomSheetScaffold(
+          title: 'Thêm chặng',
+          child: ListView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            children: [
+              IosTextField(
+                controller: nameController,
+                label: 'Tên chặng',
+                placeholder: 'VD: Đà Nẵng',
+                prefixIcon: CupertinoIcons.map_pin,
+              ),
+              const SizedBox(height: 12),
+              IosTextField(
+                controller: cityController,
+                label: 'Điểm đến',
+                placeholder: 'Thành phố',
+                prefixIcon: CupertinoIcons.location,
+              ),
+              const SizedBox(height: 12),
+              _DateRow(
+                label: 'Bắt đầu',
+                value: start != null ? _formatShortDate(start!) : 'Chọn ngày',
+                onTap: () async {
+                  final picked = await _pickDate(sheetContext,
+                      initial: start ?? DateTime.now(), title: 'Ngày bắt đầu');
+                  if (picked != null) setSheetState(() => start = picked);
+                },
+              ),
+              const SizedBox(height: 10),
+              _DateRow(
+                label: 'Kết thúc',
+                value: end != null ? _formatShortDate(end!) : 'Chọn ngày',
+                onTap: () async {
+                  final picked = await _pickDate(sheetContext,
+                      initial: end ?? start ?? DateTime.now(),
+                      title: 'Ngày kết thúc');
+                  if (picked != null) setSheetState(() => end = picked);
+                },
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: IosPrimaryButton(
+                  label: 'Lưu chặng',
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    if (name.isEmpty) {
+                      await showIosMessage(sheetContext,
+                          message: 'Vui lòng nhập tên chặng.', isError: true);
+                      return;
+                    }
+                    try {
+                      await ref.read(tripLegsActionsProvider).add(
+                            widget.tripId,
+                            name: name,
+                            destinationCity: cityController.text.trim().isEmpty
+                                ? null
+                                : cityController.text.trim(),
+                            startDate: start,
+                            endDate: end,
+                          );
+                      if (sheetContext.mounted) {
+                        Navigator.of(sheetContext).pop();
+                      }
+                    } catch (e) {
+                      if (sheetContext.mounted) {
+                        await showIosMessage(
+                          sheetContext,
+                          message:
+                              'Không thể thêm chặng: ${e.toString().replaceAll('ApiException: ', '')}',
+                          isError: true,
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<DateTime?> _pickDate(
+    BuildContext context, {
+    required DateTime initial,
+    required String title,
+  }) async {
+    DateTime picked = initial;
+    return showCupertinoModalPopup<DateTime>(
+      context: context,
+      builder: (popupContext) => Container(
+        height: 320,
+        color: AppTheme.surfaceDark,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(title, style: AppTheme.titleSm()),
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => Navigator.of(popupContext).pop(picked),
+                    child: const Text('Xong'),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: CupertinoDatePicker(
+                mode: CupertinoDatePickerMode.date,
+                initialDateTime: initial,
+                onDateTimeChanged: (value) => picked = value,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Lets the owner shift the trip's start/end dates — e.g. when an added
+  /// event/activity falls outside the current range, the day plan can be
+  /// extended to fit it. Persists via UpdateTrip (PUT /trips/{id}).
+  Future<void> _showEditTripDates(
+    BuildContext context,
+    TripDetailModel? details,
+  ) async {
+    final now = DateTime.now();
+    var start = details?.startDate ?? now;
+    var end = details?.endDate ?? start.add(const Duration(days: 2));
+
+    await showGlassBottomSheet<void>(
+      context: context,
+      heightFactor: 0.5,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => GlassBottomSheetScaffold(
+          title: 'Thay đổi thời gian',
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _DateRow(
+                  label: 'Bắt đầu',
+                  value: _formatShortDate(start),
+                  onTap: () async {
+                    final picked = await _pickDate(sheetContext,
+                        initial: start, title: 'Ngày bắt đầu');
+                    if (picked != null) {
+                      setSheetState(() {
+                        start = picked;
+                        if (end.isBefore(start)) end = start;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                _DateRow(
+                  label: 'Kết thúc',
+                  value: _formatShortDate(end),
+                  onTap: () async {
+                    final picked = await _pickDate(sheetContext,
+                        initial: end, title: 'Ngày kết thúc');
+                    if (picked != null) {
+                      setSheetState(() {
+                        end = picked.isBefore(start) ? start : picked;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: IosPrimaryButton(
+                    label: 'Lưu thời gian',
+                    onPressed: () async {
+                      try {
+                        await ref.read(updateTripDatesProvider)(
+                          widget.tripId,
+                          startDate: start,
+                          endDate: end,
+                        );
+                        _refreshTripData();
+                        if (sheetContext.mounted) {
+                          Navigator.of(sheetContext).pop();
+                        }
+                        if (context.mounted) {
+                          await showIosMessage(context,
+                              message: 'Đã cập nhật thời gian chuyến đi.');
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          await showIosMessage(
+                            context,
+                            message:
+                                'Không thể cập nhật: ${e.toString().replaceAll('ApiException: ', '')}',
+                            isError: true,
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showTripSettings(
     BuildContext context,
     AsyncValue<TripDetailModel> detailsState,
@@ -935,6 +1288,14 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                     _showMembersManager(context, detailsState);
                   },
                 ),
+                _SettingsActionTile(
+                  icon: CupertinoIcons.map_pin_ellipse,
+                  title: 'Quản lý chặng',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _showLegsManager(context);
+                  },
+                ),
               ],
             ),
             const SizedBox(height: 14),
@@ -949,8 +1310,10 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
                 _SettingsActionTile(
                   icon: CupertinoIcons.calendar,
                   title: 'Thay đổi ngày',
-                  onTap: () =>
-                      _showSettingPlaceholder(sheetContext, 'Thay đổi ngày'),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _showEditTripDates(context, details);
+                  },
                 ),
                 _SettingsActionTile(
                   icon: CupertinoIcons.photo,
@@ -1911,6 +2274,11 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
     );
   }
 
+  /// Expense creation is scan-only (no manual entry): the user picks whether
+  /// they're scanning an itemized bill or a bank-transfer slip, and both go
+  /// through the on-device OCR + review flow (ScanBillScreen ->
+  /// ScanResultReviewScreen). The review screen still allows editing every
+  /// field before saving, keeping a human in the loop.
   void _showAddExpenseSheet(
     BuildContext context,
     AsyncValue<TripDetailModel> detailsState,
@@ -1921,336 +2289,51 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen> {
       error: (err, stack) =>
           showIosMessage(context, message: err.toString(), isError: true),
       data: (details) {
-        final descController = TextEditingController();
-        final amountController = TextEditingController();
-        var selectedSplitType = 0;
-        final selectedUserIds = details.members
-            .map((member) => member.userId)
-            .toSet();
-        final customAmountControllers = {
-          for (final member in details.members)
-            member.userId: TextEditingController(),
-        };
+        void openScanner(ScanMode mode) {
+          Navigator.of(context).push(
+            CupertinoPageRoute(
+              builder: (_) => ScanBillScreen(
+                tripId: widget.tripId,
+                baseCurrency: widget.baseCurrency,
+                members: details.members,
+                destination: details.destinationCity,
+                mode: mode,
+              ),
+            ),
+          );
+        }
 
         showCupertinoModalPopup<void>(
           context: context,
-          builder: (sheetContext) {
-            return SafeArea(
-              child: CupertinoPopupSurface(
-                child: SizedBox(
-                  height: MediaQuery.of(sheetContext).size.height * 0.82,
-                  child: StatefulBuilder(
-                    builder: (context, setSheetState) {
-                      return Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                            child: Row(
-                              children: [
-                                CupertinoButton(
-                                  padding: EdgeInsets.zero,
-                                  onPressed: () =>
-                                      Navigator.of(sheetContext).pop(),
-                                  child: const Text('Hủy'),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  'Thêm chi tiêu',
-                                  style: AppTheme.titleSm(),
-                                ),
-                                const Spacer(),
-                                CupertinoButton(
-                                  padding: EdgeInsets.zero,
-                                  onPressed: () {
-                                    Navigator.of(sheetContext).pop();
-                                    Navigator.of(context).push(
-                                      CupertinoPageRoute(
-                                        builder: (_) => ScanBillScreen(
-                                          tripId: widget.tripId,
-                                          baseCurrency: widget.baseCurrency,
-                                          members: details.members,
-                                          destination: details.destinationCity,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  child: const Icon(
-                                    CupertinoIcons.camera,
-                                    size: 20,
-                                  ),
-                                ),
-                                CupertinoButton(
-                                  padding: EdgeInsets.zero,
-                                  onPressed: () => _submitExpense(
-                                    context: context,
-                                    sheetContext: sheetContext,
-                                    details: details,
-                                    descController: descController,
-                                    amountController: amountController,
-                                    selectedSplitType: selectedSplitType,
-                                    selectedUserIds: selectedUserIds,
-                                    customAmountControllers:
-                                        customAmountControllers,
-                                  ),
-                                  child: const Text('Thêm'),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: ListView(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                              children: [
-                                IosTextField(
-                                  controller: descController,
-                                  label: 'Nội dung',
-                                  placeholder: 'Ăn tối, taxi, khách sạn...',
-                                  prefixIcon: CupertinoIcons.doc_text,
-                                ),
-                                const SizedBox(height: 14),
-                                IosTextField(
-                                  controller: amountController,
-                                  label: 'Tổng tiền',
-                                  placeholder: '0 ${widget.baseCurrency}',
-                                  prefixIcon: CupertinoIcons.money_dollar,
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: const [
-                                    MoneyInputFormatter(),
-                                  ],
-                                  onChanged: (_) => setSheetState(() {}),
-                                ),
-                                _AmountSuggestionChips(
-                                  input: amountController.text,
-                                  currency: widget.baseCurrency,
-                                  onSelected: (amount) {
-                                    _setMoneyInputValue(
-                                      amountController,
-                                      amount,
-                                    );
-                                    setSheetState(() {});
-                                  },
-                                ),
-                                const SizedBox(height: 18),
-                                Text(
-                                  'Cách chia',
-                                  style: AppTheme.labelSm(
-                                    color: CupertinoColors.secondaryLabel
-                                        .resolveFrom(context),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                CupertinoSlidingSegmentedControl<int>(
-                                  groupValue: selectedSplitType,
-                                  children: const {
-                                    0: Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      child: Text('Đều'),
-                                    ),
-                                    1: Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      child: Text('Tùy chỉnh'),
-                                    ),
-                                    3: Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      child: Text('Quỹ'),
-                                    ),
-                                  },
-                                  onValueChanged: (value) {
-                                    if (value != null) {
-                                      setSheetState(
-                                        () => selectedSplitType = value,
-                                      );
-                                    }
-                                  },
-                                ),
-                                const SizedBox(height: 16),
-                                if (selectedSplitType == 0)
-                                  IosSection(
-                                    header: 'Người tham gia chia đều',
-                                    children: details.members.map((member) {
-                                      final checked = selectedUserIds.contains(
-                                        member.userId,
-                                      );
-                                      return IosListTile(
-                                        icon: CupertinoIcons.person,
-                                        title: member.nickName ?? 'Thành viên',
-                                        trailing: CupertinoSwitch(
-                                          value: checked,
-                                          onChanged: (value) {
-                                            setSheetState(() {
-                                              if (value) {
-                                                selectedUserIds.add(
-                                                  member.userId,
-                                                );
-                                              } else {
-                                                selectedUserIds.remove(
-                                                  member.userId,
-                                                );
-                                              }
-                                            });
-                                          },
-                                        ),
-                                      );
-                                    }).toList(),
-                                  )
-                                else if (selectedSplitType == 1)
-                                  Column(
-                                    children: details.members.map((member) {
-                                      return Padding(
-                                        padding: const EdgeInsets.only(
-                                          bottom: 12,
-                                        ),
-                                        child: IosTextField(
-                                          controller:
-                                              customAmountControllers[member
-                                                  .userId]!,
-                                          label:
-                                              member.nickName ?? 'Thành viên',
-                                          placeholder: '0',
-                                          prefixIcon:
-                                              CupertinoIcons.money_dollar,
-                                          keyboardType: TextInputType.number,
-                                          inputFormatters: const [
-                                            MoneyInputFormatter(),
-                                          ],
-                                        ),
-                                      );
-                                    }).toList(),
-                                  )
-                                else
-                                  const IosSection(
-                                    footer:
-                                        'Khoản chi này sẽ được thanh toán trực tiếp từ quỹ nhóm và không phát sinh nợ mới.',
-                                    children: [
-                                      IosListTile(
-                                        icon: CupertinoIcons.creditcard,
-                                        iconColor: AppTheme.iosBlue,
-                                        title: 'Trả bằng quỹ nhóm',
-                                      ),
-                                    ],
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
+          builder: (actionContext) => CupertinoActionSheet(
+            title: const Text('Thêm chi phí'),
+            message: const Text(
+                'Quét hình ảnh để tự động điền — không cần nhập tay.'),
+            actions: [
+              CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(actionContext).pop();
+                  openScanner(ScanMode.bill);
+                },
+                child: const Text('📷 Quét hóa đơn'),
               ),
-            );
-          },
+              CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(actionContext).pop();
+                  openScanner(ScanMode.transfer);
+                },
+                child: const Text('🏦 Quét biên lai chuyển khoản'),
+              ),
+            ],
+            cancelButton: CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () => Navigator.of(actionContext).pop(),
+              child: const Text('Hủy'),
+            ),
+          ),
         );
       },
     );
-  }
-
-  Future<void> _submitExpense({
-    required BuildContext context,
-    required BuildContext sheetContext,
-    required TripDetailModel details,
-    required TextEditingController descController,
-    required TextEditingController amountController,
-    required int selectedSplitType,
-    required Set<String> selectedUserIds,
-    required Map<String, TextEditingController> customAmountControllers,
-  }) async {
-    final desc = descController.text.trim();
-    final totalAmount = parseMoneyInput(amountController.text.trim());
-    if (desc.isEmpty || totalAmount == null || totalAmount <= 0) {
-      await showIosMessage(
-        context,
-        message: 'Vui lòng nhập nội dung và số tiền hợp lệ.',
-        isError: true,
-      );
-      return;
-    }
-
-    var splits = <Map<String, dynamic>>[];
-    if (selectedSplitType == 0) {
-      if (selectedUserIds.isEmpty) {
-        await showIosMessage(
-          context,
-          message: 'Vui lòng chọn ít nhất một người tham gia chia tiền.',
-          isError: true,
-        );
-        return;
-      }
-      splits = selectedUserIds
-          .map(
-            (userId) => {
-              'userId': userId,
-              'amount': null,
-              'percentage': null,
-            },
-          )
-          .toList();
-    } else if (selectedSplitType == 1) {
-      var customTotal = 0.0;
-      for (final member in details.members) {
-        final amount = parseMoneyInput(
-          customAmountControllers[member.userId]?.text.trim() ?? '',
-        );
-        if (amount != null && amount > 0) {
-          customTotal += amount;
-          splits.add({
-            'userId': member.userId,
-            'amount': amount,
-            'percentage': null,
-          });
-        }
-      }
-      if (customTotal != totalAmount) {
-        await showIosMessage(
-          context,
-          message:
-              'Tổng tiền tùy chỉnh (${formatMoney(customTotal)}) phải bằng tổng chi (${formatMoney(totalAmount)}).',
-          isError: true,
-        );
-        return;
-      }
-    } else if (selectedSplitType == 3) {
-      splits = details.members
-          .map(
-            (member) => {
-              'userId': member.userId,
-              'amount': null,
-              'percentage': null,
-            },
-          )
-          .toList();
-    }
-
-    try {
-      await ref
-          .read(tripExpensesProvider(widget.tripId).notifier)
-          .createExpense(
-            description: desc,
-            amount: totalAmount,
-            currency: widget.baseCurrency,
-            tripBaseCurrency: widget.baseCurrency,
-            splitType: selectedSplitType,
-            splits: splits,
-          );
-      ref.invalidate(tripBalancesProvider(widget.tripId));
-      ref.invalidate(tripPoolControllerProvider(widget.tripId));
-      if (sheetContext.mounted) Navigator.of(sheetContext).pop();
-    } catch (e) {
-      if (context.mounted) {
-        await showIosMessage(
-          context,
-          message:
-              'Lỗi tạo chi tiêu: ${e.toString().replaceAll('ApiException: ', '')}',
-          isError: true,
-        );
-      }
-    }
   }
 
   Future<void> _handleLeaveTrip(BuildContext context) async {
@@ -4726,4 +4809,128 @@ class _WorkspaceCoverPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _WorkspaceCoverPainter oldDelegate) =>
       oldDelegate.seed != seed;
+}
+
+class _DateRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  const _DateRow({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceSecondaryDark,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(CupertinoIcons.calendar,
+                    color: AppTheme.iosBlue, size: 18),
+                const SizedBox(width: 10),
+                Text(label, style: AppTheme.bodyMd()),
+              ],
+            ),
+            Row(
+              children: [
+                Text(value, style: AppTheme.titleSm(color: AppTheme.iosBlue)),
+                const SizedBox(width: 4),
+                Icon(CupertinoIcons.chevron_right,
+                    size: 16,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LegCard extends StatelessWidget {
+  final int index;
+  final TripLegModel leg;
+  final String dateLabel;
+  final VoidCallback onDelete;
+
+  const _LegCard({
+    required this.index,
+    required this.leg,
+    required this.dateLabel,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceSecondaryDark,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: AppTheme.iosBlue,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              '${index + 1}',
+              style: const TextStyle(
+                color: CupertinoColors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(leg.name, style: AppTheme.titleSm()),
+                if (leg.destinationLabel != leg.name)
+                  Text(
+                    leg.destinationLabel,
+                    style: AppTheme.bodySm(
+                      color:
+                          CupertinoColors.secondaryLabel.resolveFrom(context),
+                    ),
+                  ),
+                if (dateLabel.isNotEmpty)
+                  Text(
+                    dateLabel,
+                    style: AppTheme.bodySm(
+                      color:
+                          CupertinoColors.secondaryLabel.resolveFrom(context),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            onPressed: onDelete,
+            child: const Icon(CupertinoIcons.trash,
+                color: AppTheme.iosRed, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
 }

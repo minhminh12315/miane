@@ -17,17 +17,6 @@ public static class AiServiceCollectionExtensions
 
         var options = section.Get<AiServiceOptions>() ?? new AiServiceOptions();
 
-        services.AddHttpClient<IAiOcrService, HttpAiOcrService>(client =>
-        {
-            client.BaseAddress = new Uri(options.BaseUrl);
-            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-
-            if (!string.IsNullOrWhiteSpace(options.ApiKey))
-            {
-                client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
-            }
-        });
-
         services.AddHttpClient<IAiTripPlannerService, HttpAiTripPlannerService>(client =>
         {
             client.BaseAddress = new Uri(options.BaseUrl);

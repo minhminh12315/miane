@@ -10,6 +10,10 @@ part 'scan_bill_controller.g.dart';
 
 enum ScanBillStatus { idle, recognizing, success, error }
 
+/// What kind of image is being scanned — an itemized bill/receipt, or a
+/// bank-transfer slip (chuyển khoản). Selects the parsing strategy.
+enum ScanMode { bill, transfer }
+
 class ScanBillState {
   final ScanBillStatus status;
   final File? selectedImage;
@@ -49,25 +53,32 @@ class ScanBillController extends _$ScanBillController {
     return const ScanBillState();
   }
 
-  Future<void> scanReceipt(File imageFile, {String? fallbackDescription}) async {
+  Future<void> scanReceipt(
+    File imageFile, {
+    String? fallbackDescription,
+    ScanMode mode = ScanMode.bill,
+  }) async {
     state = state.copyWith(
       status: ScanBillStatus.recognizing,
       selectedImage: imageFile,
       errorMessage: null,
     );
 
+    final label = mode == ScanMode.transfer ? 'biên lai' : 'hóa đơn';
+
     try {
       final lines = await _recognizer!.recognizeLines(imageFile);
-      final result = VnReceiptParser().parse(
-        lines,
-        fallbackDescription: fallbackDescription,
-      );
+      final parser = VnReceiptParser();
+      final result = mode == ScanMode.transfer
+          ? parser.parseTransferSlip(lines,
+              fallbackDescription: fallbackDescription)
+          : parser.parse(lines, fallbackDescription: fallbackDescription);
 
       if (result.items.isEmpty && result.totalAmount <= 0) {
         state = state.copyWith(
           status: ScanBillStatus.error,
           errorMessage:
-              'Không thể đọc hóa đơn. Vui lòng chụp lại ảnh rõ hơn.',
+              'Không thể đọc $label. Vui lòng chụp lại ảnh rõ hơn.',
         );
         return;
       }
@@ -76,7 +87,7 @@ class ScanBillController extends _$ScanBillController {
     } catch (e) {
       state = state.copyWith(
         status: ScanBillStatus.error,
-        errorMessage: 'Không thể đọc hóa đơn. Vui lòng chụp lại ảnh rõ hơn.',
+        errorMessage: 'Không thể đọc $label. Vui lòng chụp lại ảnh rõ hơn.',
       );
     }
   }

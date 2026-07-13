@@ -478,6 +478,63 @@ namespace Trip.API.Migrations
                     b.ToTable("TripJoinRequests", (string)null);
                 });
 
+            modelBuilder.Entity("Trip.API.Domain.Entities.TripLeg", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DestinationCity")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("DestinationCountry")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("Latitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<decimal?>("Longitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StartDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TripId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TripId", "Order")
+                        .HasDatabaseName("IX_TripLegs_TripId_Order");
+
+                    b.ToTable("TripLegs", (string)null);
+                });
+
             modelBuilder.Entity("Trip.API.Domain.Entities.TripLocation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -564,6 +621,9 @@ namespace Trip.API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("RoleId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_TripMembers_UserId");
 
                     b.HasIndex("TripId", "UserId")
                         .IsUnique()
@@ -841,6 +901,17 @@ namespace Trip.API.Migrations
                 });
 
             modelBuilder.Entity("Trip.API.Domain.Entities.TripJoinRequest", b =>
+                {
+                    b.HasOne("Trip.API.Domain.Entities.TripEntity", "Trip")
+                        .WithMany()
+                        .HasForeignKey("TripId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Trip");
+                });
+
+            modelBuilder.Entity("Trip.API.Domain.Entities.TripLeg", b =>
                 {
                     b.HasOne("Trip.API.Domain.Entities.TripEntity", "Trip")
                         .WithMany()

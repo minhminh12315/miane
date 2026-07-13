@@ -19,6 +19,7 @@ class ScanBillScreen extends ConsumerStatefulWidget {
   final String baseCurrency;
   final List<TripMemberModel> members;
   final String? destination;
+  final ScanMode mode;
 
   const ScanBillScreen({
     super.key,
@@ -26,6 +27,7 @@ class ScanBillScreen extends ConsumerStatefulWidget {
     required this.baseCurrency,
     required this.members,
     this.destination,
+    this.mode = ScanMode.bill,
   });
 
   @override
@@ -49,6 +51,7 @@ class _ScanBillScreenState extends ConsumerState<ScanBillScreen> {
     await ref.read(scanBillControllerProvider.notifier).scanReceipt(
           File(picked.path),
           fallbackDescription: widget.destination,
+          mode: widget.mode,
         );
   }
 
@@ -79,10 +82,13 @@ class _ScanBillScreenState extends ConsumerState<ScanBillScreen> {
       }
     });
 
+    final isTransfer = widget.mode == ScanMode.transfer;
+    final noun = isTransfer ? 'biên lai chuyển khoản' : 'hóa đơn';
+
     return CupertinoPageScaffold(
       backgroundColor: AppTheme.canvasDark,
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('Quét hóa đơn'),
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(isTransfer ? 'Quét biên lai' : 'Quét hóa đơn'),
       ),
       child: SafeArea(
         child: Padding(
@@ -103,7 +109,7 @@ class _ScanBillScreenState extends ConsumerState<ScanBillScreen> {
               if (state.status == ScanBillStatus.recognizing) ...[
                 const IosLoading(),
                 const SizedBox(height: 12),
-                Text('Đang quét hóa đơn...', style: AppTheme.bodyMd()),
+                Text('Đang quét $noun...', style: AppTheme.bodyMd()),
               ] else ...[
                 if (state.status == ScanBillStatus.error &&
                     state.errorMessage != null)
@@ -116,7 +122,9 @@ class _ScanBillScreenState extends ConsumerState<ScanBillScreen> {
                     ),
                   ),
                 IosPrimaryButton(
-                  label: '📷 Chụp ảnh hóa đơn',
+                  label: isTransfer
+                      ? '📷 Chụp biên lai chuyển khoản'
+                      : '📷 Chụp ảnh hóa đơn',
                   onPressed: () => _pick(ImageSource.camera),
                 ),
                 const SizedBox(height: 12),

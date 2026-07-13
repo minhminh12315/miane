@@ -93,7 +93,9 @@ public class TripsController : ControllerBase
             GetUserId(),
             request.Name,
             request.Description,
-            request.Status), ct);
+            request.Status,
+            request.StartDate,
+            request.EndDate), ct);
 
         return NoContent();
     }
@@ -134,4 +136,9 @@ public sealed record CreateTripRequest(
     string? CoverImagePrompt,
     string? CoverImageLandmark);
 public sealed record JoinTripRequest(string InviteCode, string? NickName);
-public sealed record UpdateTripRequest(string? Name, string? Description, Trip.API.Domain.Enums.TripStatus? Status);
+public sealed record UpdateTripRequest(
+    string? Name,
+    string? Description,
+    Trip.API.Domain.Enums.TripStatus? Status,
+    DateTime? StartDate = null,
+    DateTime? EndDate = null);

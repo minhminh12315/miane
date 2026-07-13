@@ -1,5 +1,6 @@
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
+import '../../domain/models/trip_leg_model.dart';
 import '../../domain/models/trip_models.dart';
 import '../../domain/repositories/trip_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -126,6 +127,61 @@ class TripRepositoryImpl implements TripRepository {
   @override
   Future<void> deleteTripFile(String tripId, String fileId) async {
     await _apiClient.delete(ApiEndpoints.tripFile(tripId, fileId));
+  }
+
+  @override
+  Future<void> updateTripDates(
+    String tripId, {
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    await _apiClient.put(
+      '${ApiEndpoints.trips}/$tripId',
+      body: {
+        if (startDate != null) 'startDate': startDate.toUtc().toIso8601String(),
+        if (endDate != null) 'endDate': endDate.toUtc().toIso8601String(),
+      },
+    );
+  }
+
+  @override
+  Future<List<TripLegModel>> getLegs(String tripId) async {
+    final response = await _apiClient.get(ApiEndpoints.tripLegs(tripId));
+    if (response is List) {
+      return response
+          .map((json) => TripLegModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    }
+    return [];
+  }
+
+  @override
+  Future<void> addLeg(
+    String tripId, {
+    required String name,
+    String? destinationCity,
+    String? destinationCountry,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? notes,
+  }) async {
+    await _apiClient.post(
+      ApiEndpoints.tripLegs(tripId),
+      body: {
+        'name': name,
+        if (destinationCity != null) 'destinationCity': destinationCity,
+        if (destinationCountry != null)
+          'destinationCountry': destinationCountry,
+        if (startDate != null) 'startDate': startDate.toUtc().toIso8601String(),
+        if (endDate != null) 'endDate': endDate.toUtc().toIso8601String(),
+        if (notes != null) 'notes': notes,
+      },
+    );
+  }
+
+  @override
+  Future<void> deleteLeg(String tripId, String legId) async {
+    await _apiClient.delete(ApiEndpoints.tripLeg(tripId, legId));
   }
 }
 

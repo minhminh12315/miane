@@ -8,6 +8,7 @@ import '../../domain/models/trip_models.dart';
 import '../controllers/trips_provider.dart';
 import '../widgets/trip_creation_sheet.dart';
 import '../widgets/trip_share_sheet.dart';
+import 'join_trip_scan_screen.dart';
 import 'trip_workspace_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -159,6 +160,28 @@ class HomeScreen extends ConsumerWidget {
                 controller: nickController,
                 placeholder: 'Biệt danh của bạn',
                 prefixIcon: CupertinoIcons.person,
+              ),
+              const SizedBox(height: 6),
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                onPressed: () async {
+                  final scanned = await Navigator.of(context).push<String>(
+                    CupertinoPageRoute(
+                      builder: (_) => const JoinTripScanScreen(),
+                    ),
+                  );
+                  if (scanned != null && scanned.isNotEmpty) {
+                    codeController.text = scanned;
+                  }
+                },
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(CupertinoIcons.qrcode_viewfinder, size: 20),
+                    SizedBox(width: 6),
+                    Text('Quét mã QR'),
+                  ],
+                ),
               ),
             ],
           ),

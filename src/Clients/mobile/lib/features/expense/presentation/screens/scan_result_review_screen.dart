@@ -327,19 +327,24 @@ class _ItemEditor extends StatelessWidget {
       child: Column(
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
                 child: IosTextField(
                   controller: controllers.name,
-                  placeholder: 'Tên món',
+                  label: 'Tên món',
+                  placeholder: 'VD: Cà phê sữa đá',
                   onChanged: (_) => onChanged(),
                 ),
               ),
-              cupertino.CupertinoButton(
-                padding: const EdgeInsets.only(left: 8),
-                onPressed: onDelete,
-                child: const Icon(cupertino.CupertinoIcons.trash,
-                    color: AppTheme.iosRed, size: 18),
+              Padding(
+                padding: const EdgeInsets.only(left: 8, bottom: 4),
+                child: cupertino.CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: onDelete,
+                  child: const Icon(cupertino.CupertinoIcons.trash,
+                      color: AppTheme.iosRed, size: 18),
+                ),
               ),
             ],
           ),
@@ -350,7 +355,8 @@ class _ItemEditor extends StatelessWidget {
                 flex: 2,
                 child: IosTextField(
                   controller: controllers.price,
-                  placeholder: 'Đơn giá',
+                  label: 'Đơn giá',
+                  placeholder: '0',
                   keyboardType: TextInputType.number,
                   onChanged: (_) => onChanged(),
                 ),
@@ -359,7 +365,8 @@ class _ItemEditor extends StatelessWidget {
               Expanded(
                 child: IosTextField(
                   controller: controllers.quantity,
-                  placeholder: 'SL',
+                  label: 'Số lượng',
+                  placeholder: '1',
                   keyboardType: TextInputType.number,
                   onChanged: (_) => onChanged(),
                 ),

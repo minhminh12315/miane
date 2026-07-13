@@ -21,6 +21,11 @@ class ApiEndpoints {
   static String tripFile(String tripId, String fileId) =>
       '/trips/$tripId/files/$fileId';
 
+  static String tripLegs(String tripId) => '/trips/$tripId/legs';
+  static String tripLeg(String tripId, String legId) =>
+      '/trips/$tripId/legs/$legId';
+
+
   static const String expenses = '/expenses';
   static String tripExpenses(String tripId) => '/expenses/trip/$tripId';
   static String tripBalances(String tripId) =>

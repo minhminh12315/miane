@@ -18,6 +18,7 @@ public class TripDbContext : BaseDbContext
     public DbSet<TripFile> TripFiles => Set<TripFile>();
     public DbSet<TripWeatherCache> TripWeatherCache => Set<TripWeatherCache>();
     public DbSet<TripLocation> TripLocations => Set<TripLocation>();
+    public DbSet<TripLeg> TripLegs => Set<TripLeg>();
     public DbSet<TripShareLink> TripShareLinks => Set<TripShareLink>();
     public DbSet<TripJoinRequest> TripJoinRequests => Set<TripJoinRequest>();
 

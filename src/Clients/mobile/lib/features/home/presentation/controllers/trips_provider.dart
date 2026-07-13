@@ -1,9 +1,10 @@
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart'
-    show StateNotifier, StateNotifierProvider;
+    show Ref, StateNotifier, StateNotifierProvider;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../data/repositories/trip_repository_impl.dart';
+import '../../domain/models/trip_leg_model.dart';
 import '../../domain/models/trip_models.dart';
 
 part 'trips_provider.g.dart';
@@ -51,6 +52,31 @@ class Trips extends _$Trips {
   }
 }
 
+/// Updates a trip's start/end dates (e.g. when an added event falls outside
+/// the current range). Refreshes the trip detail + list so the day plan and
+/// date labels reflect the new range.
+final updateTripDatesProvider = Provider((ref) => _UpdateTripDates(ref));
+
+class _UpdateTripDates {
+  final Ref _ref;
+  _UpdateTripDates(this._ref);
+
+  Future<void> call(
+    String tripId, {
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final repo = _ref.read(tripRepositoryProvider);
+    await repo.updateTripDates(
+      tripId,
+      startDate: startDate,
+      endDate: endDate,
+    );
+    _ref.invalidate(tripDetailsProvider(tripId));
+    _ref.invalidate(tripsProvider);
+  }
+}
+
 final tripDetailsProvider =
     FutureProvider.family<TripDetailModel, String>((ref, tripId) async {
   final repo = ref.watch(tripRepositoryProvider);
@@ -62,6 +88,47 @@ final tripFilesProvider =
   final repo = ref.watch(tripRepositoryProvider);
   return repo.getTripFiles(tripId);
 });
+
+/// Legs (segments) of a multi-stop trip, ordered.
+final tripLegsProvider =
+    FutureProvider.family<List<TripLegModel>, String>((ref, tripId) async {
+  final repo = ref.watch(tripRepositoryProvider);
+  return repo.getLegs(tripId);
+});
+
+/// Mutations for trip legs (add/delete), invalidating the legs list after.
+final tripLegsActionsProvider = Provider((ref) => _TripLegsActions(ref));
+
+class _TripLegsActions {
+  final Ref _ref;
+  _TripLegsActions(this._ref);
+
+  Future<void> add(
+    String tripId, {
+    required String name,
+    String? destinationCity,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? notes,
+  }) async {
+    final repo = _ref.read(tripRepositoryProvider);
+    await repo.addLeg(
+      tripId,
+      name: name,
+      destinationCity: destinationCity,
+      startDate: startDate,
+      endDate: endDate,
+      notes: notes,
+    );
+    _ref.invalidate(tripLegsProvider(tripId));
+  }
+
+  Future<void> delete(String tripId, String legId) async {
+    final repo = _ref.read(tripRepositoryProvider);
+    await repo.deleteLeg(tripId, legId);
+    _ref.invalidate(tripLegsProvider(tripId));
+  }
+}
 
 class TripCoverMemory extends StateNotifier<Map<String, Uint8List>> {
   TripCoverMemory() : super(const {});
