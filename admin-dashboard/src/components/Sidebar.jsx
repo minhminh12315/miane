@@ -10,7 +10,6 @@ export default function Sidebar() {
       <nav>
         <NavLink to="/" end className="nav-link">Dashboard</NavLink>
         <NavLink to="/users" className="nav-link">Users</NavLink>
-        <NavLink to="/databases" className="nav-link">Databases</NavLink>
       </nav>
       <div className="sidebar-footer">
         <div className="sidebar-user">{user?.fullName}</div>
