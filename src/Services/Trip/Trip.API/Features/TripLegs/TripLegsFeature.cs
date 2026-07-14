@@ -92,7 +92,7 @@ public sealed class AddTripLegHandler : ICommandHandler<AddTripLegCommand, Guid>
             leg.EndDate.Value < leg.StartDate.Value)
         {
             throw new DomainException(
-                "Leg end date cannot be before its start date.",
+                "Ngày kết thúc chặng không được trước ngày bắt đầu.",
                 "INVALID_LEG_DATE_RANGE");
         }
     }
@@ -176,7 +176,20 @@ internal static class TripLegAuth
         if (member is null || (member.Role != MemberRole.Owner && member.Role != MemberRole.Admin))
         {
             throw new ForbiddenAccessException(
-                "Only the trip owner or admin can manage trip legs.");
+                "Chỉ chủ chuyến đi hoặc quản trị viên mới có thể quản lý chặng đi.");
+        }
+
+        var trip = await db.Trips
+            .Where(t => t.Id == tripId)
+            .Select(t => new { t.EndDate })
+            .FirstOrDefaultAsync(ct)
+            ?? throw new NotFoundException("Trip", tripId);
+
+        if (trip.EndDate.HasValue && trip.EndDate.Value.Date < DateTime.UtcNow.Date)
+        {
+            throw new DomainException(
+                "Chuyến đi đã kết thúc nên không thể thay đổi chặng đi.",
+                "TRIP_ALREADY_COMPLETED");
         }
     }
 }

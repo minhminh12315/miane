@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Trip.API.Features.CreateTrip;
+using Trip.API.Features.DeleteTrip;
 using Trip.API.Features.GetTrip;
 using Trip.API.Features.GetUserTrips;
 using Trip.API.Features.JoinTrip;
@@ -97,6 +98,13 @@ public class TripsController : ControllerBase
             request.StartDate,
             request.EndDate), ct);
 
+        return NoContent();
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteTrip(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteTripCommand(id, GetUserId()), ct);
         return NoContent();
     }
 

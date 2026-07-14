@@ -467,7 +467,7 @@ class _PhoneTravelMock extends StatelessWidget {
                                 ),
                                 const Spacer(),
                                 Text(
-                                  'Today',
+                                  'Hôm nay',
                                   style: AppTheme.bodySm(
                                     color: CupertinoColors.white
                                         .withValues(alpha: 0.48),
@@ -480,7 +480,7 @@ class _PhoneTravelMock extends StatelessWidget {
                               icon: CupertinoIcons.sun_max_fill,
                               color: AppTheme.iosGold,
                               text: '18° / 27° • Đà Nẵng',
-                              time: 'Now',
+                              time: 'Bây giờ',
                             ),
                             _TimelineRow(
                               icon: CupertinoIcons.airplane,

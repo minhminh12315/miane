@@ -123,7 +123,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                       message:
                           'Tìm kiếm trong lịch trình, chi phí, tài liệu và địa điểm sẽ được nối API ở bước sau.',
                     ),
-                    onMenu: () => _showTripSettings(context, detailsState),
+                    onMenu: () => setState(() => _selectedTab = 3),
                   ),
                 ),
                 Padding(
@@ -142,18 +142,18 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                       key: ValueKey(_selectedTab),
                       child: switch (_selectedTab) {
                         0 => _buildOverviewTab(
-                          expensesState,
-                          detailsState,
-                          filesState,
-                          coverBytes,
-                        ),
+                            expensesState,
+                            detailsState,
+                            filesState,
+                            coverBytes,
+                          ),
                         1 => _buildBalancesTab(
-                          balancesState,
-                          detailsState,
-                          userIdState,
-                        ),
+                            balancesState,
+                            detailsState,
+                            userIdState,
+                          ),
                         2 => _buildPoolTab(poolState, detailsState),
-                        _ => _buildMembersTab(detailsState),
+                        _ => _buildSettingsTab(detailsState),
                       },
                     ),
                   ),
@@ -182,9 +182,9 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     final destination = details?.destinationLabel ?? widget.destination;
     final baseCurrency = details?.baseCurrency ?? widget.baseCurrency;
     final days = _buildTripDays(details);
-    final selectedIndex = _selectedDayIndex >= days.length
-        ? days.length - 1
-        : _selectedDayIndex;
+    final locked = details?.isCompletedByDate ?? false;
+    final selectedIndex =
+        _selectedDayIndex >= days.length ? days.length - 1 : _selectedDayIndex;
     final selectedDay = days[selectedIndex];
     final selectedActivities = _sortedActivities(
       _dayActivities[selectedIndex] ?? const [],
@@ -218,7 +218,6 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                   baseCurrency: baseCurrency,
                   memberCount: details?.members.length ?? 1,
                   onShare: () => _showShareSheet(context, details),
-                  onSettings: () => _showTripSettings(context, detailsState),
                 ),
               ),
               _DaySelector(
@@ -238,6 +237,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                   day: selectedDay,
                   destination: destination,
                   activities: selectedActivities,
+                  locked: locked,
                   onAddActivity: () => _showAddActivitySheet(
                     selectedIndex,
                     selectedDay,
@@ -340,9 +340,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
 
                     return IosListTile(
                       icon: CupertinoIcons.arrow_right_arrow_left,
-                      iconColor: isOwedByMe
-                          ? AppTheme.iosRed
-                          : AppTheme.iosBlue,
+                      iconColor:
+                          isOwedByMe ? AppTheme.iosRed : AppTheme.iosBlue,
                       title:
                           '${isOwedByMe ? 'Bạn' : fromName} nợ ${debt.toUserId.toLowerCase() == currentUserId ? 'Bạn' : toName}',
                       subtitle: '${formatMoney(debt.amount)} ${debt.currency}',
@@ -442,70 +441,100 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     );
   }
 
-  Widget _buildMembersTab(AsyncValue<TripDetailModel> detailsState) {
+  Widget _buildSettingsTab(AsyncValue<TripDetailModel> detailsState) {
     return _GlassTabScroll(
       onRefresh: () async => ref.invalidate(tripDetailsProvider(widget.tripId)),
       child: detailsState.when(
         loading: () => const IosLoading(),
         error: (err, stack) => IosEmptyState(
           icon: CupertinoIcons.exclamationmark_circle,
-          title: 'Không tải được thành viên',
+          title: 'Không tải được cài đặt',
           message: err.toString(),
         ),
-        data: (details) => Column(
-          children: [
-            IosSection(
-              header: 'Chia sẻ',
-              footer: 'Mã này dùng để mời thêm thành viên vào chuyến đi.',
-              children: [
-                IosListTile(
-                  icon: CupertinoIcons.qrcode,
-                  title: details.inviteCode,
-                  subtitle:
-                      details.shareUrl ??
-                      'https://miane.app/trip/${details.inviteCode}',
-                  onTap: () => _showShareSheet(context, details),
-                ),
-              ],
-            ),
-            IosSection(
-              header: 'Thành viên',
-              children: details.members.map((member) {
-                return IosListTile(
-                  icon: CupertinoIcons.person,
-                  title: member.nickName ?? 'Thành viên',
-                  subtitle:
-                      member.roleName ??
-                      (member.role == 0 ? 'Chủ chuyến đi' : 'Thành viên'),
-                  value: member.userTier == 1 ? 'PRO' : null,
-                  onTap: () => _showMemberActions(member),
-                );
-              }).toList(),
-            ),
-            IosSection(
-              header: 'Quản lý',
-              children: [
-                IosListTile(
-                  icon: CupertinoIcons.person_badge_plus,
-                  title: 'Mời thành viên',
-                  onTap: () => _showShareSheet(context, details),
-                ),
-                IosListTile(
-                  icon: CupertinoIcons.gear_solid,
-                  title: 'Cài đặt chuyến đi',
-                  onTap: () => _showTripSettings(context, detailsState),
-                ),
-                IosListTile(
-                  icon: CupertinoIcons.square_arrow_right,
-                  iconColor: AppTheme.iosRed,
-                  title: 'Rời chuyến đi',
-                  destructive: true,
-                  onTap: () => _handleLeaveTrip(context),
-                ),
-              ],
-            ),
-          ],
-        ),
+        data: (details) {
+          final locked = details.isCompletedByDate;
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 4, 18, 4),
+                child: _TripEditStateCard(details: details),
+              ),
+              IosSection(
+                header: 'Thông tin chuyến đi',
+                footer: locked
+                    ? 'Chuyến đã đi nên thông tin đã được khóa.'
+                    : 'Bạn có thể chỉnh tên và khoảng thời gian trước khi chuyến kết thúc.',
+                children: [
+                  IosListTile(
+                    icon: CupertinoIcons.textformat,
+                    title: 'Tên và thời gian',
+                    subtitle:
+                        '${details.name} • ${_formatTripDateRange(details)}',
+                    onTap: locked
+                        ? null
+                        : () => _showEditTripInfoSheet(context, details),
+                  ),
+                  IosListTile(
+                    icon: CupertinoIcons.map_pin_ellipse,
+                    title: 'Các chặng',
+                    subtitle: 'Quản lý điểm đến và ngày ở từng chặng',
+                    onTap: locked ? null : () => _showLegsManager(context),
+                  ),
+                ],
+              ),
+              IosSection(
+                header: 'Chia sẻ',
+                footer: 'Mã này dùng để mời thêm thành viên vào chuyến đi.',
+                children: [
+                  IosListTile(
+                    icon: CupertinoIcons.qrcode,
+                    title: details.inviteCode,
+                    subtitle: details.shareUrl ??
+                        'https://miane.app/trip/${details.inviteCode}',
+                    onTap: () => _showShareSheet(context, details),
+                  ),
+                  IosListTile(
+                    icon: CupertinoIcons.person_badge_plus,
+                    title: 'Mời thành viên',
+                    onTap: () => _showShareSheet(context, details),
+                  ),
+                ],
+              ),
+              IosSection(
+                header: 'Thành viên',
+                children: [
+                  IosListTile(
+                    icon: CupertinoIcons.person_2_fill,
+                    title: 'Quản lý thành viên',
+                    subtitle: '${details.members.length} người trong chuyến đi',
+                    onTap: () => _showMembersManager(context, detailsState),
+                  ),
+                  ...details.members.map((member) {
+                    return IosListTile(
+                      icon: CupertinoIcons.person,
+                      title: member.nickName ?? 'Thành viên',
+                      subtitle: member.displayRoleName,
+                      value: member.userTier == 1 ? 'VIP' : null,
+                      onTap: () => _showMemberActions(member),
+                    );
+                  }),
+                ],
+              ),
+              IosSection(
+                header: 'Tài khoản',
+                children: [
+                  IosListTile(
+                    icon: CupertinoIcons.square_arrow_right,
+                    iconColor: AppTheme.iosRed,
+                    title: 'Rời chuyến đi',
+                    destructive: true,
+                    onTap: () => _handleLeaveTrip(context),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -540,8 +569,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
       TripCreationResult(
         tripId: details?.id ?? widget.tripId,
         inviteCode: inviteCode,
-        shareUrl:
-            details?.shareUrl ??
+        shareUrl: details?.shareUrl ??
             (inviteCode.isEmpty
                 ? 'https://miane.app/trip/${widget.tripId}'
                 : 'https://miane.app/trip/$inviteCode'),
@@ -549,130 +577,157 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     );
   }
 
-  void _showAddActivitySheet(
+  bool get _tripEditsLocked =>
+      ref
+          .read(tripDetailsProvider(widget.tripId))
+          .valueOrNull
+          ?.isCompletedByDate ??
+      false;
+
+  Future<void> _showTripLockedMessage() {
+    return showIosMessage(
+      context,
+      message: 'Chuyến đi đã kết thúc nên không thể thay đổi lịch trình.',
+      isError: true,
+    );
+  }
+
+  Future<void> _showAddActivitySheet(
     int dayIndex,
     DateTime day,
     String destination, {
     String? initialCategory,
-  }) {
+  }) async {
+    if (_tripEditsLocked) {
+      await _showTripLockedMessage();
+      return;
+    }
+
     var selectedCategory = initialCategory ?? _activityCategories.first.label;
     var selectedTime = DateTime(day.year, day.month, day.day, 9);
     final searchController = TextEditingController();
 
-    showGlassBottomSheet<void>(
-      context: context,
-      heightFactor: 0.92,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final keyword = searchController.text.trim().toLowerCase();
-            final templates = _activityTemplates.where((template) {
-              final matchCategory =
-                  template.group == selectedCategory ||
-                  selectedCategory == 'Tất cả';
-              final matchSearch =
-                  keyword.isEmpty ||
-                  template.title.toLowerCase().contains(keyword) ||
-                  template.subtitle.toLowerCase().contains(keyword);
-              return matchCategory && matchSearch;
-            }).toList();
+    try {
+      await showGlassBottomSheet<void>(
+        context: context,
+        heightFactor: 0.92,
+        builder: (sheetContext) {
+          return StatefulBuilder(
+            builder: (context, setSheetState) {
+              final keyword = searchController.text.trim().toLowerCase();
+              final templates = _activityTemplates.where((template) {
+                final matchCategory = template.group == selectedCategory ||
+                    selectedCategory == 'Tất cả';
+                final matchSearch = keyword.isEmpty ||
+                    template.title.toLowerCase().contains(keyword) ||
+                    template.subtitle.toLowerCase().contains(keyword);
+                return matchCategory && matchSearch;
+              }).toList();
 
-            return GlassBottomSheetScaffold(
-              title: 'Hoạt động mới',
-              child: ListView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-                children: [
-                  IosTextField(
-                    controller: searchController,
-                    placeholder: 'Tìm hoạt động và địa điểm',
-                    prefixIcon: CupertinoIcons.search,
-                    onChanged: (_) => setSheetState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  _ActivityTimeSelector(
-                    timeLabel: _formatActivityTime(selectedTime),
-                    onTap: () => _showActivityTimePicker(
-                      context,
-                      day,
-                      selectedTime,
-                      (value) => setSheetState(() => selectedTime = value),
+              return GlassBottomSheetScaffold(
+                title: 'Hoạt động mới',
+                child: ListView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+                  children: [
+                    IosTextField(
+                      controller: searchController,
+                      placeholder: 'Tìm hoạt động và địa điểm',
+                      prefixIcon: CupertinoIcons.search,
+                      onChanged: (_) => setSheetState(() {}),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    height: 94,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      itemBuilder: (context, index) {
-                        final category = _activityCategories[index];
-                        return _ActivityCategoryButton(
-                          category: category,
-                          selected: selectedCategory == category.label,
-                          onTap: () => setSheetState(
-                            () => selectedCategory = category.label,
-                          ),
-                        );
-                      },
-                      separatorBuilder: (_, __) => const SizedBox(width: 12),
-                      itemCount: _activityCategories.length,
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                  Text(
-                    selectedCategory == 'Tất cả'
-                        ? 'Gợi ý cho ${_formatShortDate(day)}'
-                        : selectedCategory,
-                    style: AppTheme.headlineMd(),
-                  ),
-                  const SizedBox(height: 10),
-                  for (final template in templates)
-                    _ActivityTemplateTile(
-                      template: template,
-                      destination: destination,
-                      onTap: () {
-                        if (template.usesPlacePicker) {
-                          Navigator.of(sheetContext).pop();
-                          _showPlaceActivitySheet(
-                            dayIndex: dayIndex,
-                            day: day,
-                            destination: destination,
-                            template: template,
-                            selectedTime: selectedTime,
-                          );
-                          return;
-                        }
-
-                        _addActivity(
-                          dayIndex,
-                          template.toDraft(
-                            time: selectedTime,
-                            destination: destination,
-                          ),
-                        );
-                        Navigator.of(sheetContext).pop();
-                      },
-                    ),
-                  if (templates.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 40),
-                      child: IosEmptyState(
-                        icon: CupertinoIcons.search,
-                        title: 'Không có gợi ý phù hợp',
-                        message: 'Thử đổi từ khóa hoặc chọn nhóm khác.',
+                    const SizedBox(height: 12),
+                    _ActivityTimeSelector(
+                      timeLabel: _formatActivityTime(selectedTime),
+                      onTap: () => _showActivityTimePicker(
+                        context,
+                        day,
+                        selectedTime,
+                        (value) => setSheetState(() => selectedTime = value),
                       ),
                     ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      height: 94,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        itemBuilder: (context, index) {
+                          final category = _activityCategories[index];
+                          return _ActivityCategoryButton(
+                            category: category,
+                            selected: selectedCategory == category.label,
+                            onTap: () => setSheetState(
+                              () => selectedCategory = category.label,
+                            ),
+                          );
+                        },
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemCount: _activityCategories.length,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Text(
+                      selectedCategory == 'Tất cả'
+                          ? 'Gợi ý cho ${_formatShortDate(day)}'
+                          : selectedCategory,
+                      style: AppTheme.headlineMd(),
+                    ),
+                    const SizedBox(height: 10),
+                    for (final template in templates)
+                      _ActivityTemplateTile(
+                        template: template,
+                        destination: destination,
+                        onTap: () {
+                          if (template.usesPlacePicker) {
+                            Navigator.of(sheetContext).pop();
+                            _showPlaceActivitySheet(
+                              dayIndex: dayIndex,
+                              day: day,
+                              destination: destination,
+                              template: template,
+                              selectedTime: selectedTime,
+                            );
+                            return;
+                          }
+
+                          _addActivity(
+                            dayIndex,
+                            template.toDraft(
+                              time: selectedTime,
+                              destination: destination,
+                            ),
+                          );
+                          Navigator.of(sheetContext).pop();
+                        },
+                      ),
+                    if (templates.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 40),
+                        child: IosEmptyState(
+                          icon: CupertinoIcons.search,
+                          title: 'Không có gợi ý phù hợp',
+                          message: 'Thử đổi từ khóa hoặc chọn nhóm khác.',
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      searchController.dispose();
+    }
   }
 
   void _addActivity(int dayIndex, _TripActivityDraft activity) {
+    if (_tripEditsLocked) {
+      _showTripLockedMessage();
+      return;
+    }
+
     setState(() {
       final items = [
         ...(_dayActivities[dayIndex] ?? const <_TripActivityDraft>[]),
@@ -760,18 +815,25 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     final activities = _sortedActivities(
       _dayActivities[dayIndex] ?? const <_TripActivityDraft>[],
     );
+    final locked = _tripEditsLocked;
 
     showGlassBottomSheet<void>(
       context: context,
       heightFactor: 0.88,
       builder: (_) => GlassBottomSheetScaffold(
         title: 'Ngày ${dayIndex + 1}',
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: const Size(40, 40),
-          onPressed: () => _showAddActivitySheet(dayIndex, day, destination),
-          child: const Icon(CupertinoIcons.add_circled_solid),
-        ),
+        trailing: locked
+            ? null
+            : CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(40, 40),
+                onPressed: () => _showAddActivitySheet(
+                  dayIndex,
+                  day,
+                  destination,
+                ),
+                child: const Icon(CupertinoIcons.add_circled_solid),
+              ),
         child: ListView(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
@@ -785,7 +847,9 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
             const SizedBox(height: 16),
             if (activities.isEmpty)
               _EmptyItineraryCard(
-                onAdd: () => _showAddActivitySheet(dayIndex, day, destination),
+                onAdd: locked
+                    ? null
+                    : () => _showAddActivitySheet(dayIndex, day, destination),
               )
             else
               for (final activity in activities)
@@ -904,20 +968,20 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
   ]) {
     final base = switch (template.title) {
       'Nhà hàng' => [
-        _PlaceSuggestion('Nhà hàng địa phương', destination, '4.6'),
-        _PlaceSuggestion('Quán ăn gần trung tâm', destination, '4.4'),
-        _PlaceSuggestion('Bữa tối view đẹp', destination, '4.7'),
-      ],
+          _PlaceSuggestion('Nhà hàng địa phương', destination, '4.6'),
+          _PlaceSuggestion('Quán ăn gần trung tâm', destination, '4.4'),
+          _PlaceSuggestion('Bữa tối view đẹp', destination, '4.7'),
+        ],
       'Cà phê' => [
-        _PlaceSuggestion('Cà phê gần khách sạn', destination, '4.5'),
-        _PlaceSuggestion('Quán cà phê yên tĩnh', destination, '4.6'),
-        _PlaceSuggestion('Cà phê ngắm hoàng hôn', destination, '4.7'),
-      ],
+          _PlaceSuggestion('Cà phê gần khách sạn', destination, '4.5'),
+          _PlaceSuggestion('Quán cà phê yên tĩnh', destination, '4.6'),
+          _PlaceSuggestion('Cà phê ngắm hoàng hôn', destination, '4.7'),
+        ],
       _ => [
-        _PlaceSuggestion('Điểm tham quan nổi bật', destination, '4.7'),
-        _PlaceSuggestion('Khu phố đáng đi', destination, '4.5'),
-        _PlaceSuggestion('Điểm chụp ảnh đẹp', destination, '4.6'),
-      ],
+          _PlaceSuggestion('Điểm tham quan nổi bật', destination, '4.7'),
+          _PlaceSuggestion('Khu phố đáng đi', destination, '4.5'),
+          _PlaceSuggestion('Điểm chụp ảnh đẹp', destination, '4.6'),
+        ],
     };
 
     final cleanKeyword = keyword.trim().toLowerCase();
@@ -1019,7 +1083,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
 
   String _formatLegDates(TripLegModel leg) {
     if (leg.startDate == null && leg.endDate == null) return '';
-    final start = leg.startDate != null ? _formatShortDate(leg.startDate!) : '?';
+    final start =
+        leg.startDate != null ? _formatShortDate(leg.startDate!) : '?';
     final end = leg.endDate != null ? _formatShortDate(leg.endDate!) : '?';
     return '$start → $end';
   }
@@ -1159,34 +1224,51 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     );
   }
 
-  /// Lets the owner shift the trip's start/end dates — e.g. when an added
-  /// event/activity falls outside the current range, the day plan can be
-  /// extended to fit it. Persists via UpdateTrip (PUT /trips/{id}).
-  Future<void> _showEditTripDates(
+  Future<void> _showEditTripInfoSheet(
     BuildContext context,
-    TripDetailModel? details,
+    TripDetailModel details,
   ) async {
-    final now = DateTime.now();
-    var start = details?.startDate ?? now;
-    var end = details?.endDate ?? start.add(const Duration(days: 2));
+    if (details.isCompletedByDate) {
+      await showIosMessage(
+        context,
+        message: 'Chuyến đi đã kết thúc nên không thể thay đổi thông tin.',
+        isError: true,
+      );
+      return;
+    }
 
-    await showGlassBottomSheet<void>(
-      context: context,
-      heightFactor: 0.5,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => GlassBottomSheetScaffold(
-          title: 'Thay đổi thời gian',
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+    final nameController = TextEditingController(text: details.name);
+    final now = DateTime.now();
+    var start = details.startDate ?? now;
+    var end = details.endDate ?? start.add(const Duration(days: 2));
+
+    try {
+      await showGlassBottomSheet<void>(
+        context: context,
+        heightFactor: 0.62,
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (sheetContext, setSheetState) => GlassBottomSheetScaffold(
+            title: 'Chỉnh sửa chuyến đi',
+            child: ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
               children: [
+                IosTextField(
+                  controller: nameController,
+                  label: 'Tên chuyến đi',
+                  placeholder: 'Nhập tên chuyến đi',
+                  prefixIcon: CupertinoIcons.textformat,
+                ),
+                const SizedBox(height: 12),
                 _DateRow(
                   label: 'Bắt đầu',
                   value: _formatShortDate(start),
                   onTap: () async {
-                    final picked = await _pickDate(sheetContext,
-                        initial: start, title: 'Ngày bắt đầu');
+                    final picked = await _pickDate(
+                      sheetContext,
+                      initial: start,
+                      title: 'Ngày bắt đầu',
+                    );
                     if (picked != null) {
                       setSheetState(() {
                         start = picked;
@@ -1195,13 +1277,16 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                     }
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _DateRow(
                   label: 'Kết thúc',
                   value: _formatShortDate(end),
                   onTap: () async {
-                    final picked = await _pickDate(sheetContext,
-                        initial: end, title: 'Ngày kết thúc');
+                    final picked = await _pickDate(
+                      sheetContext,
+                      initial: end,
+                      title: 'Ngày kết thúc',
+                    );
                     if (picked != null) {
                       setSheetState(() {
                         end = picked.isBefore(start) ? start : picked;
@@ -1209,150 +1294,58 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                     }
                   },
                 ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: IosPrimaryButton(
-                    label: 'Lưu thời gian',
-                    onPressed: () async {
-                      try {
-                        await ref.read(updateTripDatesProvider)(
-                          widget.tripId,
-                          startDate: start,
-                          endDate: end,
-                        );
-                        _refreshTripData();
-                        if (sheetContext.mounted) {
-                          Navigator.of(sheetContext).pop();
-                        }
-                        if (context.mounted) {
-                          await showIosMessage(context,
-                              message: 'Đã cập nhật thời gian chuyến đi.');
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          await showIosMessage(
-                            context,
-                            message:
-                                'Không thể cập nhật: ${e.toString().replaceAll('ApiException: ', '')}',
-                            isError: true,
+                const SizedBox(height: 18),
+                IosPrimaryButton(
+                  label: 'Lưu thay đổi',
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    if (name.isEmpty) {
+                      await showIosMessage(
+                        sheetContext,
+                        message: 'Vui lòng nhập tên chuyến đi.',
+                        isError: true,
+                      );
+                      return;
+                    }
+
+                    try {
+                      await ref.read(tripRepositoryProvider).updateTripInfo(
+                            widget.tripId,
+                            name: name,
+                            startDate: start,
+                            endDate: end,
                           );
-                        }
+                      _refreshTripData();
+                      ref.invalidate(tripsProvider);
+                      if (sheetContext.mounted) {
+                        Navigator.of(sheetContext).pop();
                       }
-                    },
-                  ),
+                      if (context.mounted) {
+                        await showIosMessage(
+                          context,
+                          message: 'Đã cập nhật thông tin chuyến đi.',
+                        );
+                      }
+                    } catch (e) {
+                      if (sheetContext.mounted) {
+                        await showIosMessage(
+                          sheetContext,
+                          message:
+                              'Không thể cập nhật: ${e.toString().replaceAll('ApiException: ', '')}',
+                          isError: true,
+                        );
+                      }
+                    }
+                  },
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  void _showTripSettings(
-    BuildContext context,
-    AsyncValue<TripDetailModel> detailsState,
-  ) {
-    final details = detailsState.valueOrNull;
-    showGlassBottomSheet<void>(
-      context: context,
-      heightFactor: 0.78,
-      builder: (sheetContext) => GlassBottomSheetScaffold(
-        title: 'Quản lý chuyến đi',
-        child: ListView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-          children: [
-            _TripSettingsHeader(
-              title: details?.name ?? widget.tripName,
-              subtitle: details?.destinationLabel ?? widget.destination,
-              inviteCode: details?.inviteCode ?? '',
-            ),
-            const SizedBox(height: 16),
-            _SettingsGroup(
-              children: [
-                _SettingsActionTile(
-                  icon: CupertinoIcons.square_arrow_up,
-                  title: 'Chia sẻ chuyến đi',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _showShareSheet(context, details);
-                  },
-                ),
-                _SettingsActionTile(
-                  icon: CupertinoIcons.person_2_fill,
-                  title: 'Quản lý thành viên',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _showMembersManager(context, detailsState);
-                  },
-                ),
-                _SettingsActionTile(
-                  icon: CupertinoIcons.map_pin_ellipse,
-                  title: 'Quản lý chặng',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _showLegsManager(context);
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            _SettingsGroup(
-              children: [
-                _SettingsActionTile(
-                  icon: CupertinoIcons.textformat,
-                  title: 'Chỉnh sửa tên',
-                  onTap: () =>
-                      _showSettingPlaceholder(sheetContext, 'Chỉnh sửa tên'),
-                ),
-                _SettingsActionTile(
-                  icon: CupertinoIcons.calendar,
-                  title: 'Thay đổi ngày',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _showEditTripDates(context, details);
-                  },
-                ),
-                _SettingsActionTile(
-                  icon: CupertinoIcons.photo,
-                  title: 'Thay đổi nền',
-                  onTap: () =>
-                      _showSettingPlaceholder(sheetContext, 'Thay đổi nền'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            _SettingsGroup(
-              children: [
-                _SettingsActionTile(
-                  icon: CupertinoIcons.doc_on_doc,
-                  title: 'Sao chép chuyến đi',
-                  onTap: () => _showSettingPlaceholder(
-                    sheetContext,
-                    'Sao chép chuyến đi',
-                  ),
-                ),
-                _SettingsActionTile(
-                  icon: CupertinoIcons.bell_slash,
-                  title: 'Tắt thông báo',
-                  onTap: () =>
-                      _showSettingPlaceholder(sheetContext, 'Tắt thông báo'),
-                ),
-                _SettingsActionTile(
-                  icon: CupertinoIcons.trash,
-                  title: 'Xóa chuyến đi',
-                  destructive: true,
-                  onTap: () =>
-                      _showSettingPlaceholder(sheetContext, 'Xóa chuyến đi'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
+      );
+    } finally {
+      nameController.dispose();
+    }
   }
 
   void _showMembersManager(
@@ -1383,8 +1376,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
             children: [
               _InviteCodeCard(
                 inviteCode: details.inviteCode,
-                shareUrl:
-                    details.shareUrl ??
+                shareUrl: details.shareUrl ??
                     'https://miane.app/trip/${details.inviteCode}',
                 onShare: () => _showShareSheet(context, details),
               ),
@@ -1406,7 +1398,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
       context: context,
       builder: (context) => CupertinoActionSheet(
         title: Text(member.nickName ?? 'Thành viên'),
-        message: Text(member.roleName ?? 'Thành viên'),
+        message: Text(member.displayRoleName),
         actions: [
           CupertinoActionSheetAction(
             onPressed: () => Navigator.of(context).pop(),
@@ -1427,16 +1419,6 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
           child: const Text('Đóng'),
         ),
       ),
-    );
-  }
-
-  void _showSettingPlaceholder(BuildContext sheetContext, String feature) {
-    Navigator.of(sheetContext).pop();
-    showIosMessage(
-      context,
-      title: feature,
-      message:
-          'Luồng $feature đã có vị trí trong phần quản lý chuyến đi và sẽ nối API chỉnh sửa ở bước tiếp theo.',
     );
   }
 
@@ -1544,7 +1526,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                 icon: CupertinoIcons.doc_fill,
                 color: AppTheme.iosOrange,
                 title: 'Nhập tài liệu',
-                subtitle: 'PDF, Word, Excel, CSV, text, PowerPoint',
+                subtitle: 'PDF, Word, Excel, CSV, văn bản, PowerPoint',
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _pickImportedDocument();
@@ -1555,7 +1537,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                 icon: CupertinoIcons.square_pencil,
                 color: AppTheme.iosIndigo,
                 title: 'Ghi chú',
-                subtitle: 'Viết note nhanh rồi lưu cùng tài liệu chuyến đi',
+                subtitle: 'Viết ghi chú nhanh rồi lưu cùng tài liệu chuyến đi',
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _showNoteDocumentSheet();
@@ -1566,7 +1548,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                 icon: CupertinoIcons.text_badge_checkmark,
                 color: AppTheme.iosIndigo,
                 title: 'Chọn từ Ghi chú iPhone',
-                subtitle: 'Chọn ghi chú đã lưu/xuất trong Files',
+                subtitle: 'Chọn ghi chú đã lưu hoặc xuất trong Tệp',
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _pickIphoneNoteDocument();
@@ -1577,7 +1559,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                 icon: CupertinoIcons.link,
                 color: AppTheme.iosBlue,
                 title: 'Thêm bằng liên kết',
-                subtitle: 'Dán link booking, drive hoặc tài liệu online',
+                subtitle:
+                    'Dán liên kết đặt chỗ, Drive hoặc tài liệu trực tuyến',
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _showLinkDocumentSheet();
@@ -1611,14 +1594,14 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                 onPressed: isSaving
                     ? null
                     : () => _submitTripFile(
-                        sheetContext: sheetContext,
-                        nameController: nameController,
-                        urlController: urlController,
-                        tagsController: tagsController,
-                        folder: folder,
-                        setSaving: (value) =>
-                            setSheetState(() => isSaving = value),
-                      ),
+                          sheetContext: sheetContext,
+                          nameController: nameController,
+                          urlController: urlController,
+                          tagsController: tagsController,
+                          folder: folder,
+                          setSaving: (value) =>
+                              setSheetState(() => isSaving = value),
+                        ),
                 child: isSaving
                     ? const CupertinoActivityIndicator()
                     : const Text('Lưu'),
@@ -1683,14 +1666,14 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                 onPressed: isSaving
                     ? null
                     : () => _submitTripNote(
-                        sheetContext: sheetContext,
-                        titleController: titleController,
-                        contentController: contentController,
-                        tagsController: tagsController,
-                        folder: folder,
-                        setSaving: (value) =>
-                            setSheetState(() => isSaving = value),
-                      ),
+                          sheetContext: sheetContext,
+                          titleController: titleController,
+                          contentController: contentController,
+                          tagsController: tagsController,
+                          folder: folder,
+                          setSaving: (value) =>
+                              setSheetState(() => isSaving = value),
+                        ),
                 child: isSaving
                     ? const CupertinoActivityIndicator()
                     : const Text('Lưu'),
@@ -1881,9 +1864,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     bool showSuccess = true,
   }) async {
     try {
-      await ref
-          .read(tripRepositoryProvider)
-          .uploadTripFile(
+      await ref.read(tripRepositoryProvider).uploadTripFile(
             widget.tripId,
             draft,
           );
@@ -1936,9 +1917,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
           .where((tag) => tag.isNotEmpty)
           .toList(growable: false);
 
-      await ref
-          .read(tripRepositoryProvider)
-          .addTripNote(
+      await ref.read(tripRepositoryProvider).addTripNote(
             widget.tripId,
             TripNoteDraft(
               title: title,
@@ -1993,9 +1972,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
           .where((tag) => tag.isNotEmpty)
           .toList(growable: false);
 
-      await ref
-          .read(tripRepositoryProvider)
-          .addTripFile(
+      await ref.read(tripRepositoryProvider).addTripFile(
             widget.tripId,
             TripFileDraft(
               fileName: fileName,
@@ -2171,9 +2148,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     if (!confirmed) return;
 
     try {
-      await ref
-          .read(tripRepositoryProvider)
-          .deleteTripFile(
+      await ref.read(tripRepositoryProvider).deleteTripFile(
             widget.tripId,
             file.id,
           );
@@ -2395,7 +2370,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
 }
 
 const _documentFolders = <String>[
-  'General',
+  'Chung',
   'Ảnh',
   'Vé',
   'Booking',
@@ -2618,9 +2593,7 @@ class _DocumentVaultHeader extends StatelessWidget {
     final latest = files.isEmpty
         ? 'Chưa có'
         : _formatDocumentDate(
-            files
-                .map((file) => file.createdAt)
-                .reduce(
+            files.map((file) => file.createdAt).reduce(
                   (a, b) => a.isAfter(b) ? a : b,
                 ),
           );
@@ -3291,6 +3264,79 @@ class _FloatingCircle extends StatelessWidget {
   }
 }
 
+class _TripEditStateCard extends StatelessWidget {
+  final TripDetailModel details;
+
+  const _TripEditStateCard({required this.details});
+
+  @override
+  Widget build(BuildContext context) {
+    final status = details.timelineStatus;
+    final color = switch (status) {
+      TripTimelineStatus.upcoming => AppTheme.iosBlue,
+      TripTimelineStatus.ongoing => AppTheme.iosGreen,
+      TripTimelineStatus.completed => AppTheme.iosGray,
+    };
+    final icon = switch (status) {
+      TripTimelineStatus.upcoming => CupertinoIcons.clock_fill,
+      TripTimelineStatus.ongoing => CupertinoIcons.play_circle_fill,
+      TripTimelineStatus.completed => CupertinoIcons.lock_fill,
+    };
+    final message = switch (status) {
+      TripTimelineStatus.upcoming =>
+        'Chuyến chưa bắt đầu, bạn vẫn có thể chỉnh thông tin.',
+      TripTimelineStatus.ongoing =>
+        'Chuyến đang diễn ra, bạn vẫn có thể cập nhật thông tin.',
+      TripTimelineStatus.completed =>
+        'Chuyến đã đi, thông tin đã được khóa để giữ lịch sử.',
+    };
+
+    return ModernCard(
+      radius: 24,
+      padding: const EdgeInsets.all(16),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          color.withValues(alpha: 0.24),
+          AppTheme.surfaceDark.withValues(alpha: 0.92),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(details.timelineStatusLabel, style: AppTheme.titleSm()),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.bodySm(
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _WorkspaceSegmentedTabs extends StatelessWidget {
   final int selectedTab;
   final ValueChanged<int> onChanged;
@@ -3316,7 +3362,7 @@ class _WorkspaceSegmentedTabs extends StatelessWidget {
             label: 'Nợ',
           ),
           2: _SegmentLabel(icon: CupertinoIcons.creditcard, label: 'Quỹ'),
-          3: _SegmentLabel(icon: CupertinoIcons.person_2, label: 'Khách'),
+          3: _SegmentLabel(icon: CupertinoIcons.gear_solid, label: 'Cài đặt'),
         },
         onValueChanged: (value) {
           if (value != null) onChanged(value);
@@ -3366,7 +3412,6 @@ class _TripHeroWorkspaceCard extends StatelessWidget {
   final String baseCurrency;
   final int memberCount;
   final VoidCallback onShare;
-  final VoidCallback onSettings;
 
   const _TripHeroWorkspaceCard({
     required this.tripName,
@@ -3378,7 +3423,6 @@ class _TripHeroWorkspaceCard extends StatelessWidget {
     required this.baseCurrency,
     required this.memberCount,
     required this.onShare,
-    required this.onSettings,
   });
 
   @override
@@ -3426,11 +3470,6 @@ class _TripHeroWorkspaceCard extends StatelessWidget {
                     _HeroAction(
                       icon: CupertinoIcons.square_arrow_up,
                       onTap: onShare,
-                    ),
-                    const Spacer(),
-                    _HeroAction(
-                      icon: CupertinoIcons.gear_solid,
-                      onTap: onSettings,
                     ),
                   ],
                 ),
@@ -3660,6 +3699,7 @@ class _DayPlanPanel extends StatelessWidget {
   final DateTime day;
   final String destination;
   final List<_TripActivityDraft> activities;
+  final bool locked;
   final VoidCallback onAddActivity;
   final VoidCallback onOpenDay;
 
@@ -3668,6 +3708,7 @@ class _DayPlanPanel extends StatelessWidget {
     required this.day,
     required this.destination,
     required this.activities,
+    required this.locked,
     required this.onAddActivity,
     required this.onOpenDay,
   });
@@ -3704,12 +3745,12 @@ class _DayPlanPanel extends StatelessWidget {
               CupertinoButton(
                 padding: EdgeInsets.zero,
                 minimumSize: const Size(42, 42),
-                onPressed: onAddActivity,
+                onPressed: locked ? null : onAddActivity,
                 child: Container(
                   width: 42,
                   height: 42,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.iosBlue,
+                  decoration: BoxDecoration(
+                    color: locked ? AppTheme.iosGray : AppTheme.iosBlue,
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -3722,7 +3763,7 @@ class _DayPlanPanel extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           if (activities.isEmpty)
-            _EmptyItineraryCard(onAdd: onAddActivity)
+            _EmptyItineraryCard(onAdd: locked ? null : onAddActivity)
           else ...[
             for (final activity in activities)
               _TimelineActivityRow(activity: activity),
@@ -3746,12 +3787,13 @@ class _DayPlanPanel extends StatelessWidget {
 }
 
 class _EmptyItineraryCard extends StatelessWidget {
-  final VoidCallback onAdd;
+  final VoidCallback? onAdd;
 
   const _EmptyItineraryCard({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
+    final locked = onAdd == null;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -3764,12 +3806,22 @@ class _EmptyItineraryCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(CupertinoIcons.calendar_badge_plus, size: 34),
+          Icon(
+            locked
+                ? CupertinoIcons.lock_fill
+                : CupertinoIcons.calendar_badge_plus,
+            size: 34,
+          ),
           const SizedBox(height: 10),
-          Text('Chưa có hoạt động', style: AppTheme.titleSm()),
+          Text(
+            locked ? 'Lịch trình đã khóa' : 'Chưa có hoạt động',
+            style: AppTheme.titleSm(),
+          ),
           const SizedBox(height: 6),
           Text(
-            'Thêm chuyến bay, lưu trú, nhà hàng hoặc điểm tham quan cho ngày này.',
+            locked
+                ? 'Chuyến đã đi nên không thể thêm hoạt động mới.'
+                : 'Thêm chuyến bay, lưu trú, nhà hàng hoặc điểm tham quan cho ngày này.',
             textAlign: TextAlign.center,
             style: AppTheme.bodySm(
               color: CupertinoColors.secondaryLabel.resolveFrom(context),
@@ -3778,7 +3830,7 @@ class _EmptyItineraryCard extends StatelessWidget {
           const SizedBox(height: 12),
           CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            color: AppTheme.iosBlue,
+            color: locked ? AppTheme.iosGray : AppTheme.iosBlue,
             borderRadius: BorderRadius.circular(22),
             onPressed: onAdd,
             child: const Text(
@@ -4343,145 +4395,6 @@ class _DetailedActivityCard extends StatelessWidget {
   }
 }
 
-class _TripSettingsHeader extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final String inviteCode;
-
-  const _TripSettingsHeader({
-    required this.title,
-    required this.subtitle,
-    required this.inviteCode,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ModernGlass(
-      radius: 28,
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: AppTheme.iosBlue.withValues(alpha: 0.18),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              CupertinoIcons.flag_fill,
-              color: AppTheme.iosBlue,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTheme.titleSm(),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTheme.bodySm(
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (inviteCode.isNotEmpty)
-            Text(inviteCode, style: AppTheme.labelSm(color: AppTheme.iosBlue)),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsGroup extends StatelessWidget {
-  final List<Widget> children;
-
-  const _SettingsGroup({required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return ModernGlass(
-      radius: 24,
-      padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          for (var i = 0; i < children.length; i++) ...[
-            children[i],
-            if (i != children.length - 1)
-              Padding(
-                padding: const EdgeInsets.only(left: 58),
-                child: Container(height: 0.5, color: iosSeparator(context)),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsActionTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final bool destructive;
-  final VoidCallback onTap;
-
-  const _SettingsActionTile({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.destructive = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = destructive
-        ? AppTheme.iosRed
-        : CupertinoColors.label.resolveFrom(context);
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      minimumSize: Size.zero,
-      onPressed: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: destructive ? AppTheme.iosRed : AppTheme.iosBlue,
-              size: 22,
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                title,
-                style: AppTheme.bodyMd(
-                  color: color,
-                ).copyWith(fontWeight: FontWeight.w600),
-              ),
-            ),
-            Icon(
-              CupertinoIcons.chevron_right,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              size: 16,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _InviteCodeCard extends StatelessWidget {
   final String inviteCode;
   final String shareUrl;
@@ -4577,8 +4490,7 @@ class _MemberManageCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      member.roleName ??
-                          (isOwner ? 'Chủ chuyến đi' : 'Thành viên'),
+                      member.displayRoleName,
                       style: AppTheme.bodySm(
                         color: CupertinoColors.secondaryLabel.resolveFrom(
                           context,
@@ -4598,7 +4510,7 @@ class _MemberManageCard extends StatelessWidget {
                     color: AppTheme.iosBlue,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text('PRO', style: AppTheme.labelXs()),
+                  child: Text('VIP', style: AppTheme.labelXs()),
                 ),
             ],
           ),
@@ -4678,18 +4590,17 @@ class _WorkspaceCoverPainter extends CustomPainter {
     );
 
     final glow = Paint()
-      ..shader =
-          RadialGradient(
-            colors: [
-              AppTheme.iosBlue.withValues(alpha: 0.48),
-              CupertinoColors.transparent,
-            ],
-          ).createShader(
-            Rect.fromCircle(
-              center: Offset(size.width * 0.72, size.height * 0.28),
-              radius: size.width * 0.45,
-            ),
-          );
+      ..shader = RadialGradient(
+        colors: [
+          AppTheme.iosBlue.withValues(alpha: 0.48),
+          CupertinoColors.transparent,
+        ],
+      ).createShader(
+        Rect.fromCircle(
+          center: Offset(size.width * 0.72, size.height * 0.28),
+          radius: size.width * 0.45,
+        ),
+      );
     canvas.drawCircle(
       Offset(size.width * 0.72, size.height * 0.28),
       size.width * 0.45,

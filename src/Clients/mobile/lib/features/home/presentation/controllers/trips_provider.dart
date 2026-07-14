@@ -50,6 +50,13 @@ class Trips extends _$Trips {
     ref.invalidateSelf();
     await future;
   }
+
+  Future<void> deleteTrip(String tripId) async {
+    final repo = ref.read(tripRepositoryProvider);
+    await repo.deleteTrip(tripId);
+    ref.invalidateSelf();
+    await future;
+  }
 }
 
 /// Updates a trip's start/end dates (e.g. when an added event falls outside

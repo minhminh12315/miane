@@ -260,7 +260,7 @@ public class TripFilesController : ControllerBase
 
         if (file.UploadedByUserId != userId && !CanManageFiles(member))
         {
-            throw new ForbiddenAccessException("Only the uploader or a file manager can remove this trip file.");
+            throw new ForbiddenAccessException("Chỉ người tải lên hoặc người quản lý tệp mới có thể xóa tệp này.");
         }
 
         DeleteStoredContentIfLocal(tripId, file.FileUrl);

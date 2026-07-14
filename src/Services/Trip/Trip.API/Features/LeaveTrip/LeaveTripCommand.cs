@@ -29,7 +29,7 @@ public sealed class LeaveTripHandler : ICommandHandler<LeaveTripCommand>
         if (member.Role == MemberRole.Owner)
         {
             throw new DomainException(
-                "Trip owner cannot leave the trip. Transfer ownership to another member first.",
+                "Chủ chuyến đi không thể rời chuyến đi. Vui lòng chuyển quyền sở hữu cho thành viên khác trước.",
                 "OWNER_CANNOT_LEAVE");
         }
 

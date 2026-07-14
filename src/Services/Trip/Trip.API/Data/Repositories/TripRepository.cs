@@ -34,10 +34,12 @@ public class TripRepository : BaseRepository<TripEntity, TripDbContext>, ITripRe
 
     public async Task<int> GetActiveTripCountByUserAsync(Guid userId, CancellationToken cancellationToken = default)
     {
+        var today = DateTime.UtcNow.Date;
         return await DbContext.TripMembers
             .Where(m => m.UserId == userId)
             .Join(DbSet, m => m.TripId, t => t.Id, (m, t) => t)
-            .Where(t => t.Status == TripStatus.Active)
+            .Where(t => t.Status == TripStatus.Active &&
+                (!t.EndDate.HasValue || t.EndDate.Value >= today))
             .CountAsync(cancellationToken);
     }
 

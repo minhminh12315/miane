@@ -60,7 +60,7 @@ class ApiClient {
     }
 
     _processResponse(response);
-    throw ApiException(response.statusCode, 'Unable to download file.');
+    throw ApiException(response.statusCode, 'Không thể tải tệp.');
   }
 
   Future<dynamic> post(String endpoint,
@@ -155,7 +155,7 @@ class ApiClient {
       return responseBody;
     }
 
-    String errorMessage = 'Something went wrong';
+    String errorMessage = 'Đã xảy ra lỗi.';
     if (responseBody is Map && responseBody.containsKey('message')) {
       errorMessage = responseBody['message'];
     } else if (responseBody is Map && responseBody.containsKey('error')) {

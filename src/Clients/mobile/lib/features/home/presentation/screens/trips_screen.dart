@@ -45,10 +45,24 @@ class TripsScreen extends ConsumerWidget {
                 ),
                 data: (trips) {
                   final covers = ref.watch(tripCoverMemoryProvider);
-                  final activeTrips =
-                      trips.where((trip) => trip.status == 0).toList();
-                  final pastTrips =
-                      trips.where((trip) => trip.status != 0).toList();
+                  final ongoingTrips = trips
+                      .where(
+                        (trip) =>
+                            trip.timelineStatus == TripTimelineStatus.ongoing,
+                      )
+                      .toList();
+                  final upcomingTrips = trips
+                      .where(
+                        (trip) =>
+                            trip.timelineStatus == TripTimelineStatus.upcoming,
+                      )
+                      .toList();
+                  final pastTrips = trips
+                      .where(
+                        (trip) =>
+                            trip.timelineStatus == TripTimelineStatus.completed,
+                      )
+                      .toList();
 
                   if (trips.isEmpty) {
                     return const SliverFillRemaining(
@@ -69,21 +83,34 @@ class TripsScreen extends ConsumerWidget {
                           padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
                           child: _TripsSummaryCard(
                             total: trips.length,
-                            active: activeTrips.length,
+                            ongoing: ongoingTrips.length,
+                            upcoming: upcomingTrips.length,
                             finished: pastTrips.length,
                           ),
                         ),
-                        if (activeTrips.isNotEmpty)
+                        if (ongoingTrips.isNotEmpty)
                           _TripGroup(
                             title: 'Đang diễn ra',
-                            trips: activeTrips,
+                            trips: ongoingTrips,
                             covers: covers,
+                            onDeleteTrip: (trip) =>
+                                _confirmDeleteTrip(context, ref, trip),
+                          ),
+                        if (upcomingTrips.isNotEmpty)
+                          _TripGroup(
+                            title: 'Sắp diễn ra',
+                            trips: upcomingTrips,
+                            covers: covers,
+                            onDeleteTrip: (trip) =>
+                                _confirmDeleteTrip(context, ref, trip),
                           ),
                         if (pastTrips.isNotEmpty)
                           _TripGroup(
-                            title: 'Đã kết thúc',
+                            title: 'Đã đi',
                             trips: pastTrips,
                             covers: covers,
+                            onDeleteTrip: (trip) =>
+                                _confirmDeleteTrip(context, ref, trip),
                           ),
                         const SizedBox(height: 132),
                       ],
@@ -97,16 +124,52 @@ class TripsScreen extends ConsumerWidget {
       ),
     );
   }
+
+  Future<void> _confirmDeleteTrip(
+    BuildContext context,
+    WidgetRef ref,
+    TripModel trip,
+  ) async {
+    final confirmed = await showIosConfirm(
+      context,
+      title: 'Xóa chuyến đi?',
+      message:
+          'Chuyến "${trip.name}" sẽ bị xóa cùng thành viên, lịch trình và tệp liên quan. Thao tác này không thể hoàn tác.',
+      confirmLabel: 'Xóa',
+      destructive: true,
+    );
+    if (!confirmed) return;
+
+    try {
+      await ref.read(tripsProvider.notifier).deleteTrip(trip.id);
+      if (!context.mounted) return;
+      await showIosMessage(
+        context,
+        title: 'Đã xóa chuyến đi',
+        message: 'Chuyến "${trip.name}" đã được xóa.',
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      await showIosMessage(
+        context,
+        message:
+            'Không thể xóa chuyến đi: ${e.toString().replaceAll('ApiException: ', '')}',
+        isError: true,
+      );
+    }
+  }
 }
 
 class _TripsSummaryCard extends StatelessWidget {
   final int total;
-  final int active;
+  final int ongoing;
+  final int upcoming;
   final int finished;
 
   const _TripsSummaryCard({
     required this.total,
-    required this.active,
+    required this.ongoing,
+    required this.upcoming,
     required this.finished,
   });
 
@@ -150,7 +213,7 @@ class _TripsSummaryCard extends StatelessWidget {
                 Text('Tổng quan chuyến đi', style: AppTheme.titleSm()),
                 const SizedBox(height: 7),
                 Text(
-                  '$total chuyến đi • $active đang diễn ra • $finished đã kết thúc',
+                  '$total chuyến đi • $ongoing đang diễn ra • $upcoming sắp diễn ra • $finished đã đi',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppTheme.bodySm(
@@ -170,11 +233,13 @@ class _TripGroup extends StatelessWidget {
   final String title;
   final List<TripModel> trips;
   final Map<String, Uint8List> covers;
+  final ValueChanged<TripModel> onDeleteTrip;
 
   const _TripGroup({
     required this.title,
     required this.trips,
     required this.covers,
+    required this.onDeleteTrip,
   });
 
   @override
@@ -194,7 +259,11 @@ class _TripGroup extends StatelessWidget {
             ),
           ),
           for (final trip in trips)
-            _TripListCard(trip: trip, coverBytes: covers[trip.id]),
+            _TripListCard(
+              trip: trip,
+              coverBytes: covers[trip.id],
+              onDelete: trip.userRole == 0 ? () => onDeleteTrip(trip) : null,
+            ),
         ],
       ),
     );
@@ -204,12 +273,22 @@ class _TripGroup extends StatelessWidget {
 class _TripListCard extends StatelessWidget {
   final TripModel trip;
   final Uint8List? coverBytes;
+  final VoidCallback? onDelete;
 
-  const _TripListCard({required this.trip, this.coverBytes});
+  const _TripListCard({
+    required this.trip,
+    this.coverBytes,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final isActive = trip.status == 0;
+    final status = trip.timelineStatus;
+    final statusColor = switch (status) {
+      TripTimelineStatus.upcoming => AppTheme.iosGold,
+      TripTimelineStatus.ongoing => AppTheme.iosGreen,
+      TripTimelineStatus.completed => AppTheme.iosGray,
+    };
     final destination = trip.destinationLabel;
     final createdAgo = _relativeDate(trip.createdAt);
 
@@ -267,9 +346,8 @@ class _TripListCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _StatusPill(
-                            label: isActive ? 'Đang diễn ra' : 'Đã kết thúc',
-                            color:
-                                isActive ? AppTheme.iosGreen : AppTheme.iosGray,
+                            label: trip.timelineStatusLabel,
+                            color: statusColor,
                           ),
                           const SizedBox(height: 9),
                           Text(
@@ -309,21 +387,21 @@ class _TripListCard extends StatelessWidget {
                         Expanded(
                           child: _TripMetric(
                             icon: CupertinoIcons.person_2_fill,
-                            label: 'Members',
+                            label: 'Thành viên',
                             value: '${trip.memberCount}',
                           ),
                         ),
                         Expanded(
                           child: _TripMetric(
                             icon: CupertinoIcons.money_dollar,
-                            label: 'Currency',
+                            label: 'Tiền tệ',
                             value: trip.baseCurrency,
                           ),
                         ),
                         Expanded(
                           child: _TripMetric(
                             icon: CupertinoIcons.calendar,
-                            label: 'Created',
+                            label: 'Tạo lúc',
                             value: createdAgo,
                           ),
                         ),
@@ -334,6 +412,31 @@ class _TripListCard extends StatelessWidget {
                       children: [
                         _MemberAvatarStack(count: trip.memberCount),
                         const Spacer(),
+                        if (onDelete != null) ...[
+                          CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(44, 44),
+                            onPressed: onDelete,
+                            child: Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: AppTheme.iosRed.withValues(alpha: 0.14),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color:
+                                      AppTheme.iosRed.withValues(alpha: 0.24),
+                                ),
+                              ),
+                              child: const Icon(
+                                CupertinoIcons.trash,
+                                color: AppTheme.iosRed,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
                         CupertinoButton(
                           padding: EdgeInsets.zero,
                           minimumSize: const Size(44, 44),
@@ -394,9 +497,9 @@ class _TripListCard extends StatelessWidget {
 
   String _relativeDate(DateTime date) {
     final days = DateTime.now().difference(date).inDays;
-    if (days <= 0) return 'Today';
-    if (days < 30) return '${days}d';
-    return '${(days / 30).floor()}mo';
+    if (days <= 0) return 'Hôm nay';
+    if (days < 30) return '$days ngày';
+    return '${(days / 30).floor()} tháng';
   }
 }
 

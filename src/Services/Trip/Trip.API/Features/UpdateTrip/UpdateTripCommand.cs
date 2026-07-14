@@ -28,11 +28,18 @@ public sealed class UpdateTripHandler : ICommandHandler<UpdateTripCommand>
         var trip = await _tripRepository.GetWithMembersAsync(request.TripId, cancellationToken)
             ?? throw new NotFoundException("Trip", request.TripId);
 
+        if (IsCompletedByDate(trip.EndDate))
+        {
+            throw new DomainException(
+                "Chuyến đi đã kết thúc nên không thể thay đổi thông tin.",
+                "TRIP_ALREADY_COMPLETED");
+        }
+
         // Only Owner or Admin can update
         var member = trip.Members.FirstOrDefault(m => m.UserId == request.UserId);
         if (member is null || (member.Role != MemberRole.Owner && member.Role != MemberRole.Admin))
         {
-            throw new ForbiddenAccessException("Only the trip owner or admin can update trip details.");
+            throw new ForbiddenAccessException("Chỉ chủ chuyến đi hoặc quản trị viên mới có thể cập nhật chuyến đi.");
         }
 
         if (!string.IsNullOrWhiteSpace(request.Name))
@@ -54,7 +61,7 @@ public sealed class UpdateTripHandler : ICommandHandler<UpdateTripCommand>
             trip.EndDate.Value < trip.StartDate.Value)
         {
             throw new DomainException(
-                "Trip end date cannot be before the start date.",
+                "Ngày kết thúc chuyến đi không được trước ngày bắt đầu.",
                 "INVALID_TRIP_DATE_RANGE");
         }
 
@@ -62,5 +69,11 @@ public sealed class UpdateTripHandler : ICommandHandler<UpdateTripCommand>
         await _tripRepository.SaveChangesAsync(cancellationToken);
 
         return MediatR.Unit.Value;
+    }
+
+    private static bool IsCompletedByDate(DateTime? endDate)
+    {
+        if (!endDate.HasValue) return false;
+        return endDate.Value.Date < DateTime.UtcNow.Date;
     }
 }

@@ -1,5 +1,11 @@
 import 'dart:convert';
 
+enum TripTimelineStatus {
+  upcoming,
+  ongoing,
+  completed,
+}
+
 class TripModel {
   final String id;
   final String name;
@@ -81,6 +87,13 @@ class TripModel {
     if (startDate == null || endDate == null) return null;
     return endDate!.difference(startDate!).inDays + 1;
   }
+
+  TripTimelineStatus get timelineStatus =>
+      _resolveTripTimelineStatus(status, startDate, endDate);
+
+  String get timelineStatusLabel => _timelineStatusLabel(timelineStatus);
+
+  bool get isCompletedByDate => timelineStatus == TripTimelineStatus.completed;
 }
 
 class TripPlaceData {
@@ -260,6 +273,28 @@ class TripMemberModel {
           : DateTime.now(),
     );
   }
+
+  String get displayRoleName {
+    final normalized = (roleName ?? '').trim().toLowerCase();
+    switch (normalized) {
+      case 'owner':
+        return 'Chủ chuyến đi';
+      case 'admin':
+        return 'Quản trị viên';
+      case 'finance':
+        return 'Phụ trách chi phí';
+      case 'planner':
+        return 'Phụ trách lịch trình';
+      case 'photographer':
+        return 'Phụ trách ảnh';
+      case 'member':
+        return 'Thành viên';
+    }
+
+    if (role == 0) return 'Chủ chuyến đi';
+    if (role == 1) return 'Quản trị viên';
+    return 'Thành viên';
+  }
 }
 
 class TripFileModel {
@@ -291,7 +326,7 @@ class TripFileModel {
     return TripFileModel(
       id: (json['id'] ?? '').toString(),
       tripId: (json['tripId'] ?? '').toString(),
-      folder: (json['folder'] ?? 'General').toString(),
+      folder: (json['folder'] ?? 'Chung').toString(),
       fileName: (json['fileName'] ?? '').toString(),
       fileUrl: (json['fileUrl'] ?? '').toString(),
       contentType: json['contentType'] as String?,
@@ -304,7 +339,11 @@ class TripFileModel {
     );
   }
 
-  String get displayFolder => folder.trim().isEmpty ? 'General' : folder;
+  String get displayFolder {
+    final value = folder.trim();
+    if (value.isEmpty || value == 'General') return 'Chung';
+    return value;
+  }
 
   String get extension {
     final parts = fileName.split('.');
@@ -324,7 +363,7 @@ class TripFileDraft {
   const TripFileDraft({
     required this.fileName,
     required this.fileUrl,
-    this.folder = 'General',
+    this.folder = 'Chung',
     this.contentType,
     this.fileSizeBytes,
     this.tags = const [],
@@ -353,7 +392,7 @@ class TripLocalFileDraft {
     this.filePath,
     this.fileBytes,
     required this.fileName,
-    this.folder = 'General',
+    this.folder = 'Chung',
     this.tags = const [],
   });
 }
@@ -462,6 +501,13 @@ class TripDetailModel {
     if (startDate == null || endDate == null) return null;
     return endDate!.difference(startDate!).inDays + 1;
   }
+
+  TripTimelineStatus get timelineStatus =>
+      _resolveTripTimelineStatus(status, startDate, endDate);
+
+  String get timelineStatusLabel => _timelineStatusLabel(timelineStatus);
+
+  bool get isCompletedByDate => timelineStatus == TripTimelineStatus.completed;
 }
 
 List<String> _stringList(dynamic value) {
@@ -471,3 +517,30 @@ List<String> _stringList(dynamic value) {
       .where((item) => item.isNotEmpty)
       .toList(growable: false);
 }
+
+TripTimelineStatus _resolveTripTimelineStatus(
+  int rawStatus,
+  DateTime? startDate,
+  DateTime? endDate,
+) {
+  if (rawStatus != 0) return TripTimelineStatus.completed;
+
+  final today = _dateOnly(DateTime.now());
+  final start = startDate == null ? null : _dateOnly(startDate);
+  final end = endDate == null ? null : _dateOnly(endDate);
+
+  if (end != null && end.isBefore(today)) return TripTimelineStatus.completed;
+  if (start != null && start.isAfter(today)) return TripTimelineStatus.upcoming;
+  return TripTimelineStatus.ongoing;
+}
+
+String _timelineStatusLabel(TripTimelineStatus status) {
+  return switch (status) {
+    TripTimelineStatus.upcoming => 'Sắp diễn ra',
+    TripTimelineStatus.ongoing => 'Đang diễn ra',
+    TripTimelineStatus.completed => 'Đã đi',
+  };
+}
+
+DateTime _dateOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);

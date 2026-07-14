@@ -35,7 +35,7 @@ public sealed class RemoveMemberHandler : ICommandHandler<RemoveMemberCommand>
         var requestingMember = trip.Members.FirstOrDefault(m => m.UserId == request.RequestingUserId);
         if (requestingMember is null || (requestingMember.Role != MemberRole.Owner && requestingMember.Role != MemberRole.Admin))
         {
-            throw new ForbiddenAccessException("Only the trip owner or admin can remove members.");
+            throw new ForbiddenAccessException("Chỉ chủ chuyến đi hoặc quản trị viên mới có thể xóa thành viên.");
         }
 
         var targetMember = await _tripRepository.GetTripMemberAsync(request.TripId, request.TargetUserId, cancellationToken)
@@ -44,13 +44,13 @@ public sealed class RemoveMemberHandler : ICommandHandler<RemoveMemberCommand>
         // Cannot remove the owner
         if (targetMember.Role == MemberRole.Owner)
         {
-            throw new DomainException("Cannot remove the trip owner.", "CANNOT_REMOVE_OWNER");
+            throw new DomainException("Không thể xóa chủ chuyến đi.", "CANNOT_REMOVE_OWNER");
         }
 
         // Admin cannot remove another admin (only owner can)
         if (targetMember.Role == MemberRole.Admin && requestingMember.Role != MemberRole.Owner)
         {
-            throw new ForbiddenAccessException("Only the trip owner can remove admins.");
+            throw new ForbiddenAccessException("Chỉ chủ chuyến đi mới có thể xóa quản trị viên.");
         }
 
         _dbContext.TripMembers.Remove(targetMember);
