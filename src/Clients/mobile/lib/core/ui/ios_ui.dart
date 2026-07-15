@@ -1116,59 +1116,143 @@ Future<bool> showIosConfirm(
 
 Future<void> showIosProSheet(
   BuildContext context, {
-  String featureName = 'MIANE Pro',
+  String featureName = 'MIANE VIP',
 }) {
-  return showCupertinoModalPopup<void>(
+  return showGlassBottomSheet<void>(
     context: context,
-    builder: (sheetContext) => Consumer(
-      builder: (context, ref, _) {
-        final state = ref.watch(proUpgradeControllerProvider);
-        final isPurchasing = state.status == ProUpgradeStatus.purchasing;
+    heightFactor: 0.58,
+    builder: (_) => _VipUpgradeSheet(featureName: featureName),
+  );
+}
 
-        ref.listen(proUpgradeControllerProvider, (previous, next) {
-          if (next.status == ProUpgradeStatus.success) {
-            ref.read(proUpgradeControllerProvider.notifier).reset();
-            Navigator.of(sheetContext).pop();
-            showIosMessage(context, message: 'Chào mừng bạn đến với MIANE Pro!');
-          }
-        });
+class _VipUpgradeSheet extends ConsumerWidget {
+  final String featureName;
 
-        return CupertinoActionSheet(
-          title: const Text('Mở khóa MIANE Pro'),
-          message: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Tính năng "$featureName" thuộc gói Pro: không giới hạn chuyến đi, thành viên, đa tiền tệ, AI OCR và trợ lý lịch trình.',
-              ),
-              if (state.status == ProUpgradeStatus.error && state.errorMessage != null) ...[
+  const _VipUpgradeSheet({required this.featureName});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(proUpgradeControllerProvider);
+    final isPurchasing = state.status == ProUpgradeStatus.purchasing;
+
+    ref.listen(proUpgradeControllerProvider, (previous, next) {
+      if (next.status == ProUpgradeStatus.success) {
+        ref.read(proUpgradeControllerProvider.notifier).reset();
+        Navigator.of(context).pop();
+        showIosMessage(context, message: 'Chào mừng bạn đến với MIANE VIP!');
+      }
+    });
+
+    return GlassBottomSheetScaffold(
+      title: 'Mở khóa MIANE VIP',
+      child: ListView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+        children: [
+          ModernCard(
+            radius: AppTheme.radiusXl,
+            padding: const EdgeInsets.all(18),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF332817),
+                Color(0xFF142B2C),
+                Color(0xFF111111),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  CupertinoIcons.star_fill,
+                  color: AppTheme.iosGold,
+                  size: 34,
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Gói VIP cho "$featureName"',
+                  style: AppTheme.headlineMd(color: CupertinoColors.white),
+                ),
                 const SizedBox(height: 8),
                 Text(
-                  state.errorMessage!,
-                  style: const TextStyle(color: CupertinoColors.systemRed),
+                  'Không giới hạn chuyến đi, thành viên, đa tiền tệ, quét hóa đơn AI và trợ lý lịch trình.',
+                  style: AppTheme.bodyMd(
+                    color: CupertinoColors.white.withValues(alpha: 0.76),
+                  ).copyWith(height: 1.35),
                 ),
               ],
-            ],
+            ),
           ),
-          actions: [
-            CupertinoActionSheetAction(
-              isDefaultAction: true,
-              onPressed: isPurchasing
-                  ? () {}
-                  : () => ref.read(proUpgradeControllerProvider.notifier).purchasePro(),
-              child: isPurchasing
-                  ? const CupertinoActivityIndicator()
-                  : const Text('Nâng cấp 99.000 đ / tháng'),
+          const SizedBox(height: 14),
+          const _VipBenefitRow(
+            icon: CupertinoIcons.map_fill,
+            text: 'Tạo và tham gia chuyến đi không giới hạn',
+          ),
+          const _VipBenefitRow(
+            icon: CupertinoIcons.person_2_fill,
+            text: 'Không giới hạn số thành viên trong chuyến đi',
+          ),
+          const _VipBenefitRow(
+            icon: CupertinoIcons.doc_text_viewfinder,
+            text: 'Quét hóa đơn AI và tự động chia chi phí',
+          ),
+          if (state.status == ProUpgradeStatus.error &&
+              state.errorMessage != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              state.errorMessage!,
+              style: AppTheme.bodySm(color: AppTheme.iosRed),
             ),
           ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(sheetContext).pop(),
-            child: const Text('Để sau'),
+          const SizedBox(height: 18),
+          IosPrimaryButton(
+            label: isPurchasing ? 'Đang xử lý...' : 'Nâng cấp 99.000 đ / tháng',
+            isLoading: isPurchasing,
+            onPressed: isPurchasing
+                ? null
+                : () => ref
+                    .read(proUpgradeControllerProvider.notifier)
+                    .purchasePro(),
           ),
-        );
-      },
-    ),
-  );
+          const SizedBox(height: 10),
+          IosSecondaryButton(
+            label: 'Để sau',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VipBenefitRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _VipBenefitRow({
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          Icon(icon, color: AppTheme.iosGold, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTheme.bodyMd(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 String formatMoney(double amount) {

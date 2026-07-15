@@ -17,7 +17,7 @@ public class TierLimitExceededException : DomainException
         int currentCount,
         int maxAllowed)
         : base(
-            $"Gói MIANE Basic đã đạt giới hạn {limitType} ({currentCount}/{maxAllowed}). Nâng cấp lên MIANE Pro để bỏ giới hạn này.",
+            $"Bạn đã vượt giới hạn gói: {limitType}. Hiện có: {currentCount}, tối đa: {maxAllowed}. Nâng cấp MIANE VIP để dùng không giới hạn.",
             "TIER_LIMIT_EXCEEDED")
     {
         CurrentTier = currentTier;

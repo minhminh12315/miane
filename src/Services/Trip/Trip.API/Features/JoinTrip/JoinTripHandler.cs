@@ -29,7 +29,7 @@ public sealed class JoinTripHandler : ICommandHandler<JoinTripCommand, JoinTripR
 
         if (trip.Status != TripStatus.Active)
         {
-            throw new DomainException("Chuyến đi này hiện không còn hoạt động.", "TRIP_NOT_ACTIVE");
+            throw new DomainException("Không thể tham gia chuyến đi không còn hoạt động.", "TRIP_NOT_ACTIVE");
         }
 
         // Check if user is already a member
@@ -90,6 +90,10 @@ public sealed class JoinTripHandler : ICommandHandler<JoinTripCommand, JoinTripR
 
         // If the joining user is Pro, they can always join (their own membership doesn't affect limits)
         // The limit is enforced based on the trip's context
+        if (request.UserTier >= 1)
+        {
+            return;
+        }
 
         // Rule: Check if ANY member in the trip is Pro, or if a TripPass is active for this trip
         var ownerMember = trip.Members.FirstOrDefault(m => m.Role == MemberRole.Owner);
@@ -107,7 +111,7 @@ public sealed class JoinTripHandler : ICommandHandler<JoinTripCommand, JoinTripR
         {
             throw new TierLimitExceededException(
                 currentTier: 0,
-                limitType: "số thành viên",
+                limitType: "thành viên chuyến đi",
                 currentCount: currentMemberCount,
                 maxAllowed: BasicMaxMembers);
         }

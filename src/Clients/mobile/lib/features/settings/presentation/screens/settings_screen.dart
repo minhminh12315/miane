@@ -5,6 +5,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
 import '../../../auth/presentation/controllers/app_auth_provider.dart';
 import '../../../notification/presentation/screens/notification_history_screen.dart';
+import '../controllers/payment_account_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -16,13 +17,12 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _language = 'Tiếng Việt';
   String _region = 'Việt Nam (VND)';
-  String _bankName = 'Vietcombank';
-  String _bankAccount = '1029384756';
 
   @override
   Widget build(BuildContext context) {
+    final paymentAccount = ref.watch(paymentAccountProvider);
     final tierState = ref.watch(currentUserTierProvider);
-    final isPro = tierState.valueOrNull == 1;
+    final isPro = tierState.valueOrNull != null && tierState.valueOrNull! >= 1;
 
     return CupertinoPageScaffold(
       backgroundColor: iosGroupedBackground(context),
@@ -39,26 +39,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 IosListTile(
                   icon: CupertinoIcons.person,
-                  title: 'Khách du lịch',
+                  title: isPro ? 'Thành viên VIP' : 'Khách du lịch',
                   subtitle: 'traveler@example.com',
-                  value: isPro ? 'PRO' : 'BASIC',
+                  value: isPro ? 'VIP' : 'CƠ BẢN',
                 ),
-                if (isPro)
-                  const IosListTile(
-                    icon: CupertinoIcons.star_fill,
-                    iconColor: AppTheme.iosGold,
-                    title: 'MIANE Pro',
-                    subtitle: 'Chuyến đi và thành viên không giới hạn',
-                    value: 'Đã kích hoạt',
-                  )
-                else
+                if (!isPro)
                   IosListTile(
                     icon: CupertinoIcons.star,
                     iconColor: AppTheme.iosGold,
-                    title: 'Nâng cấp MIANE Pro',
-                    subtitle: 'Chuyến đi và thành viên không giới hạn',
+                    title: 'Nâng cấp MIANE VIP',
+                    subtitle:
+                        'Lập lịch AI, quét hóa đơn AI và không giới hạn chuyến đi',
                     onTap: () =>
-                        showIosProSheet(context, featureName: 'MIANE Pro'),
+                        showIosProSheet(context, featureName: 'MIANE VIP'),
+                  )
+                else
+                  const IosListTile(
+                    icon: CupertinoIcons.check_mark_circled_solid,
+                    iconColor: AppTheme.iosGreen,
+                    title: 'MIANE VIP đang hoạt động',
+                    subtitle: 'Không giới hạn chuyến đi và thành viên',
                   ),
               ],
             ),
@@ -92,8 +92,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 IosListTile(
                   icon: CupertinoIcons.creditcard,
                   title: 'Ví nhận tiền',
-                  value: '$_bankName ($_bankAccount)',
-                  onTap: _showWalletDialog,
+                  subtitle: paymentAccount.displaySubtitle,
+                  value: paymentAccount.displayValue,
+                  onTap: () => _showWalletDialog(paymentAccount),
                 ),
               ],
             ),
@@ -170,9 +171,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showWalletDialog() {
-    final bankController = TextEditingController(text: _bankName);
-    final accountController = TextEditingController(text: _bankAccount);
+  void _showWalletDialog(PaymentAccountConfig current) {
+    final bankController = TextEditingController(text: current.bankName);
+    final accountController =
+        TextEditingController(text: current.accountNumber);
+    final holderController = TextEditingController(text: current.accountHolder);
 
     showCupertinoDialog<void>(
       context: context,
@@ -186,6 +189,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 controller: bankController,
                 placeholder: 'Ngân hàng / Ví',
                 prefixIcon: CupertinoIcons.creditcard,
+              ),
+              const SizedBox(height: 10),
+              IosTextField(
+                controller: holderController,
+                placeholder: 'Tên chủ tài khoản',
+                prefixIcon: CupertinoIcons.person,
               ),
               const SizedBox(height: 10),
               IosTextField(
@@ -204,11 +213,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           CupertinoDialogAction(
             isDefaultAction: true,
-            onPressed: () {
-              setState(() {
-                _bankName = bankController.text.trim();
-                _bankAccount = accountController.text.trim();
-              });
+            onPressed: () async {
+              final bankName = bankController.text.trim();
+              final accountNumber = accountController.text.trim();
+              if (bankName.isEmpty || accountNumber.isEmpty) {
+                await showIosMessage(
+                  dialogContext,
+                  message: 'Vui lòng nhập ngân hàng/ví và số tài khoản.',
+                  isError: true,
+                );
+                return;
+              }
+              await ref.read(paymentAccountProvider.notifier).save(
+                    bankName: bankName,
+                    accountNumber: accountNumber,
+                    accountHolder: holderController.text,
+                  );
+              if (!dialogContext.mounted) return;
               Navigator.of(dialogContext).pop();
             },
             child: const Text('Lưu'),

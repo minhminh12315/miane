@@ -49,13 +49,15 @@ class ProUpgradeController extends _$ProUpgradeController {
   }
 
   Future<void> purchasePro() async {
-    state = state.copyWith(status: ProUpgradeStatus.purchasing, errorMessage: null);
+    state =
+        state.copyWith(status: ProUpgradeStatus.purchasing, errorMessage: null);
 
     final available = await _iapService.isAvailable();
     if (!available) {
       state = state.copyWith(
         status: ProUpgradeStatus.error,
-        errorMessage: 'Cửa hàng ứng dụng hiện không khả dụng trên thiết bị này.',
+        errorMessage:
+            'Cửa hàng ứng dụng hiện không khả dụng trên thiết bị này.',
       );
       return;
     }
@@ -64,7 +66,7 @@ class ProUpgradeController extends _$ProUpgradeController {
     if (product == null) {
       state = state.copyWith(
         status: ProUpgradeStatus.error,
-        errorMessage: 'Không tìm thấy gói MIANE Pro. Vui lòng thử lại sau.',
+        errorMessage: 'Không tìm thấy gói MIANE VIP. Vui lòng thử lại sau.',
       );
       return;
     }
@@ -122,7 +124,8 @@ class ProUpgradeController extends _$ProUpgradeController {
     } catch (e) {
       state = state.copyWith(
         status: ProUpgradeStatus.error,
-        errorMessage: 'Thanh toán thành công nhưng không thể nâng cấp tài khoản: $e',
+        errorMessage:
+            'Thanh toán thành công nhưng không thể nâng cấp tài khoản: $e',
       );
     } finally {
       await _iapService.completePurchase(purchase);

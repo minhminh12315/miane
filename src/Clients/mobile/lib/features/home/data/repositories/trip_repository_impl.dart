@@ -67,6 +67,11 @@ class TripRepositoryImpl implements TripRepository {
   }
 
   @override
+  Future<void> deleteTrip(String tripId) async {
+    await _apiClient.delete(ApiEndpoints.trip(tripId));
+  }
+
+  @override
   Future<void> leaveTrip(String tripId) async {
     await _apiClient.post(ApiEndpoints.leaveTrip(tripId));
   }
@@ -138,8 +143,25 @@ class TripRepositoryImpl implements TripRepository {
     await _apiClient.put(
       '${ApiEndpoints.trips}/$tripId',
       body: {
-        if (startDate != null) 'startDate': startDate.toUtc().toIso8601String(),
-        if (endDate != null) 'endDate': endDate.toUtc().toIso8601String(),
+        if (startDate != null) 'startDate': _dateToApi(startDate),
+        if (endDate != null) 'endDate': _dateToApi(endDate),
+      },
+    );
+  }
+
+  @override
+  Future<void> updateTripInfo(
+    String tripId, {
+    String? name,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    await _apiClient.put(
+      '${ApiEndpoints.trips}/$tripId',
+      body: {
+        if (name != null) 'name': name,
+        if (startDate != null) 'startDate': _dateToApi(startDate),
+        if (endDate != null) 'endDate': _dateToApi(endDate),
       },
     );
   }
@@ -172,8 +194,8 @@ class TripRepositoryImpl implements TripRepository {
         if (destinationCity != null) 'destinationCity': destinationCity,
         if (destinationCountry != null)
           'destinationCountry': destinationCountry,
-        if (startDate != null) 'startDate': startDate.toUtc().toIso8601String(),
-        if (endDate != null) 'endDate': endDate.toUtc().toIso8601String(),
+        if (startDate != null) 'startDate': _dateToApi(startDate),
+        if (endDate != null) 'endDate': _dateToApi(endDate),
         if (notes != null) 'notes': notes,
       },
     );
@@ -184,6 +206,9 @@ class TripRepositoryImpl implements TripRepository {
     await _apiClient.delete(ApiEndpoints.tripLeg(tripId, legId));
   }
 }
+
+String _dateToApi(DateTime date) =>
+    DateTime.utc(date.year, date.month, date.day).toIso8601String();
 
 final tripRepositoryProvider = Provider<TripRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);

@@ -14,6 +14,7 @@ class ApiEndpoints {
   
   static const String trips = '/trips';
   static const String joinTrip = '/trips/join';
+  static String trip(String tripId) => '/trips/$tripId';
   static String leaveTrip(String tripId) => '/trips/$tripId/leave';
   static String tripFiles(String tripId) => '/trips/$tripId/files';
   static String uploadTripFile(String tripId) => '/trips/$tripId/files/upload';

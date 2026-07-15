@@ -1,5 +1,6 @@
 using BuildingBlocks.CQRS;
 using BuildingBlocks.EventBus;
+using BuildingBlocks.Exceptions;
 using System.Text.Json;
 using Trip.API.Data.Repositories;
 using Trip.API.Domain.Entities;
@@ -12,6 +13,7 @@ public sealed class CreateTripHandler : ICommandHandler<CreateTripCommand, Creat
 {
     private readonly ITripRepository _tripRepository;
     private readonly IEventBus _eventBus;
+    private const int BasicMaxActiveTrips = 2;
 
     public CreateTripHandler(ITripRepository tripRepository, IEventBus eventBus)
     {
@@ -21,6 +23,19 @@ public sealed class CreateTripHandler : ICommandHandler<CreateTripCommand, Creat
 
     public async Task<CreateTripResult> Handle(CreateTripCommand request, CancellationToken cancellationToken)
     {
+        if (request.UserTier <= 0)
+        {
+            var activeTripCount = await _tripRepository.GetActiveTripCountByUserAsync(request.UserId, cancellationToken);
+            if (activeTripCount >= BasicMaxActiveTrips)
+            {
+                throw new TierLimitExceededException(
+                    currentTier: request.UserTier,
+                    limitType: "chuyến đi đang hoạt động",
+                    currentCount: activeTripCount,
+                    maxAllowed: BasicMaxActiveTrips);
+            }
+        }
+
         var trip = new TripEntity
         {
             Name = request.Name,

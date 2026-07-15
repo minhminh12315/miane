@@ -228,8 +228,8 @@ public sealed class TripLimitReachedHandler : BaseNotificationEventHandler
 
         await SendToUserAsync(
             ownerUserId,
-            "⚠️ Member Limit Reached",
-            $"Your trip '{tripName}' has reached the {maxMembers}-member limit. Upgrade to MIANE Pro for unlimited members.",
+            "Chuyến đi đã đạt giới hạn thành viên",
+            $"Chuyến đi '{tripName}' đã đạt giới hạn {maxMembers} thành viên. Nâng cấp MIANE VIP để thêm thành viên không giới hạn.",
             "TripLimitReachedEvent",
             new Dictionary<string, string>
             {

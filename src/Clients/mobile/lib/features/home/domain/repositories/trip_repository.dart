@@ -8,6 +8,7 @@ abstract class TripRepository {
       String name, String? description, String? baseCurrency);
   Future<TripCreationResult> createTripDraft(TripCreationDraft draft);
   Future<Map<String, dynamic>> joinTrip(String inviteCode, String? nickName);
+  Future<void> deleteTrip(String tripId);
   Future<void> leaveTrip(String tripId);
   Future<List<TripFileModel>> getTripFiles(String tripId);
   Future<TripFileModel> addTripFile(String tripId, TripFileDraft draft);
@@ -17,6 +18,13 @@ abstract class TripRepository {
 
   Future<void> updateTripDates(
     String tripId, {
+    DateTime? startDate,
+    DateTime? endDate,
+  });
+
+  Future<void> updateTripInfo(
+    String tripId, {
+    String? name,
     DateTime? startDate,
     DateTime? endDate,
   });

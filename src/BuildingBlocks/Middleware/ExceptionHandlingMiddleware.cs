@@ -47,7 +47,7 @@ public sealed class ExceptionHandlingMiddleware
             ValidationException validationEx => (
                 HttpStatusCode.BadRequest,
                 "VALIDATION_ERROR",
-                "One or more validation errors occurred.",
+                "Một hoặc nhiều dữ liệu chưa hợp lệ.",
                 validationEx.Errors.Select(e => new { field = e.PropertyName, error = e.ErrorMessage }).ToArray() as object
             ),
             TierLimitExceededException tierEx => (
@@ -83,13 +83,13 @@ public sealed class ExceptionHandlingMiddleware
             UnauthorizedAccessException => (
                 HttpStatusCode.Unauthorized,
                 "UNAUTHORIZED",
-                "Authentication required.",
+                "Bạn cần đăng nhập để tiếp tục.",
                 (object?)null
             ),
             _ => (
                 HttpStatusCode.InternalServerError,
                 "INTERNAL_ERROR",
-                "An unexpected error occurred.",
+                "Đã xảy ra lỗi không mong muốn.",
                 (object?)null
             )
         };
