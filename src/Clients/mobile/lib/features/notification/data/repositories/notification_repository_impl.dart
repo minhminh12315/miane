@@ -28,6 +28,25 @@ class NotificationRepositoryImpl implements NotificationRepository {
   Future<void> markAllAsRead() async {
     await _apiClient.put('${ApiEndpoints.notifications}/read-all');
   }
+
+  @override
+  Future<void> registerDevice({
+    required String fcmToken,
+    required String platform,
+  }) async {
+    await _apiClient.post(
+      ApiEndpoints.registerNotificationDevice,
+      body: {
+        'fcmToken': fcmToken,
+        'platform': platform,
+      },
+    );
+  }
+
+  @override
+  Future<void> unregisterDevice(String fcmToken) async {
+    await _apiClient.delete(ApiEndpoints.notificationDevice(fcmToken));
+  }
 }
 
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {

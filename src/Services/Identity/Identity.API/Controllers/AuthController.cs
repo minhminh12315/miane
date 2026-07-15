@@ -261,14 +261,77 @@ namespace Identity.API.Controllers
 
             var roles = await _userManager.GetRolesAsync(user);
 
-            return Ok(new
-            {
-                id = user.Id,
-                email = user.Email,
-                fullName = user.FullName,
-                roles
-            });
+            return Ok(ToProfileResponse(user, roles));
         }
 
+        [Authorize]
+        [HttpPut("me")]
+        public async Task<IActionResult> UpdateMe([FromBody] UpdateMeRequest request)
+        {
+            var userId = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var parsedUserId))
+            {
+                return Unauthorized(new { message = "Invalid token subject" });
+            }
+
+            var user = await _userManager.FindByIdAsync(parsedUserId.ToString());
+            if (user == null || !user.IsActive)
+            {
+                return Unauthorized(new { message = "User not found or inactive" });
+            }
+
+            var fullName = request.FullName?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(fullName))
+            {
+                return BadRequest(new { message = "Vui lòng nhập tên hiển thị." });
+            }
+
+            if (fullName.Length > 120)
+            {
+                return BadRequest(new { message = "Tên hiển thị không được vượt quá 120 ký tự." });
+            }
+
+            var avatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl)
+                ? null
+                : request.AvatarUrl.Trim();
+            if (avatarUrl is not null)
+            {
+                if (avatarUrl.Length > 1000)
+                {
+                    return BadRequest(new { message = "Liên kết ảnh đại diện không được vượt quá 1000 ký tự." });
+                }
+
+                if (!Uri.TryCreate(avatarUrl, UriKind.Absolute, out var parsedUri) ||
+                    (parsedUri.Scheme != Uri.UriSchemeHttp && parsedUri.Scheme != Uri.UriSchemeHttps))
+                {
+                    return BadRequest(new { message = "Ảnh đại diện phải là URL http hoặc https hợp lệ." });
+                }
+            }
+
+            user.FullName = fullName;
+            user.AvatarUrl = avatarUrl;
+
+            var result = await _userManager.UpdateAsync(user);
+            if (!result.Succeeded)
+            {
+                return BadRequest(new { message = string.Join("; ", result.Errors.Select(e => e.Description)) });
+            }
+
+            var roles = await _userManager.GetRolesAsync(user);
+            return Ok(ToProfileResponse(user, roles));
+        }
+
+        private static object ToProfileResponse(User user, IList<string> roles) => new
+        {
+            id = user.Id,
+            email = user.Email,
+            fullName = user.FullName,
+            avatarUrl = user.AvatarUrl,
+            userTier = user.UserTier,
+            roles
+        };
+
     }
+
+    public sealed record UpdateMeRequest(string? FullName, string? AvatarUrl);
 }

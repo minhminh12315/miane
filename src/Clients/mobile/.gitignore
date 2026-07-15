@@ -24,7 +24,11 @@ app.*.map.json
 /linux/
 /macos/
 /windows/
-/web/
+/web/*
+!/web/
+!/web/firebase-config.example.json
+!/web/firebase-messaging-sw.js
+/web/firebase-config.json
 
 # ── IDE & Editor ─────────────────────────────────────────────────────────────
 .idea/

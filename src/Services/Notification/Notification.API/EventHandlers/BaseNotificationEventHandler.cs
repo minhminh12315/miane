@@ -46,6 +46,7 @@ public abstract class BaseNotificationEventHandler
                 await FirebaseService.SendAsync(new FirebaseNotificationRequest
                 {
                     Token = device.FcmToken,
+                    Platform = device.DevicePlatform,
                     Title = title,
                     Body = body,
                     Data = data ?? new()

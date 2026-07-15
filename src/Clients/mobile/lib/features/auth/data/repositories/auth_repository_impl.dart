@@ -23,7 +23,8 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<AuthResponseModel> register(String email, String password, String fullName) async {
+  Future<AuthResponseModel> register(
+      String email, String password, String fullName) async {
     final response = await _apiClient.post(
       ApiEndpoints.register,
       body: {
@@ -39,7 +40,8 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<void> sendRegistrationOtp(String email, String password, String fullName) async {
+  Future<void> sendRegistrationOtp(
+      String email, String password, String fullName) async {
     await _apiClient.post(
       ApiEndpoints.sendRegistrationOtp,
       body: {
@@ -52,7 +54,8 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<AuthResponseModel> verifyRegistrationOtp(String email, String otpCode) async {
+  Future<AuthResponseModel> verifyRegistrationOtp(
+      String email, String otpCode) async {
     final response = await _apiClient.post(
       ApiEndpoints.verifyRegistrationOtp,
       body: {
@@ -97,12 +100,27 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<UserModel?> getMe() async {
     try {
-      final response = await _apiClient.get('/auth/me');
+      final response = await _apiClient.get(ApiEndpoints.me);
       if (response != null) {
         return UserModel.fromJson(response);
       }
     } catch (_) {}
     return null;
+  }
+
+  @override
+  Future<UserModel> updateMe({
+    required String fullName,
+    String? avatarUrl,
+  }) async {
+    final response = await _apiClient.put(
+      ApiEndpoints.me,
+      body: {
+        'fullName': fullName,
+        'avatarUrl': avatarUrl,
+      },
+    );
+    return UserModel.fromJson(response as Map<String, dynamic>);
   }
 
   @override

@@ -24,8 +24,6 @@ import '../../domain/models/trip_models.dart';
 import '../controllers/trips_provider.dart';
 import '../widgets/trip_share_sheet.dart';
 
-const _googlePlacesApiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
-
 class TripWorkspaceScreen extends ConsumerStatefulWidget {
   final String tripId;
   final String tripName;
@@ -883,9 +881,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
                 children: [
-                  _GooglePlacesNotice(
-                    configured: _googlePlacesApiKey.isNotEmpty,
-                  ),
+                  const _PlaceSuggestionsNotice(),
                   const SizedBox(height: 14),
                   _ActivityTimeSelector(
                     timeLabel: _formatActivityTime(currentTime),
@@ -899,7 +895,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                   const SizedBox(height: 14),
                   IosTextField(
                     controller: searchController,
-                    placeholder: 'Tìm trên Google Maps',
+                    placeholder: 'Tìm địa điểm',
                     prefixIcon: CupertinoIcons.search,
                     onChanged: (value) {
                       setSheetState(() {
@@ -4090,10 +4086,8 @@ class _ActivityTimeSelector extends StatelessWidget {
   }
 }
 
-class _GooglePlacesNotice extends StatelessWidget {
-  final bool configured;
-
-  const _GooglePlacesNotice({required this.configured});
+class _PlaceSuggestionsNotice extends StatelessWidget {
+  const _PlaceSuggestionsNotice();
 
   @override
   Widget build(BuildContext context) {
@@ -4103,26 +4097,19 @@ class _GooglePlacesNotice extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            configured ? CupertinoIcons.check_mark_circled : CupertinoIcons.map,
-            color: AppTheme.iosBlue,
-          ),
+          const Icon(CupertinoIcons.map, color: AppTheme.iosBlue),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  configured
-                      ? 'Google Places đã sẵn sàng'
-                      : 'Placeholder Google Places',
+                  'Gợi ý địa điểm',
                   style: AppTheme.titleSm(),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  configured
-                      ? 'API key đã được truyền qua dart-define. Có thể đổi danh sách mock thành endpoint Places/proxy.'
-                      : 'Chưa có GOOGLE_MAPS_API_KEY nên đang dùng gợi ý mẫu. Thêm key để nối Google Maps Places.',
+                  'Đang dùng danh sách gợi ý có sẵn và địa điểm nhập thủ công.',
                   style: AppTheme.bodySm(
                     color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),

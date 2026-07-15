@@ -7,6 +7,7 @@ import 'features/auth/presentation/controllers/app_auth_provider.dart';
 import 'features/auth/presentation/screens/auth_gate_screen.dart';
 import 'features/auth/presentation/screens/welcome_flow_screen.dart';
 import 'features/home/presentation/screens/main_layout_screen.dart';
+import 'features/notification/presentation/controllers/push_notification_controller.dart';
 import 'features/user_profile/presentation/screens/initial_setup_screen.dart';
 
 void main() {
@@ -39,6 +40,13 @@ class MianeApp extends StatelessWidget {
               if (next == AppAuthStatus.unauthenticated ||
                   next == AppAuthStatus.welcome) {
                 Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+              if (next == AppAuthStatus.authenticated) {
+                Future.microtask(
+                  () => ref
+                      .read(pushNotificationSettingsProvider.notifier)
+                      .syncWithCurrentPreference(),
+                );
               }
             });
 

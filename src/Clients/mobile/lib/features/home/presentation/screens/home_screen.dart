@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme.dart';
@@ -629,23 +630,26 @@ class _PaymentAccountEditorSheet extends ConsumerStatefulWidget {
 
 class _PaymentAccountEditorSheetState
     extends ConsumerState<_PaymentAccountEditorSheet> {
-  late final TextEditingController _bankController;
+  late PaymentDestination _destination;
   late final TextEditingController _holderController;
   late final TextEditingController _accountController;
+  PaymentAccountValidationResult? _validation;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
     final account = ref.read(paymentAccountProvider);
-    _bankController = TextEditingController(text: account.bankName);
+    _destination = account.destination ?? supportedPaymentDestinations.first;
     _holderController = TextEditingController(text: account.accountHolder);
     _accountController = TextEditingController(text: account.accountNumber);
+    _validation = account.isConfigured
+        ? _destination.validateAccountNumber(account.accountNumber)
+        : null;
   }
 
   @override
   void dispose() {
-    _bankController.dispose();
     _holderController.dispose();
     _accountController.dispose();
     super.dispose();
@@ -659,26 +663,36 @@ class _PaymentAccountEditorSheetState
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
         children: [
-          IosTextField(
-            controller: _bankController,
-            label: 'Ngân hàng / ví',
-            placeholder: 'Ví dụ: Vietcombank, Momo',
-            prefixIcon: CupertinoIcons.creditcard,
+          _PaymentDestinationSelector(
+            destination: _destination,
+            onPressed: _selectDestination,
           ),
           const SizedBox(height: 14),
           IosTextField(
             controller: _holderController,
-            label: 'Tên chủ tài khoản',
+            label: 'Tên tài khoản',
             placeholder: 'Tên người nhận tiền',
             prefixIcon: CupertinoIcons.person,
           ),
           const SizedBox(height: 14),
           IosTextField(
             controller: _accountController,
-            label: 'Số tài khoản / số điện thoại',
-            placeholder: 'Nhập số tài khoản',
+            label: _destination.accountNumberLabel,
+            placeholder: _destination.accountNumberLabel,
             prefixIcon: CupertinoIcons.number,
             keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (_) => setState(() => _validation = null),
+          ),
+          if (_validation != null) ...[
+            const SizedBox(height: 12),
+            _PaymentValidationBanner(result: _validation!),
+          ],
+          const SizedBox(height: 16),
+          IosSecondaryButton(
+            label: 'Kiểm tra số nhận tiền',
+            icon: CupertinoIcons.check_mark_circled,
+            onPressed: _checkAccountNumber,
           ),
           const SizedBox(height: 22),
           IosPrimaryButton(
@@ -691,27 +705,166 @@ class _PaymentAccountEditorSheetState
     );
   }
 
+  Future<void> _selectDestination() async {
+    final selected = await showCupertinoModalPopup<PaymentDestination>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text('Chọn ngân hàng / ví nhận tiền'),
+        actions: supportedPaymentDestinations.map((destination) {
+          final selected = destination.code == _destination.code;
+          return CupertinoActionSheetAction(
+            isDefaultAction: selected,
+            onPressed: () => Navigator.of(sheetContext).pop(destination),
+            child: Text(selected ? '${destination.name} ✓' : destination.name),
+          );
+        }).toList(),
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text('Hủy'),
+        ),
+      ),
+    );
+
+    if (selected == null || !mounted) return;
+    setState(() {
+      _destination = selected;
+      _validation = null;
+    });
+  }
+
+  void _checkAccountNumber() {
+    setState(() {
+      _validation = _destination.validateAccountNumber(_accountController.text);
+    });
+  }
+
   Future<void> _save() async {
-    final bankName = _bankController.text.trim();
-    final accountNumber = _accountController.text.trim();
-    if (bankName.isEmpty || accountNumber.isEmpty) {
+    final holder = _holderController.text.trim();
+    final result = _destination.validateAccountNumber(_accountController.text);
+
+    if (holder.isEmpty) {
       await showIosMessage(
         context,
-        message: 'Vui lòng nhập ngân hàng/ví và số tài khoản.',
+        message: 'Vui lòng nhập tên tài khoản.',
         isError: true,
       );
       return;
     }
 
+    if (!result.isValid) {
+      setState(() => _validation = result);
+      return;
+    }
+
     setState(() => _isSaving = true);
-    await ref.read(paymentAccountProvider.notifier).save(
-          bankName: bankName,
-          accountNumber: accountNumber,
-          accountHolder: _holderController.text,
-        );
-    if (!mounted) return;
-    setState(() => _isSaving = false);
-    Navigator.of(context).pop();
+    try {
+      await ref.read(paymentAccountProvider.notifier).save(
+            destination: _destination,
+            accountNumber: result.normalizedAccountNumber,
+            accountHolder: holder,
+          );
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      await showIosMessage(
+        context,
+        message: error.toString(),
+        isError: true,
+      );
+    }
+  }
+}
+
+class _PaymentDestinationSelector extends StatelessWidget {
+  final PaymentDestination destination;
+  final VoidCallback onPressed;
+
+  const _PaymentDestinationSelector({
+    required this.destination,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Ngân hàng / ví nhận tiền',
+            style: AppTheme.labelSm(color: secondary)),
+        const SizedBox(height: 8),
+        CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: onPressed,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceSecondaryDark,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              border: Border.all(
+                color: CupertinoColors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  CupertinoIcons.creditcard,
+                  color: AppTheme.iosBlue,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    destination.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.bodyMd(),
+                  ),
+                ),
+                Icon(CupertinoIcons.chevron_down, color: secondary, size: 16),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PaymentValidationBanner extends StatelessWidget {
+  final PaymentAccountValidationResult result;
+
+  const _PaymentValidationBanner({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = result.isValid ? AppTheme.iosGreen : AppTheme.iosRed;
+    return ModernCard(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            result.isValid
+                ? CupertinoIcons.check_mark_circled_solid
+                : CupertinoIcons.exclamationmark_triangle_fill,
+            color: color,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              result.message,
+              style: AppTheme.bodySm(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

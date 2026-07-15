@@ -27,6 +27,39 @@ public sealed class FirebaseNotificationService : IFirebaseNotificationService
             Data = request.Data
         };
 
+        ApplyPlatformOptions(message, request.Platform);
+
         return await FirebaseMessaging.DefaultInstance.SendAsync(message, cancellationToken);
+    }
+
+    private static void ApplyPlatformOptions(Message message, string platform)
+    {
+        switch (platform.Trim().ToLowerInvariant())
+        {
+            case "ios":
+            case "macos":
+                message.Apns = new ApnsConfig
+                {
+                    Headers = new Dictionary<string, string>
+                    {
+                        ["apns-priority"] = "10"
+                    },
+                    Aps = new Aps
+                    {
+                        Sound = "default"
+                    }
+                };
+                break;
+            case "web":
+                message.Webpush = new WebpushConfig
+                {
+                    Notification = new WebpushNotification
+                    {
+                        Icon = "/icons/Icon-192.png",
+                        Badge = "/icons/Icon-192.png"
+                    }
+                };
+                break;
+        }
     }
 }

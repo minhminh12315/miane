@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -21,9 +20,6 @@ class TripCreationSheet extends ConsumerStatefulWidget {
 }
 
 class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
-  static const _googlePlacesApiKey =
-      String.fromEnvironment('GOOGLE_MAPS_API_KEY');
-
   static const _aiThumbnailEndpoint = String.fromEnvironment(
     'MIANE_AI_IMAGE_URL',
     defaultValue: 'http://localhost:8000/api/v1/image/generate-trip-thumbnail',
@@ -110,7 +106,6 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
                   delay: 0.14,
                   child: _DestinationCard(
                     place: _selectedPlace,
-                    googleApiKey: _googlePlacesApiKey,
                     onTap: _openPlaceSearch,
                   ),
                 ),
@@ -200,7 +195,6 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
       context: context,
       heightFactor: 0.92,
       builder: (_) => _PlaceSearchSheet(
-        googleApiKey: _googlePlacesApiKey,
         initialPlace: _selectedPlace,
       ),
     );
@@ -372,7 +366,7 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
     if (place == null) {
       await showIosMessage(
         context,
-        message: 'Vui lòng chọn địa điểm bằng Google Maps.',
+        message: 'Vui lòng chọn địa điểm cho chuyến đi.',
         isError: true,
       );
       return;
@@ -816,12 +810,10 @@ class _TripNameField extends StatelessWidget {
 
 class _DestinationCard extends StatelessWidget {
   final _TripPlace? place;
-  final String googleApiKey;
   final VoidCallback onTap;
 
   const _DestinationCard({
     required this.place,
-    required this.googleApiKey,
     required this.onTap,
   });
 
@@ -845,7 +837,6 @@ class _DestinationCard extends StatelessWidget {
             : _SelectedDestinationContent(
                 key: ValueKey(place!.placeId ?? place!.name),
                 place: place!,
-                googleApiKey: googleApiKey,
               ),
       ),
     );
@@ -874,7 +865,7 @@ class _EmptyDestinationContent extends StatelessWidget {
                 Text('Chọn địa điểm', style: AppTheme.titleSm()),
                 const SizedBox(height: 5),
                 Text(
-                  'Tìm bằng Google Maps để lấy tọa độ và metadata.',
+                  'Chọn từ gợi ý có sẵn hoặc nhập địa điểm thủ công.',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppTheme.bodySm(
@@ -897,12 +888,10 @@ class _EmptyDestinationContent extends StatelessWidget {
 
 class _SelectedDestinationContent extends StatelessWidget {
   final _TripPlace place;
-  final String googleApiKey;
 
   const _SelectedDestinationContent({
     super.key,
     required this.place,
-    required this.googleApiKey,
   });
 
   @override
@@ -912,7 +901,7 @@ class _SelectedDestinationContent extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          _MiniMapPreview(place: place, googleApiKey: googleApiKey),
+          _MiniMapPreview(place: place),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -975,51 +964,21 @@ class _SelectedDestinationContent extends StatelessWidget {
 
 class _MiniMapPreview extends StatelessWidget {
   final _TripPlace place;
-  final String googleApiKey;
 
   const _MiniMapPreview({
     required this.place,
-    required this.googleApiKey,
   });
 
   @override
   Widget build(BuildContext context) {
-    final lat = place.latitude;
-    final lng = place.longitude;
-    final canLoadStaticMap =
-        googleApiKey.isNotEmpty && lat != null && lng != null;
-
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
       child: SizedBox(
         width: 86,
         height: 86,
-        child: canLoadStaticMap
-            ? Image.network(
-                _staticMapUrl(lat, lng, googleApiKey),
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    CustomPaint(painter: _MiniMapPainter(place.name)),
-              )
-            : CustomPaint(painter: _MiniMapPainter(place.name)),
+        child: CustomPaint(painter: _MiniMapPainter(place.name)),
       ),
     );
-  }
-
-  String _staticMapUrl(double lat, double lng, String apiKey) {
-    return Uri.https(
-      'maps.googleapis.com',
-      '/maps/api/staticmap',
-      {
-        'center': '$lat,$lng',
-        'zoom': '12',
-        'size': '220x220',
-        'scale': '2',
-        'maptype': 'roadmap',
-        'markers': 'color:orange|$lat,$lng',
-        'key': apiKey,
-      },
-    ).toString();
   }
 }
 
@@ -1298,11 +1257,9 @@ class _CoverErrorPanel extends StatelessWidget {
 }
 
 class _PlaceSearchSheet extends StatefulWidget {
-  final String googleApiKey;
   final _TripPlace? initialPlace;
 
   const _PlaceSearchSheet({
-    required this.googleApiKey,
     this.initialPlace,
   });
 
@@ -1312,13 +1269,7 @@ class _PlaceSearchSheet extends StatefulWidget {
 
 class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
   final _controller = TextEditingController();
-  final _sessionToken = DateTime.now().microsecondsSinceEpoch.toString();
-  Timer? _debounce;
   List<_TripPlacePreview> _suggestions = const [];
-  bool _isLoading = false;
-  String? _error;
-
-  bool get _hasGoogleKey => widget.googleApiKey.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -1332,7 +1283,6 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -1366,22 +1316,12 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
             ),
           ),
           const SizedBox(height: 12),
-          _GooglePlacesStatus(configured: _hasGoogleKey),
-          const SizedBox(height: 16),
-          if (_isLoading)
-            const _PlaceSearchLoading()
-          else if (_error != null)
-            _PlaceSearchError(
-              message: _error!,
-              onRetry: () => _search(_controller.text.trim()),
-            )
-          else
-            for (final suggestion in _suggestions)
-              _PlaceResultTile(
-                suggestion: suggestion,
-                onTap: () => _selectSuggestion(suggestion),
-              ),
-          if (!_isLoading && _controller.text.trim().isNotEmpty) ...[
+          for (final suggestion in _suggestions)
+            _PlaceResultTile(
+              suggestion: suggestion,
+              onTap: () => _selectSuggestion(suggestion),
+            ),
+          if (_controller.text.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             _ManualDestinationButton(
               query: _controller.text.trim(),
@@ -1396,118 +1336,14 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
   }
 
   void _onQueryChanged(String value) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 360), () {
-      if (!mounted) return;
-      _search(value.trim());
-    });
-  }
-
-  Future<void> _search(String query) async {
-    if (query.length < 2) {
-      setState(() {
-        _error = null;
-        _isLoading = false;
-        _suggestions = _fallbackSuggestions(query);
-      });
-      return;
-    }
-
-    if (!_hasGoogleKey) {
-      setState(() {
-        _error = null;
-        _isLoading = false;
-        _suggestions = _fallbackSuggestions(query);
-      });
-      return;
-    }
-
     setState(() {
-      _isLoading = true;
-      _error = null;
+      _suggestions = _fallbackSuggestions(value.trim());
     });
-
-    try {
-      final uri = Uri.https(
-        'maps.googleapis.com',
-        '/maps/api/place/autocomplete/json',
-        {
-          'input': query,
-          'language': 'vi',
-          'sessiontoken': _sessionToken,
-          'key': widget.googleApiKey,
-        },
-      );
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      final status = (body['status'] ?? '').toString();
-      if (status != 'OK' && status != 'ZERO_RESULTS') {
-        throw Exception(body['error_message'] ?? status);
-      }
-      final predictions = (body['predictions'] as List<dynamic>? ?? [])
-          .whereType<Map<String, dynamic>>()
-          .map(_TripPlacePreview.fromPrediction)
-          .toList();
-      if (!mounted) return;
-      setState(() {
-        _suggestions =
-            predictions.isEmpty ? _fallbackSuggestions(query) : predictions;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _error = 'Không thể tải Google Places. Đang dùng gợi ý mẫu.';
-        _suggestions = _fallbackSuggestions(query);
-      });
-    }
   }
 
-  Future<void> _selectSuggestion(_TripPlacePreview suggestion) async {
+  void _selectSuggestion(_TripPlacePreview suggestion) {
     final fallback = suggestion.fallbackPlace;
-    if (!_hasGoogleKey || suggestion.placeId == null) {
-      Navigator.of(context)
-          .pop(fallback ?? _TripPlace.manual(suggestion.title));
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final uri = Uri.https(
-        'maps.googleapis.com',
-        '/maps/api/place/details/json',
-        {
-          'place_id': suggestion.placeId!,
-          'language': 'vi',
-          'sessiontoken': _sessionToken,
-          'fields':
-              'place_id,name,formatted_address,geometry,address_components,types',
-          'key': widget.googleApiKey,
-        },
-      );
-      final response = await http.get(uri).timeout(const Duration(seconds: 12));
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      final status = (body['status'] ?? '').toString();
-      if (status != 'OK') {
-        throw Exception(body['error_message'] ?? status);
-      }
-      final place = _TripPlace.fromDetails(
-        body['result'] as Map<String, dynamic>,
-        fallbackTitle: suggestion.title,
-        fallbackAddress: suggestion.subtitle,
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop(place);
-    } catch (_) {
-      if (!mounted) return;
-      Navigator.of(context)
-          .pop(fallback ?? _TripPlace.manual(suggestion.title));
-    }
+    Navigator.of(context).pop(fallback ?? _TripPlace.manual(suggestion.title));
   }
 
   List<_TripPlacePreview> _fallbackSuggestions(String query) {
@@ -1521,44 +1357,6 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
         .toList();
 
     return places.isEmpty ? [_TripPlacePreview.manual(query)] : places;
-  }
-}
-
-class _GooglePlacesStatus extends StatelessWidget {
-  final bool configured;
-
-  const _GooglePlacesStatus({required this.configured});
-
-  @override
-  Widget build(BuildContext context) {
-    return ModernGlass(
-      radius: 22,
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-      child: Row(
-        children: [
-          Icon(
-            configured
-                ? CupertinoIcons.check_mark_circled_solid
-                : CupertinoIcons.info_circle_fill,
-            color: configured ? AppTheme.iosGreen : AppTheme.iosGold,
-            size: 18,
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              configured
-                  ? 'Google Places đã sẵn sàng'
-                  : 'Chưa có GOOGLE_MAPS_API_KEY nên đang dùng gợi ý mẫu.',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTheme.bodySm(
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -1625,84 +1423,6 @@ class _PlaceResultTile extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _PlaceSearchLoading extends StatelessWidget {
-  const _PlaceSearchLoading();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: List.generate(
-        4,
-        (index) => const Padding(
-          padding: EdgeInsets.only(bottom: 10),
-          child: ModernGlass(
-            radius: 24,
-            padding: EdgeInsets.all(14),
-            child: Row(
-              children: [
-                _SkeletonBox(width: 42, height: 42, radius: 21),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _SkeletonBox(width: 160, height: 14, radius: 7),
-                      SizedBox(height: 9),
-                      _SkeletonBox(
-                          width: double.infinity, height: 11, radius: 6),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceSearchError extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _PlaceSearchError({
-    required this.message,
-    required this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ModernGlass(
-      radius: 24,
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          const Icon(
-            CupertinoIcons.exclamationmark_circle,
-            color: AppTheme.iosGold,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: AppTheme.bodySm(
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              ),
-            ),
-          ),
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(36, 36),
-            onPressed: onRetry,
-            child: Text('Thử lại', style: AppTheme.labelSm()),
-          ),
-        ],
       ),
     );
   }
@@ -2147,66 +1867,6 @@ class _TinyChip extends StatelessWidget {
   }
 }
 
-class _SkeletonBox extends StatefulWidget {
-  final double width;
-  final double height;
-  final double radius;
-
-  const _SkeletonBox({
-    required this.width,
-    required this.height,
-    required this.radius,
-  });
-
-  @override
-  State<_SkeletonBox> createState() => _SkeletonBoxState();
-}
-
-class _SkeletonBoxState extends State<_SkeletonBox>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1300),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Container(
-          width: widget.width,
-          height: widget.height,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(widget.radius),
-            gradient: LinearGradient(
-              begin: Alignment(-1 + _controller.value * 2, 0),
-              end: Alignment(0.2 + _controller.value * 2, 0),
-              colors: [
-                CupertinoColors.white.withValues(alpha: 0.08),
-                CupertinoColors.white.withValues(alpha: 0.20),
-                CupertinoColors.white.withValues(alpha: 0.08),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 class _AiThumbnail {
   final String imageUrl;
   final String prompt;
@@ -2252,17 +1912,6 @@ class _TripPlacePreview {
     this.isManual = false,
   });
 
-  factory _TripPlacePreview.fromPrediction(Map<String, dynamic> json) {
-    final formatting =
-        json['structured_formatting'] as Map<String, dynamic>? ?? const {};
-    return _TripPlacePreview(
-      placeId: json['place_id']?.toString(),
-      title: (formatting['main_text'] ?? json['description'] ?? '').toString(),
-      subtitle: (formatting['secondary_text'] ?? json['description'] ?? '')
-          .toString(),
-    );
-  }
-
   factory _TripPlacePreview.fromPlace(_TripPlace place) {
     return _TripPlacePreview(
       placeId: place.placeId,
@@ -2294,7 +1943,6 @@ class _TripPlace {
   final String? city;
   final String? province;
   final List<String> types;
-  final Map<String, dynamic>? viewport;
 
   const _TripPlace({
     required this.placeId,
@@ -2306,7 +1954,6 @@ class _TripPlace {
     this.city,
     this.province,
     this.types = const [],
-    this.viewport,
   });
 
   factory _TripPlace.manual(String value) {
@@ -2315,42 +1962,6 @@ class _TripPlace {
       name: value.trim(),
       formattedAddress: value.trim(),
       city: value.trim(),
-    );
-  }
-
-  factory _TripPlace.fromDetails(
-    Map<String, dynamic> json, {
-    required String fallbackTitle,
-    required String fallbackAddress,
-  }) {
-    final geometry = json['geometry'] as Map<String, dynamic>? ?? const {};
-    final location = geometry['location'] as Map<String, dynamic>? ?? const {};
-    final components =
-        (json['address_components'] as List<dynamic>? ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .toList();
-
-    final country = _component(components, 'country');
-    final province = _component(components, 'administrative_area_level_1');
-    final city = _component(components, 'locality') ??
-        _component(components, 'administrative_area_level_2') ??
-        _component(components, 'sublocality') ??
-        (json['name'] ?? fallbackTitle).toString();
-
-    return _TripPlace(
-      placeId: json['place_id']?.toString(),
-      name: (json['name'] ?? fallbackTitle).toString(),
-      formattedAddress:
-          (json['formatted_address'] ?? fallbackAddress).toString(),
-      latitude: (location['lat'] as num?)?.toDouble(),
-      longitude: (location['lng'] as num?)?.toDouble(),
-      country: country,
-      city: city,
-      province: province,
-      types: (json['types'] as List<dynamic>? ?? const [])
-          .map((type) => type.toString())
-          .toList(),
-      viewport: geometry['viewport'] as Map<String, dynamic>?,
     );
   }
 
@@ -2377,21 +1988,8 @@ class _TripPlace {
       city: city,
       province: province,
       types: types,
-      viewport: viewport,
     );
   }
-}
-
-String? _component(List<Map<String, dynamic>> components, String type) {
-  for (final component in components) {
-    final types = (component['types'] as List<dynamic>? ?? const [])
-        .map((entry) => entry.toString())
-        .toList();
-    if (types.contains(type)) {
-      return component['long_name']?.toString();
-    }
-  }
-  return null;
 }
 
 final _popularPlaces = <_TripPlace>[

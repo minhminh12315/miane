@@ -3,29 +3,35 @@ class UserModel {
   final String email;
   final String fullName;
   final String? avatarUrl;
+  final int userTier;
 
   UserModel({
     required this.id,
     required this.email,
     required this.fullName,
     this.avatarUrl,
+    this.userTier = 0,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       id: json['id'] as String? ?? '',
       email: json['email'] as String? ?? '',
-      fullName: json['fullName'] as String? ?? json['fullName'] as String? ?? '',
+      fullName: json['fullName'] as String? ?? '',
       avatarUrl: json['avatarUrl'] as String?,
+      userTier: json['userTier'] as int? ??
+          int.tryParse(json['userTier']?.toString() ?? '') ??
+          0,
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'email': email,
-    'fullName': fullName,
-    'avatarUrl': avatarUrl,
-  };
+        'id': id,
+        'email': email,
+        'fullName': fullName,
+        'avatarUrl': avatarUrl,
+        'userTier': userTier,
+      };
 }
 
 class AuthResponseModel {

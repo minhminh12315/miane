@@ -40,7 +40,9 @@ public sealed class JoinTripHandler : ICommandHandler<JoinTripCommand, JoinTripR
 
         // Check member limit based on tier rules
         var currentMemberCount = await _tripRepository.GetMemberCountByTripAsync(trip.Id, cancellationToken);
-        EnforceMemberLimit(trip, request, currentMemberCount);
+        var ownerMember = trip.Members.FirstOrDefault(m => m.Role == MemberRole.Owner);
+        var ownerIsVip = ownerMember is not null && ownerMember.UserTier >= 1;
+        EnforceMemberLimit(trip, currentMemberCount);
 
         var member = new TripMember
         {
@@ -67,7 +69,7 @@ public sealed class JoinTripHandler : ICommandHandler<JoinTripCommand, JoinTripR
         }, cancellationToken);
 
         // Notify if the trip has reached the Basic member limit
-        if (newMemberCount >= BasicMaxMembers && request.UserTier == 0)
+        if (newMemberCount >= BasicMaxMembers && !ownerIsVip)
         {
             await _eventBus.PublishAsync(new TripLimitReachedEvent
             {
@@ -82,24 +84,14 @@ public sealed class JoinTripHandler : ICommandHandler<JoinTripCommand, JoinTripR
         return new JoinTripResult(trip.Id, trip.Name, newMemberCount);
     }
 
-    private static void EnforceMemberLimit(TripEntity trip, JoinTripCommand request, int currentMemberCount)
+    private static void EnforceMemberLimit(TripEntity trip, int currentMemberCount)
     {
-        // Pro users (tier 1+): unlimited members in all trips
-        // We check the trip OWNER's tier, not the joining user's tier
-        // But also check if a Trip Pass is active for this specific trip
-
-        // If the joining user is Pro, they can always join (their own membership doesn't affect limits)
-        // The limit is enforced based on the trip's context
-        if (request.UserTier >= 1)
-        {
-            return;
-        }
-
-        // Rule: Check if ANY member in the trip is Pro, or if a TripPass is active for this trip
+        // Member capacity belongs to the trip owner. A VIP joiner should not
+        // silently turn a Basic owner's trip into an unlimited trip.
         var ownerMember = trip.Members.FirstOrDefault(m => m.Role == MemberRole.Owner);
         if (ownerMember is not null && ownerMember.UserTier >= 1)
         {
-            return; // Owner is Pro — unlimited members
+            return;
         }
 
         // Check Trip Pass: If the trip creator has a TripPass for this specific trip

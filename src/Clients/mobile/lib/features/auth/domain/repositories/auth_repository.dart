@@ -2,13 +2,19 @@ import '../models/auth_models.dart';
 
 abstract class AuthRepository {
   Future<AuthResponseModel> login(String email, String password);
-  Future<AuthResponseModel> register(String email, String password, String fullName);
-  Future<void> sendRegistrationOtp(String email, String password, String fullName);
+  Future<AuthResponseModel> register(
+      String email, String password, String fullName);
+  Future<void> sendRegistrationOtp(
+      String email, String password, String fullName);
   Future<AuthResponseModel> verifyRegistrationOtp(String email, String otpCode);
   Future<void> logout();
   Future<AuthResponseModel> upgradeToPro();
   Future<AuthResponseModel> loginWithGoogle(String idToken);
   Future<UserModel?> getMe();
+  Future<UserModel> updateMe({
+    required String fullName,
+    String? avatarUrl,
+  });
   Future<void> saveToken(String accessToken, String refreshToken);
   Future<String?> getToken();
   Future<void> clearSession();

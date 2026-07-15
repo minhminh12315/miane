@@ -20,8 +20,8 @@ CACHE_DIR = Path(os.getenv("AI_IMAGE_CACHE_DIR", "cache")).resolve()
 PUBLIC_BASE_URL = os.getenv("AI_IMAGE_PUBLIC_BASE_URL", "http://localhost:8000")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("AI_IMAGE_LANDMARK_MODEL", "llama3.2:3b")
-OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2")
-OPENAI_IMAGE_SIZE = os.getenv("OPENAI_IMAGE_SIZE", "1536x864")
+OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
+OPENAI_IMAGE_SIZE = os.getenv("OPENAI_IMAGE_SIZE", "1536x1024")
 OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "high")
 OPENAI_IMAGE_FORMAT = os.getenv("OPENAI_IMAGE_FORMAT", "jpeg")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -240,7 +240,7 @@ def _build_image_prompt(
             "Create a photorealistic travel cover photo for a real destination.",
             "The image must look like authentic professional travel photography, not an illustration, not concept art, and not a fantasy scene.",
             "",
-            "Exact Google Maps place name:",
+            "Exact destination name:",
             request.placeName,
             "",
             "Formatted address:",

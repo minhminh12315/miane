@@ -49,8 +49,35 @@ FROM build AS release-build
 
 # Build the web app with the target API URL
 ARG API_URL=http://localhost:5000
-ARG GOOGLE_MAPS_API_KEY=
-RUN flutter build web --release --dart-define=API_URL=${API_URL} --dart-define=GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+ARG MIANE_AI_IMAGE_URL=http://localhost:8000/api/v1/image/generate-trip-thumbnail
+ARG FIREBASE_WEB_API_KEY=
+ARG FIREBASE_WEB_AUTH_DOMAIN=
+ARG FIREBASE_WEB_PROJECT_ID=
+ARG FIREBASE_WEB_STORAGE_BUCKET=
+ARG FIREBASE_WEB_MESSAGING_SENDER_ID=
+ARG FIREBASE_WEB_APP_ID=
+ARG FIREBASE_WEB_MEASUREMENT_ID=
+ARG FIREBASE_WEB_VAPID_KEY=
+RUN printf '{"apiKey":"%s","authDomain":"%s","projectId":"%s","storageBucket":"%s","messagingSenderId":"%s","appId":"%s","measurementId":"%s"}\n' \
+  "${FIREBASE_WEB_API_KEY}" \
+  "${FIREBASE_WEB_AUTH_DOMAIN}" \
+  "${FIREBASE_WEB_PROJECT_ID}" \
+  "${FIREBASE_WEB_STORAGE_BUCKET}" \
+  "${FIREBASE_WEB_MESSAGING_SENDER_ID}" \
+  "${FIREBASE_WEB_APP_ID}" \
+  "${FIREBASE_WEB_MEASUREMENT_ID}" \
+  > web/firebase-config.json
+RUN flutter build web --release \
+  --dart-define=API_URL=${API_URL} \
+  --dart-define=MIANE_AI_IMAGE_URL=${MIANE_AI_IMAGE_URL} \
+  --dart-define=FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY} \
+  --dart-define=FIREBASE_WEB_AUTH_DOMAIN=${FIREBASE_WEB_AUTH_DOMAIN} \
+  --dart-define=FIREBASE_WEB_PROJECT_ID=${FIREBASE_WEB_PROJECT_ID} \
+  --dart-define=FIREBASE_WEB_STORAGE_BUCKET=${FIREBASE_WEB_STORAGE_BUCKET} \
+  --dart-define=FIREBASE_WEB_MESSAGING_SENDER_ID=${FIREBASE_WEB_MESSAGING_SENDER_ID} \
+  --dart-define=FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID} \
+  --dart-define=FIREBASE_WEB_MEASUREMENT_ID=${FIREBASE_WEB_MEASUREMENT_ID} \
+  --dart-define=FIREBASE_WEB_VAPID_KEY=${FIREBASE_WEB_VAPID_KEY}
 
 # Stage 2: Serve using Nginx
 FROM nginx:alpine

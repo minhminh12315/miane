@@ -1,6 +1,8 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import '../../data/repositories/auth_repository_impl.dart';
+import '../../domain/models/auth_models.dart';
+import '../../../notification/presentation/controllers/push_notification_controller.dart';
 
 part 'app_auth_provider.g.dart';
 
@@ -81,6 +83,9 @@ class AppAuth extends _$AppAuth {
 
   Future<void> logout() async {
     try {
+      await ref
+          .read(pushNotificationSettingsProvider.notifier)
+          .disableBestEffort();
       final repo = ref.read(authRepositoryProvider);
       await repo.logout();
     } catch (_) {
@@ -98,6 +103,29 @@ final currentUserIdProvider = FutureProvider<String?>((ref) async {
     try {
       final decoded = JwtDecoder.decode(token);
       return decoded['sub'] as String? ?? decoded['nameid'] as String?;
+    } catch (_) {}
+  }
+  return null;
+});
+
+final currentUserProvider = FutureProvider<UserModel?>((ref) async {
+  final repo = ref.watch(authRepositoryProvider);
+  final user = await repo.getMe();
+  if (user != null) return user;
+
+  final token = await repo.getToken();
+  if (token != null && token.isNotEmpty) {
+    try {
+      final decoded = JwtDecoder.decode(token);
+      return UserModel(
+        id: decoded['sub'] as String? ?? decoded['nameid'] as String? ?? '',
+        email: decoded['email'] as String? ??
+            decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress']
+                as String? ??
+            '',
+        fullName: decoded['FullName'] as String? ?? '',
+        userTier: int.tryParse(decoded['UserTier']?.toString() ?? '') ?? 0,
+      );
     } catch (_) {}
   }
   return null;

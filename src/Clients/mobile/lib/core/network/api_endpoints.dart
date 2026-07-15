@@ -9,9 +9,10 @@ class ApiEndpoints {
   static const String verifyRegistrationOtp = '/auth/register/verify-otp';
   static const String login = '/auth/login';
   static const String logout = '/auth/logout';
+  static const String me = '/auth/me';
   static const String upgradePro = '/auth/upgrade-pro';
   static const String googleLogin = '/auth/google';
-  
+
   static const String trips = '/trips';
   static const String joinTrip = '/trips/join';
   static String trip(String tripId) => '/trips/$tripId';
@@ -26,7 +27,6 @@ class ApiEndpoints {
   static String tripLeg(String tripId, String legId) =>
       '/trips/$tripId/legs/$legId';
 
-
   static const String expenses = '/expenses';
   static String tripExpenses(String tripId) => '/expenses/trip/$tripId';
   static String tripBalances(String tripId) =>
@@ -37,4 +37,9 @@ class ApiEndpoints {
   static String getPool(String tripId) => '/expenses/pool/$tripId';
 
   static const String notifications = '/notifications';
+  static const String notificationDevices = '/notifications/devices';
+  static const String registerNotificationDevice =
+      '$notificationDevices/register';
+  static String notificationDevice(String token) =>
+      '$notificationDevices/${Uri.encodeComponent(token)}';
 }
