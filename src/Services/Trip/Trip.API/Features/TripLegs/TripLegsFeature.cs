@@ -92,7 +92,7 @@ public sealed class AddTripLegHandler : ICommandHandler<AddTripLegCommand, Guid>
             leg.EndDate.Value < leg.StartDate.Value)
         {
             throw new DomainException(
-                "Leg end date cannot be before its start date.",
+                "Ngày kết thúc chặng đi không được trước ngày bắt đầu.",
                 "INVALID_LEG_DATE_RANGE");
         }
     }
@@ -124,7 +124,7 @@ public sealed class UpdateTripLegHandler : ICommandHandler<UpdateTripLegCommand>
 
         var leg = await _db.TripLegs
             .FirstOrDefaultAsync(l => l.Id == request.LegId && l.TripId == request.TripId, ct)
-            ?? throw new NotFoundException("TripLeg", request.LegId);
+            ?? throw new NotFoundException("chặng đi", request.LegId);
 
         if (request.Order.HasValue) leg.Order = request.Order.Value;
         if (!string.IsNullOrWhiteSpace(request.Name)) leg.Name = request.Name;
@@ -157,7 +157,7 @@ public sealed class DeleteTripLegHandler : ICommandHandler<DeleteTripLegCommand>
 
         var leg = await _db.TripLegs
             .FirstOrDefaultAsync(l => l.Id == request.LegId && l.TripId == request.TripId, ct)
-            ?? throw new NotFoundException("TripLeg", request.LegId);
+            ?? throw new NotFoundException("chặng đi", request.LegId);
 
         _db.TripLegs.Remove(leg);
         await _db.SaveChangesAsync(ct);
@@ -176,7 +176,7 @@ internal static class TripLegAuth
         if (member is null || (member.Role != MemberRole.Owner && member.Role != MemberRole.Admin))
         {
             throw new ForbiddenAccessException(
-                "Only the trip owner or admin can manage trip legs.");
+                "Chỉ chủ chuyến đi hoặc quản trị viên mới có thể quản lý chặng đi.");
         }
     }
 }

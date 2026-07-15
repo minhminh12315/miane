@@ -45,12 +45,12 @@ public sealed class GetTripHandler : IQueryHandler<GetTripQuery, TripDetailRespo
     public async Task<TripDetailResponse> Handle(GetTripQuery request, CancellationToken cancellationToken)
     {
         var trip = await _tripRepository.GetWithMembersAsync(request.TripId, cancellationToken)
-            ?? throw new NotFoundException("Trip", request.TripId);
+            ?? throw new NotFoundException("chuyến đi", request.TripId);
 
         // Verify user is a member
         if (!trip.Members.Any(m => m.UserId == request.UserId))
         {
-            throw new ForbiddenAccessException("You are not a member of this trip.");
+            throw new ForbiddenAccessException("Bạn không phải là thành viên của chuyến đi này.");
         }
 
         return new TripDetailResponse(

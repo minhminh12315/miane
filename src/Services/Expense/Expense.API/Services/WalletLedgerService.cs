@@ -64,18 +64,18 @@ public sealed class WalletLedgerService
     {
         if (request.Amount < 0)
         {
-            throw new DomainException("Wallet transaction amount cannot be negative.", "INVALID_WALLET_TRANSACTION_AMOUNT");
+            throw new DomainException("Số tiền giao dịch ví không được là số âm.", "INVALID_WALLET_TRANSACTION_AMOUNT");
         }
 
         await using var dbTransaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var wallet = await _dbContext.TripWallets
             .FirstOrDefaultAsync(w => w.Id == request.WalletId, cancellationToken)
-            ?? throw new NotFoundException("TripWallet", request.WalletId);
+            ?? throw new NotFoundException("ví chung", request.WalletId);
 
         if (!string.Equals(wallet.Currency, request.Currency, StringComparison.OrdinalIgnoreCase))
         {
-            throw new DomainException("Wallet transaction currency must match wallet currency.", "WALLET_CURRENCY_MISMATCH");
+            throw new DomainException("Đơn vị tiền tệ của giao dịch phải khớp với đơn vị tiền tệ của ví.", "WALLET_CURRENCY_MISMATCH");
         }
 
         var walletTransaction = new WalletTransaction
@@ -122,7 +122,7 @@ public sealed class WalletLedgerService
     {
         var wallet = await _dbContext.TripWallets
             .FirstOrDefaultAsync(w => w.Id == walletId, cancellationToken)
-            ?? throw new NotFoundException("TripWallet", walletId);
+            ?? throw new NotFoundException("ví chung", walletId);
 
         var transactions = await _dbContext.WalletTransactions
             .Where(t => t.TripWalletId == walletId && t.Status == WalletTransactionStatus.Posted)

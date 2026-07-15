@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
+import '../../../auth/presentation/controllers/app_auth_provider.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
 import '../../domain/models/trip_models.dart';
 import '../controllers/trips_provider.dart';
@@ -113,7 +114,13 @@ class HomeScreen extends ConsumerWidget {
 
   Future<void> _handleAddNewTrip(BuildContext context, WidgetRef ref) async {
     final trips = ref.read(tripsProvider).valueOrNull ?? [];
-    if (trips.length >= 2) {
+    final isPro = ref.read(currentUserTierProvider).valueOrNull == 1;
+    // MIANE Basic caps active trips at 2 (mirrors CreateTripValidator.cs on
+    // the backend); Pro is unlimited. Must check tier here — the backend
+    // already bypasses this limit for Pro (UserTier >= 1), but this
+    // client-side pre-check ran unconditionally before, so Basic's 2-trip
+    // wall kept blocking Pro users who'd already paid to remove it.
+    if (!isPro && trips.length >= 2) {
       showIosProSheet(context, featureName: 'Tạo thêm chuyến đi');
       return;
     }

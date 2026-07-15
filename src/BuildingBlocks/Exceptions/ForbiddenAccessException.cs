@@ -6,7 +6,7 @@ namespace BuildingBlocks.Exceptions;
 /// </summary>
 public class ForbiddenAccessException : DomainException
 {
-    public ForbiddenAccessException(string message = "You do not have permission to perform this action.")
+    public ForbiddenAccessException(string message = "Bạn không có quyền thực hiện thao tác này.")
         : base(message, "FORBIDDEN")
     {
     }

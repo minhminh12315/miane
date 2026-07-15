@@ -66,7 +66,7 @@ public class NotificationsController : ControllerBase
 
         if (notification is null)
         {
-            return NotFound(new { message = "Notification not found." });
+            return NotFound(new { message = "Không tìm thấy thông báo." });
         }
 
         notification.IsRead = true;

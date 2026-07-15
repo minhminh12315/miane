@@ -94,7 +94,7 @@ public sealed class CreateExpenseHandler : ICommandHandler<CreateExpenseCommand,
         {
             var pool = await _dbContext.TripPools
                 .FirstOrDefaultAsync(p => p.TripId == request.TripId, cancellationToken)
-                ?? throw new NotFoundException("TripPool", request.TripId);
+                ?? throw new NotFoundException("quỹ nhóm", request.TripId);
 
             pool.Deduct(convertedAmount);
         }
@@ -121,7 +121,7 @@ public sealed class CreateExpenseHandler : ICommandHandler<CreateExpenseCommand,
             {
                 if (!source.TripWalletId.HasValue)
                 {
-                    throw new DomainException("Wallet payment source must include TripWalletId.", "WALLET_SOURCE_REQUIRES_WALLET_ID");
+                    throw new DomainException("Nguồn thanh toán từ ví phải kèm mã ví.", "WALLET_SOURCE_REQUIRES_WALLET_ID");
                 }
 
                 var walletTransaction = await _walletLedger.PostAsync(new WalletPostRequest(
@@ -187,7 +187,7 @@ public sealed class CreateExpenseHandler : ICommandHandler<CreateExpenseCommand,
                 Amount = Math.Round(convertedAmount * (s.Percentage ?? 0m) / 100m, 4)
             }).ToList(),
 
-            _ => throw new DomainException("Invalid split type.", "INVALID_SPLIT_TYPE")
+            _ => throw new DomainException("Cách chia khoản chi không hợp lệ.", "INVALID_SPLIT_TYPE")
         };
     }
 
@@ -195,13 +195,13 @@ public sealed class CreateExpenseHandler : ICommandHandler<CreateExpenseCommand,
     {
         if (sources.Any(s => s.Amount <= 0))
         {
-            throw new DomainException("Payment source amounts must be positive.", "INVALID_PAYMENT_SOURCE_AMOUNT");
+            throw new DomainException("Số tiền của nguồn thanh toán phải lớn hơn 0.", "INVALID_PAYMENT_SOURCE_AMOUNT");
         }
 
         var sourceTotal = sources.Sum(s => s.Amount);
         if (Math.Abs(sourceTotal - convertedAmount) > 0.01m)
         {
-            throw new DomainException("Payment source total must equal the converted expense amount.", "PAYMENT_SOURCE_TOTAL_MISMATCH");
+            throw new DomainException("Tổng các nguồn thanh toán phải bằng số tiền chi tiêu đã quy đổi.", "PAYMENT_SOURCE_TOTAL_MISMATCH");
         }
     }
 }

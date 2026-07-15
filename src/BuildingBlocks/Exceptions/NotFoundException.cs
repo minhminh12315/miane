@@ -7,7 +7,7 @@ namespace BuildingBlocks.Exceptions;
 public class NotFoundException : DomainException
 {
     public NotFoundException(string entityName, object key)
-        : base($"{entityName} with key '{key}' was not found.", "NOT_FOUND")
+        : base($"Không tìm thấy {entityName} (mã: {key}).", "NOT_FOUND")
     {
     }
 

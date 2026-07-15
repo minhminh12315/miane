@@ -21,6 +21,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tierState = ref.watch(currentUserTierProvider);
+    final isPro = tierState.valueOrNull == 1;
+
     return CupertinoPageScaffold(
       backgroundColor: iosGroupedBackground(context),
       child: CustomScrollView(
@@ -34,20 +37,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           SliverToBoxAdapter(
             child: IosSection(
               children: [
-                const IosListTile(
+                IosListTile(
                   icon: CupertinoIcons.person,
                   title: 'Khách du lịch',
                   subtitle: 'traveler@example.com',
-                  value: 'BASIC',
+                  value: isPro ? 'PRO' : 'BASIC',
                 ),
-                IosListTile(
-                  icon: CupertinoIcons.star,
-                  iconColor: AppTheme.iosGold,
-                  title: 'Nâng cấp MIANE Pro',
-                  subtitle: 'AI Plan, AI OCR và không giới hạn chuyến đi',
-                  onTap: () =>
-                      showIosProSheet(context, featureName: 'MIANE Pro'),
-                ),
+                if (isPro)
+                  const IosListTile(
+                    icon: CupertinoIcons.star_fill,
+                    iconColor: AppTheme.iosGold,
+                    title: 'MIANE Pro',
+                    subtitle: 'Chuyến đi và thành viên không giới hạn',
+                    value: 'Đã kích hoạt',
+                  )
+                else
+                  IosListTile(
+                    icon: CupertinoIcons.star,
+                    iconColor: AppTheme.iosGold,
+                    title: 'Nâng cấp MIANE Pro',
+                    subtitle: 'Chuyến đi và thành viên không giới hạn',
+                    onTap: () =>
+                        showIosProSheet(context, featureName: 'MIANE Pro'),
+                  ),
               ],
             ),
           ),

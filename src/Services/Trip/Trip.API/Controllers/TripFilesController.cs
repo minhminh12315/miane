@@ -82,18 +82,18 @@ public class TripFilesController : ControllerBase
         var fileUrl = TrimToMax(request.FileUrl, 1000);
         if (string.IsNullOrWhiteSpace(fileName))
         {
-            return BadRequest(new { message = "File name is required." });
+            return BadRequest(new { message = "Vui lòng nhập tên tệp." });
         }
 
         if (string.IsNullOrWhiteSpace(fileUrl) ||
             !Uri.TryCreate(fileUrl, UriKind.Absolute, out _))
         {
-            return BadRequest(new { message = "A valid file URL is required." });
+            return BadRequest(new { message = "Đường dẫn tệp không hợp lệ." });
         }
 
         if (request.FileSizeBytes is < 0)
         {
-            return BadRequest(new { message = "File size cannot be negative." });
+            return BadRequest(new { message = "Dung lượng tệp không được là số âm." });
         }
 
         var file = new TripFile
@@ -129,19 +129,19 @@ public class TripFilesController : ControllerBase
 
         if (file is null || file.Length <= 0)
         {
-            return BadRequest(new { message = "File is required." });
+            return BadRequest(new { message = "Vui lòng chọn một tệp để tải lên." });
         }
 
         if (file.Length > MaxUploadBytes)
         {
-            return BadRequest(new { message = "File size cannot exceed 25 MB." });
+            return BadRequest(new { message = "Dung lượng tệp không được vượt quá 25 MB." });
         }
 
         var originalFileName = Path.GetFileName(file.FileName);
         var extension = Path.GetExtension(originalFileName);
         if (string.IsNullOrWhiteSpace(extension) || !AllowedExtensions.Contains(extension))
         {
-            return BadRequest(new { message = "This file type is not supported." });
+            return BadRequest(new { message = "Định dạng tệp này không được hỗ trợ." });
         }
 
         var storageName = $"{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
@@ -183,12 +183,12 @@ public class TripFilesController : ControllerBase
         var content = request.Content?.Trim();
         if (string.IsNullOrWhiteSpace(title))
         {
-            return BadRequest(new { message = "Note title is required." });
+            return BadRequest(new { message = "Vui lòng nhập tiêu đề ghi chú." });
         }
 
         if (string.IsNullOrWhiteSpace(content))
         {
-            return BadRequest(new { message = "Note content is required." });
+            return BadRequest(new { message = "Vui lòng nhập nội dung ghi chú." });
         }
 
         var storageName = $"{Guid.NewGuid():N}.txt";
@@ -226,7 +226,7 @@ public class TripFilesController : ControllerBase
         var safeStorageName = Path.GetFileName(storageName);
         if (safeStorageName != storageName)
         {
-            return BadRequest(new { message = "Invalid file name." });
+            return BadRequest(new { message = "Tên tệp không hợp lệ." });
         }
 
         var file = await _db.TripFiles
@@ -234,12 +234,12 @@ public class TripFilesController : ControllerBase
             .FirstOrDefaultAsync(item =>
                 item.TripId == tripId &&
                 item.FileUrl.EndsWith($"/{safeStorageName}"), ct)
-            ?? throw new NotFoundException("Trip file", storageName);
+            ?? throw new NotFoundException("tệp đính kèm", storageName);
 
         var absolutePath = Path.Combine(GetTripUploadDirectory(tripId), safeStorageName);
         if (!System.IO.File.Exists(absolutePath))
         {
-            throw new NotFoundException("Trip file content", storageName);
+            throw new NotFoundException("nội dung tệp", storageName);
         }
 
         return PhysicalFile(
@@ -256,11 +256,11 @@ public class TripFilesController : ControllerBase
 
         var file = await _db.TripFiles
             .FirstOrDefaultAsync(item => item.TripId == tripId && item.Id == fileId, ct)
-            ?? throw new NotFoundException("Trip file", fileId);
+            ?? throw new NotFoundException("tệp đính kèm", fileId);
 
         if (file.UploadedByUserId != userId && !CanManageFiles(member))
         {
-            throw new ForbiddenAccessException("Only the uploader or a file manager can remove this trip file.");
+            throw new ForbiddenAccessException("Chỉ người tải lên hoặc người quản lý tệp mới có thể xóa tệp này.");
         }
 
         DeleteStoredContentIfLocal(tripId, file.FileUrl);
@@ -277,13 +277,13 @@ public class TripFilesController : ControllerBase
             .AnyAsync(trip => trip.Id == tripId, ct);
         if (!tripExists)
         {
-            throw new NotFoundException("Trip", tripId);
+            throw new NotFoundException("chuyến đi", tripId);
         }
 
         return await _db.TripMembers
             .Include(member => member.CustomRole)
             .FirstOrDefaultAsync(member => member.TripId == tripId && member.UserId == userId, ct)
-            ?? throw new ForbiddenAccessException("You are not a member of this trip.");
+            ?? throw new ForbiddenAccessException("Bạn không phải là thành viên của chuyến đi này.");
     }
 
     private static bool CanManageFiles(TripMember member)

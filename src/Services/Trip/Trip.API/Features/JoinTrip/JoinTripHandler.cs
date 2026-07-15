@@ -25,17 +25,17 @@ public sealed class JoinTripHandler : ICommandHandler<JoinTripCommand, JoinTripR
     public async Task<JoinTripResult> Handle(JoinTripCommand request, CancellationToken cancellationToken)
     {
         var trip = await _tripRepository.GetByInviteCodeAsync(request.InviteCode, cancellationToken)
-            ?? throw new NotFoundException("Trip", request.InviteCode);
+            ?? throw new NotFoundException("chuyến đi", request.InviteCode);
 
         if (trip.Status != TripStatus.Active)
         {
-            throw new DomainException("Cannot join a trip that is not active.", "TRIP_NOT_ACTIVE");
+            throw new DomainException("Chuyến đi này hiện không còn hoạt động.", "TRIP_NOT_ACTIVE");
         }
 
         // Check if user is already a member
         if (await _tripRepository.IsUserMemberOfTripAsync(trip.Id, request.UserId, cancellationToken))
         {
-            throw new ConflictException("You are already a member of this trip.");
+            throw new ConflictException("Bạn đã là thành viên của chuyến đi này.");
         }
 
         // Check member limit based on tier rules
@@ -107,7 +107,7 @@ public sealed class JoinTripHandler : ICommandHandler<JoinTripCommand, JoinTripR
         {
             throw new TierLimitExceededException(
                 currentTier: 0,
-                limitType: "Trip Members",
+                limitType: "số thành viên",
                 currentCount: currentMemberCount,
                 maxAllowed: BasicMaxMembers);
         }

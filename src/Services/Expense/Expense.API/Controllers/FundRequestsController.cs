@@ -30,16 +30,16 @@ public class FundRequestsController : ControllerBase
     {
         var wallet = await _dbContext.TripWallets
             .FirstOrDefaultAsync(w => w.Id == walletId, ct)
-            ?? throw new NotFoundException("TripWallet", walletId);
+            ?? throw new NotFoundException("ví chung", walletId);
 
         if (request.TargetAmount <= 0)
         {
-            throw new DomainException("Fund request target amount must be positive.", "INVALID_FUND_TARGET_AMOUNT");
+            throw new DomainException("Số tiền mục tiêu của yêu cầu quỹ phải lớn hơn 0.", "INVALID_FUND_TARGET_AMOUNT");
         }
 
         if (request.Participants.Count == 0)
         {
-            throw new DomainException("Fund request requires at least one participant.", "NO_FUND_PARTICIPANTS");
+            throw new DomainException("Yêu cầu quỹ cần ít nhất một người tham gia.", "NO_FUND_PARTICIPANTS");
         }
 
         var fundRequest = new FundRequest
@@ -88,13 +88,13 @@ public class FundRequestsController : ControllerBase
     {
         if (request.Amount <= 0)
         {
-            throw new DomainException("Contribution amount must be positive.", "INVALID_CONTRIBUTION_AMOUNT");
+            throw new DomainException("Số tiền đóng góp phải lớn hơn 0.", "INVALID_CONTRIBUTION_AMOUNT");
         }
 
         var contribution = await _dbContext.FundContributions
             .Include(c => c.TripWallet)
             .FirstOrDefaultAsync(c => c.Id == contributionId, ct)
-            ?? throw new NotFoundException("FundContribution", contributionId);
+            ?? throw new NotFoundException("khoản đóng góp", contributionId);
 
         contribution.Amount += request.Amount;
         contribution.ConfirmedByUserId = GetUserId();
@@ -139,7 +139,7 @@ public class FundRequestsController : ControllerBase
             FundAllocationType.Fixed => AllocateFixed(targetAmount, participants),
             FundAllocationType.Percent => AllocatePercent(targetAmount, participants),
             FundAllocationType.Weight => AllocateWeight(targetAmount, participants),
-            _ => throw new DomainException("Unsupported fund allocation type.", "UNSUPPORTED_FUND_ALLOCATION")
+            _ => throw new DomainException("Loại phân bổ quỹ này không được hỗ trợ.", "UNSUPPORTED_FUND_ALLOCATION")
         };
     }
 
@@ -155,7 +155,7 @@ public class FundRequestsController : ControllerBase
         var result = participants.Select(p => (p.UserId, Amount: p.Amount ?? 0m)).ToList();
         if (Math.Abs(result.Sum(p => p.Amount) - targetAmount) > 0.0001m)
         {
-            throw new DomainException("Fixed fund allocation must equal target amount.", "FUND_FIXED_TOTAL_MISMATCH");
+            throw new DomainException("Tổng phân bổ cố định phải bằng số tiền mục tiêu.", "FUND_FIXED_TOTAL_MISMATCH");
         }
 
         return result;
@@ -166,7 +166,7 @@ public class FundRequestsController : ControllerBase
         var totalPercent = participants.Sum(p => p.Percentage ?? 0m);
         if (Math.Abs(totalPercent - 100m) > 0.0001m)
         {
-            throw new DomainException("Fund allocation percentage must total 100.", "FUND_PERCENT_TOTAL_MISMATCH");
+            throw new DomainException("Tổng phần trăm phân bổ quỹ phải bằng 100.", "FUND_PERCENT_TOTAL_MISMATCH");
         }
 
         var result = participants
@@ -180,7 +180,7 @@ public class FundRequestsController : ControllerBase
         var totalWeight = participants.Sum(p => p.Weight ?? 0m);
         if (totalWeight <= 0)
         {
-            throw new DomainException("Fund allocation weight must be positive.", "FUND_WEIGHT_INVALID");
+            throw new DomainException("Trọng số phân bổ quỹ phải lớn hơn 0.", "FUND_WEIGHT_INVALID");
         }
 
         var result = participants
