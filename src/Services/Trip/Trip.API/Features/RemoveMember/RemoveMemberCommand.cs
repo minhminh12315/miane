@@ -29,7 +29,7 @@ public sealed class RemoveMemberHandler : ICommandHandler<RemoveMemberCommand>
     public async Task<MediatR.Unit> Handle(RemoveMemberCommand request, CancellationToken cancellationToken)
     {
         var trip = await _tripRepository.GetWithMembersAsync(request.TripId, cancellationToken)
-            ?? throw new NotFoundException("Trip", request.TripId);
+            ?? throw new NotFoundException("chuyến đi", request.TripId);
 
         // Only Owner or Admin can remove members
         var requestingMember = trip.Members.FirstOrDefault(m => m.UserId == request.RequestingUserId);
@@ -39,7 +39,7 @@ public sealed class RemoveMemberHandler : ICommandHandler<RemoveMemberCommand>
         }
 
         var targetMember = await _tripRepository.GetTripMemberAsync(request.TripId, request.TargetUserId, cancellationToken)
-            ?? throw new NotFoundException("TripMember", request.TargetUserId);
+            ?? throw new NotFoundException("thành viên", request.TargetUserId);
 
         // Cannot remove the owner
         if (targetMember.Role == MemberRole.Owner)

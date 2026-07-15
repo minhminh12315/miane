@@ -124,7 +124,7 @@ public sealed class UpdateTripLegHandler : ICommandHandler<UpdateTripLegCommand>
 
         var leg = await _db.TripLegs
             .FirstOrDefaultAsync(l => l.Id == request.LegId && l.TripId == request.TripId, ct)
-            ?? throw new NotFoundException("TripLeg", request.LegId);
+            ?? throw new NotFoundException("chặng đi", request.LegId);
 
         if (request.Order.HasValue) leg.Order = request.Order.Value;
         if (!string.IsNullOrWhiteSpace(request.Name)) leg.Name = request.Name;
@@ -157,7 +157,7 @@ public sealed class DeleteTripLegHandler : ICommandHandler<DeleteTripLegCommand>
 
         var leg = await _db.TripLegs
             .FirstOrDefaultAsync(l => l.Id == request.LegId && l.TripId == request.TripId, ct)
-            ?? throw new NotFoundException("TripLeg", request.LegId);
+            ?? throw new NotFoundException("chặng đi", request.LegId);
 
         _db.TripLegs.Remove(leg);
         await _db.SaveChangesAsync(ct);
@@ -183,7 +183,7 @@ internal static class TripLegAuth
             .Where(t => t.Id == tripId)
             .Select(t => new { t.EndDate })
             .FirstOrDefaultAsync(ct)
-            ?? throw new NotFoundException("Trip", tripId);
+            ?? throw new NotFoundException("chuyến đi", tripId);
 
         if (trip.EndDate.HasValue && trip.EndDate.Value.Date < DateTime.UtcNow.Date)
         {

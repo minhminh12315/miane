@@ -156,10 +156,22 @@ class ApiClient {
     }
 
     String errorMessage = 'Đã xảy ra lỗi.';
-    if (responseBody is Map && responseBody.containsKey('message')) {
-      errorMessage = responseBody['message'];
-    } else if (responseBody is Map && responseBody.containsKey('error')) {
-      errorMessage = responseBody['error'];
+    if (responseBody is Map) {
+      // FluentValidation errors arrive as {message: "One or more validation
+      // errors occurred.", errors: [{field, error}, ...]} — the generic
+      // top-level `message` is useless; the field-level `error` (e.g. the
+      // Basic-tier trip/member limit copy) is what's actually worth showing.
+      final errors = responseBody['errors'];
+      if (errors is List && errors.isNotEmpty) {
+        final first = errors.first;
+        if (first is Map && first['error'] is String) {
+          errorMessage = first['error'] as String;
+        }
+      } else if (responseBody['message'] is String) {
+        errorMessage = responseBody['message'] as String;
+      } else if (responseBody['error'] is String) {
+        errorMessage = responseBody['error'] as String;
+      }
     } else if (response.body.isNotEmpty) {
       errorMessage = response.body;
     }

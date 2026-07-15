@@ -33,7 +33,7 @@ public class TripPoolController : ControllerBase
     public async Task<IActionResult> GetPool(Guid tripId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetTripPoolQuery(tripId), ct);
-        return result is not null ? Ok(result) : NotFound(new { message = "No pool exists for this trip yet." });
+        return result is not null ? Ok(result) : NotFound(new { message = "Chuyến đi này chưa có quỹ nhóm." });
     }
 }
 

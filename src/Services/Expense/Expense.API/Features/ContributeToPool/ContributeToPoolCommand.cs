@@ -27,7 +27,7 @@ public sealed class ContributeToPoolHandler : ICommandHandler<ContributeToPoolCo
     {
         if (request.Amount <= 0)
         {
-            throw new DomainException("Contribution amount must be positive.", "INVALID_AMOUNT");
+            throw new DomainException("Số tiền đóng góp phải lớn hơn 0.", "INVALID_AMOUNT");
         }
 
         var pool = await _dbContext.TripPools

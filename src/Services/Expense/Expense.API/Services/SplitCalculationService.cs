@@ -25,7 +25,7 @@ public sealed class SplitCalculationService
     {
         if (amount < 0)
         {
-            throw new DomainException("Split amount cannot be negative.", "INVALID_SPLIT_AMOUNT");
+            throw new DomainException("Số tiền chia không được là số âm.", "INVALID_SPLIT_AMOUNT");
         }
 
         if (splitType == SplitType.TripPool)
@@ -39,7 +39,7 @@ public sealed class SplitCalculationService
 
         if (eligible.Count == 0)
         {
-            throw new DomainException("At least one eligible participant is required.", "NO_ELIGIBLE_PARTICIPANTS");
+            throw new DomainException("Cần ít nhất một người tham gia hợp lệ.", "NO_ELIGIBLE_PARTICIPANTS");
         }
 
         var rawShares = splitType switch
@@ -47,7 +47,7 @@ public sealed class SplitCalculationService
             SplitType.Equal => CalculateByWeight(amount, eligible.Select(p => (p.UserId, Weight: p.ParticipationRatio))),
             SplitType.Custom => CalculateCustom(amount, eligible),
             SplitType.Percentage => CalculatePercentage(amount, eligible),
-            _ => throw new DomainException("Unsupported split type.", "UNSUPPORTED_SPLIT_TYPE")
+            _ => throw new DomainException("Cách chia khoản chi này không được hỗ trợ.", "UNSUPPORTED_SPLIT_TYPE")
         };
 
         return RoundAndDistributeDelta(amount, rawShares, currencyScale);
@@ -76,7 +76,7 @@ public sealed class SplitCalculationService
 
         if (Math.Abs(shares.Sum(s => s.Amount) - amount) > 0.0001m)
         {
-            throw new DomainException("Custom split amounts must equal the total amount.", "CUSTOM_SPLIT_TOTAL_MISMATCH");
+            throw new DomainException("Tổng các khoản chia tùy chỉnh phải bằng tổng số tiền.", "CUSTOM_SPLIT_TOTAL_MISMATCH");
         }
 
         return shares;
@@ -87,7 +87,7 @@ public sealed class SplitCalculationService
         var totalPercentage = participants.Sum(p => p.Percentage ?? 0m);
         if (Math.Abs(totalPercentage - 100m) > 0.0001m)
         {
-            throw new DomainException("Percentage split must total 100.", "PERCENTAGE_SPLIT_TOTAL_MISMATCH");
+            throw new DomainException("Tổng phần trăm chia phải bằng 100.", "PERCENTAGE_SPLIT_TOTAL_MISMATCH");
         }
 
         return participants
@@ -103,7 +103,7 @@ public sealed class SplitCalculationService
 
         if (weighted.Count == 0)
         {
-            throw new DomainException("Total split weight must be positive.", "INVALID_SPLIT_WEIGHT");
+            throw new DomainException("Tổng trọng số chia phải lớn hơn 0.", "INVALID_SPLIT_WEIGHT");
         }
 
         var totalWeight = weighted.Sum(p => p.Weight);

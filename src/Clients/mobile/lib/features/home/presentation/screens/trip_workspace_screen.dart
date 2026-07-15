@@ -2286,14 +2286,14 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                   Navigator.of(actionContext).pop();
                   openScanner(ScanMode.bill);
                 },
-                child: const Text('📷 Quét hóa đơn'),
+                child: const Text('Quét hóa đơn'),
               ),
               CupertinoActionSheetAction(
                 onPressed: () {
                   Navigator.of(actionContext).pop();
                   openScanner(ScanMode.transfer);
                 },
-                child: const Text('🏦 Quét biên lai chuyển khoản'),
+                child: const Text('Quét biên lai chuyển khoản'),
               ),
             ],
             cancelButton: CupertinoActionSheetAction(

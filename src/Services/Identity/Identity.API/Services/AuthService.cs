@@ -42,7 +42,7 @@ namespace Identity.API.Services
             var existingUser = await _userManager.FindByEmailAsync(request.Email);
             if (existingUser is not null)
             {
-                throw new InvalidOperationException("A user with this email already exists.");
+                throw new InvalidOperationException("Email này đã được đăng ký.");
             }
 
             var user = new User
@@ -358,7 +358,7 @@ namespace Identity.API.Services
         public async Task<AuthResponse> UpgradeToProAsync(Guid userId)
         {
             var user = await _userManager.FindByIdAsync(userId.ToString())
-                ?? throw new InvalidOperationException("User not found.");
+                ?? throw new InvalidOperationException("Không tìm thấy người dùng.");
 
             if (user.UserTier != 1)
             {

@@ -24,7 +24,7 @@ public sealed class LeaveTripHandler : ICommandHandler<LeaveTripCommand>
     public async Task<MediatR.Unit> Handle(LeaveTripCommand request, CancellationToken cancellationToken)
     {
         var member = await _tripRepository.GetTripMemberAsync(request.TripId, request.UserId, cancellationToken)
-            ?? throw new NotFoundException("TripMember", request.UserId);
+            ?? throw new NotFoundException("thành viên", request.UserId);
 
         if (member.Role == MemberRole.Owner)
         {

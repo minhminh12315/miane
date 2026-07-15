@@ -26,13 +26,13 @@ public class TripWallet : AggregateRoot
     {
         if (transaction.Amount < 0)
         {
-            throw new DomainException("Wallet transaction amount cannot be negative.", "INVALID_WALLET_TRANSACTION_AMOUNT");
+            throw new DomainException("Số tiền giao dịch ví không được là số âm.", "INVALID_WALLET_TRANSACTION_AMOUNT");
         }
 
         if (transaction.Direction == TransactionDirection.Debit && transaction.Amount > CurrentBalance)
         {
             throw new DomainException(
-                $"Insufficient wallet balance. Available: {CurrentBalance:F2} {Currency}, Required: {transaction.Amount:F2} {Currency}",
+                $"Số dư ví không đủ. Hiện có: {CurrentBalance:F2} {Currency}, cần: {transaction.Amount:F2} {Currency}",
                 "INSUFFICIENT_WALLET_BALANCE");
         }
 

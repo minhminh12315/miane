@@ -36,13 +36,13 @@ public sealed class StaticExchangeRateProvider : IExchangeRateProvider
         if (!RatesToUsd.TryGetValue(fromCurrency, out var fromRate))
         {
             throw new BuildingBlocks.Exceptions.DomainException(
-                $"Unsupported currency: {fromCurrency}", "UNSUPPORTED_CURRENCY");
+                $"Không hỗ trợ loại tiền tệ: {fromCurrency}", "UNSUPPORTED_CURRENCY");
         }
 
         if (!RatesToUsd.TryGetValue(toCurrency, out var toRate))
         {
             throw new BuildingBlocks.Exceptions.DomainException(
-                $"Unsupported currency: {toCurrency}", "UNSUPPORTED_CURRENCY");
+                $"Không hỗ trợ loại tiền tệ: {toCurrency}", "UNSUPPORTED_CURRENCY");
         }
 
         // Convert: fromCurrency → USD → toCurrency

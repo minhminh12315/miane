@@ -12,7 +12,7 @@ public class ConflictException : DomainException
     }
 
     public ConflictException(string entityName, object key)
-        : base($"{entityName} with key '{key}' already exists.", "CONFLICT")
+        : base($"{entityName} (mã: {key}) đã tồn tại.", "CONFLICT")
     {
     }
 }

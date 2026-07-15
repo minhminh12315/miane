@@ -65,7 +65,7 @@ public class WalletsController : ControllerBase
 
         if (wallet is null)
         {
-            return NotFound(new { message = "No wallet exists for this trip yet." });
+            return NotFound(new { message = "Chuyến đi này chưa có ví chung." });
         }
 
         var members = await _dbContext.WalletMembers
@@ -121,7 +121,7 @@ public class WalletsController : ControllerBase
 
         if (wallet is null)
         {
-            return NotFound(new { message = "Wallet not found." });
+            return NotFound(new { message = "Không tìm thấy ví chung." });
         }
 
         var previousCustodian = wallet.CurrentCustodianUserId;

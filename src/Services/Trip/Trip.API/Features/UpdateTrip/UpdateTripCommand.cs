@@ -26,7 +26,7 @@ public sealed class UpdateTripHandler : ICommandHandler<UpdateTripCommand>
     public async Task<MediatR.Unit> Handle(UpdateTripCommand request, CancellationToken cancellationToken)
     {
         var trip = await _tripRepository.GetWithMembersAsync(request.TripId, cancellationToken)
-            ?? throw new NotFoundException("Trip", request.TripId);
+            ?? throw new NotFoundException("chuyến đi", request.TripId);
 
         if (IsCompletedByDate(trip.EndDate))
         {

@@ -25,7 +25,7 @@ public sealed class JoinTripHandler : ICommandHandler<JoinTripCommand, JoinTripR
     public async Task<JoinTripResult> Handle(JoinTripCommand request, CancellationToken cancellationToken)
     {
         var trip = await _tripRepository.GetByInviteCodeAsync(request.InviteCode, cancellationToken)
-            ?? throw new NotFoundException("Trip", request.InviteCode);
+            ?? throw new NotFoundException("chuyến đi", request.InviteCode);
 
         if (trip.Status != TripStatus.Active)
         {

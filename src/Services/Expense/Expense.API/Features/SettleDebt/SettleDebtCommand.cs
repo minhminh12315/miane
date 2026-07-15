@@ -24,17 +24,17 @@ public sealed class SettleDebtHandler : ICommandHandler<SettleDebtCommand>
     {
         var debt = await _dbContext.DebtRecords
             .FirstOrDefaultAsync(d => d.Id == request.DebtRecordId, cancellationToken)
-            ?? throw new NotFoundException("DebtRecord", request.DebtRecordId);
+            ?? throw new NotFoundException("khoản nợ", request.DebtRecordId);
 
         if (debt.IsSettled)
         {
-            throw new ConflictException("This debt has already been settled.");
+            throw new ConflictException("Khoản nợ này đã được tất toán.");
         }
 
         // Only the debtor (FromUserId) or the creditor (ToUserId) can settle
         if (debt.FromUserId != request.SettledByUserId && debt.ToUserId != request.SettledByUserId)
         {
-            throw new ForbiddenAccessException("Only the debtor or creditor can settle this debt.");
+            throw new ForbiddenAccessException("Chỉ người nợ hoặc người cho nợ mới có thể tất toán khoản nợ này.");
         }
 
         debt.IsSettled = true;

@@ -93,7 +93,7 @@ namespace Identity.API.Controllers
             var response = await _authService.LoginAsync(request);
 
             if (response == null)
-                return Unauthorized(new { message = "Email or password is incorrect" });
+                return Unauthorized(new { message = "Email hoặc mật khẩu không đúng." });
 
             var accessCookieOptions = new CookieOptions
             {
@@ -183,7 +183,7 @@ namespace Identity.API.Controllers
             var userId = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var parsedUserId))
             {
-                return Unauthorized(new { message = "Invalid token subject" });
+                return Unauthorized(new { message = "Token không hợp lệ." });
             }
 
             var response = await _authService.UpgradeToProAsync(parsedUserId);
@@ -216,13 +216,13 @@ namespace Identity.API.Controllers
             var userId = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var parsedUserId))
             {
-                return Unauthorized(new { message = "Invalid token subject" });
+                return Unauthorized(new { message = "Token không hợp lệ." });
             }
 
             var user = await _userManager.FindByIdAsync(parsedUserId.ToString());
             if (user == null || !user.IsActive)
             {
-                return Unauthorized(new { message = "User not found or inactive" });
+                return Unauthorized(new { message = "Không tìm thấy người dùng hoặc tài khoản đã bị vô hiệu hóa." });
             }
 
             var roles = await _userManager.GetRolesAsync(user);
@@ -250,13 +250,13 @@ namespace Identity.API.Controllers
             var userId = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var parsedUserId))
             {
-                return Unauthorized(new { message = "Invalid token subject" });
+                return Unauthorized(new { message = "Token không hợp lệ." });
             }
 
             var user = await _userManager.FindByIdAsync(parsedUserId.ToString());
             if (user == null || !user.IsActive)
             {
-                return Unauthorized(new { message = "User not found or inactive" });
+                return Unauthorized(new { message = "Không tìm thấy người dùng hoặc tài khoản đã bị vô hiệu hóa." });
             }
 
             var roles = await _userManager.GetRolesAsync(user);

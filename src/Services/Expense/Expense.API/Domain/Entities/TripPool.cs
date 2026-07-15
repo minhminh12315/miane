@@ -27,7 +27,7 @@ public class TripPool : AggregateRoot
         if (amount > Balance)
         {
             throw new BuildingBlocks.Exceptions.DomainException(
-                $"Insufficient pool balance. Available: {Balance:F2} {Currency}, Required: {amount:F2} {Currency}",
+                $"Số dư quỹ nhóm không đủ. Hiện có: {Balance:F2} {Currency}, cần: {amount:F2} {Currency}",
                 "INSUFFICIENT_POOL_BALANCE");
         }
         Balance -= amount;

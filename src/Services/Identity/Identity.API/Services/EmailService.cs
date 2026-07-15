@@ -53,7 +53,7 @@ public class EmailService : IEmailService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send OTP email to {Email} via SMTP.", toEmail);
-            throw new InvalidOperationException("Khong the gui email xac minh. Vui long kiem tra cau hinh SMTP hoac thu lai sau.", ex);
+            throw new InvalidOperationException("Không thể gửi email xác minh. Vui lòng kiểm tra cấu hình SMTP hoặc thử lại sau.", ex);
         }
         finally
         {
