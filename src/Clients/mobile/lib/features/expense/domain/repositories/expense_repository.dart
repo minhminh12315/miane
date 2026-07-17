@@ -1,4 +1,5 @@
 import '../models/expense_models.dart';
+import '../../../../core/payments/viet_qr_payment.dart';
 
 abstract class ExpenseRepository {
   Future<List<ExpenseModel>> getExpenses(String tripId);
@@ -13,6 +14,12 @@ abstract class ExpenseRepository {
     required List<Map<String, dynamic>> splits,
   });
   Future<void> settleDebt(String debtRecordId);
+  Future<VietQrPaymentQr> generateDebtPaymentQr(String debtRecordId);
   Future<TripPoolModel?> getPool(String tripId);
+  Future<VietQrPaymentQr> generateFundContributionQr(
+    String tripId,
+    double amount,
+    String currency,
+  );
   Future<void> contributeToPool(String tripId, double amount, String currency);
 }

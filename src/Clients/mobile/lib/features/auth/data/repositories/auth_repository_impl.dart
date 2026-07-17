@@ -124,6 +124,19 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<UserModel> uploadAvatar({
+    required List<int> fileBytes,
+    required String fileName,
+  }) async {
+    final response = await _apiClient.postMultipart(
+      ApiEndpoints.uploadAvatar,
+      fileBytes: fileBytes,
+      fileName: fileName,
+    );
+    return UserModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  @override
   Future<void> saveToken(String accessToken, String refreshToken) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('access_token', accessToken);

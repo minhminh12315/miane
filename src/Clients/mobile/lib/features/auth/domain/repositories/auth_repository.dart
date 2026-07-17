@@ -15,6 +15,10 @@ abstract class AuthRepository {
     required String fullName,
     String? avatarUrl,
   });
+  Future<UserModel> uploadAvatar({
+    required List<int> fileBytes,
+    required String fileName,
+  });
   Future<void> saveToken(String accessToken, String refreshToken);
   Future<String?> getToken();
   Future<void> clearSession();

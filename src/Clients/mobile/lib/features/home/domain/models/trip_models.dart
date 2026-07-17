@@ -154,6 +154,10 @@ class TripPlaceData {
 }
 
 class TripCreationDraft {
+  static const _coverImageUrlMaxLength = 1000;
+  static const _coverImagePromptMaxLength = 1000;
+  static const _coverImageLandmarkMaxLength = 160;
+
   final String name;
   final TripPlaceData place;
   final String? description;
@@ -203,9 +207,11 @@ class TripCreationDraft {
       'placeMetadataJson': jsonEncode(place.toMetadataJson()),
       'startDate': _asUtcDate(startDate).toIso8601String(),
       'endDate': _asUtcDate(endDate).toIso8601String(),
-      'coverImageUrl': coverImageUrl,
-      'coverImagePrompt': coverImagePrompt,
-      'coverImageLandmark': coverImageLandmark,
+      'coverImageUrl': _trimToMax(coverImageUrl, _coverImageUrlMaxLength),
+      'coverImagePrompt':
+          _trimToMax(coverImagePrompt, _coverImagePromptMaxLength),
+      'coverImageLandmark':
+          _trimToMax(coverImageLandmark, _coverImageLandmarkMaxLength),
       'latitude': place.latitude,
       'longitude': place.longitude,
     };
@@ -219,6 +225,14 @@ class TripCreationDraft {
 
   static DateTime _asUtcDate(DateTime date) =>
       DateTime.utc(date.year, date.month, date.day);
+
+  static String? _trimToMax(String? value, int maxLength) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    return trimmed.length <= maxLength
+        ? trimmed
+        : trimmed.substring(0, maxLength);
+  }
 }
 
 class TripCreationResult {

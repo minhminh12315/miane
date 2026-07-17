@@ -24,6 +24,7 @@ OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
 OPENAI_IMAGE_SIZE = os.getenv("OPENAI_IMAGE_SIZE", "1536x1024")
 OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "high")
 OPENAI_IMAGE_FORMAT = os.getenv("OPENAI_IMAGE_FORMAT", "jpeg")
+TRIP_API_COVER_PROMPT_MAX_LENGTH = 1000
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="MIANE AI Image Service", version="0.2.0")
@@ -142,7 +143,7 @@ def _thumbnail_response(
 ) -> GenerateTripThumbnailResponse:
     return GenerateTripThumbnailResponse(
         imageUrl=f"{PUBLIC_BASE_URL.rstrip('/')}/static/cache/{image_path.name}",
-        prompt=prompt,
+        prompt=_trim_text(prompt, TRIP_API_COVER_PROMPT_MAX_LENGTH),
         landmark=landmark,
         cached=cached,
     )
@@ -296,6 +297,11 @@ def _sanitize_landmark(value: str) -> str:
 
 def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip())
+
+
+def _trim_text(value: str, max_length: int) -> str:
+    text = value.strip()
+    return text if len(text) <= max_length else text[:max_length]
 
 
 def _generate_with_openai(prompt: str, output_path: Path) -> None:

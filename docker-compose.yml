@@ -101,6 +101,9 @@ services:
       - Redis__ConnectionString=redis:6379
       - AiServices__BaseUrl=${AI_SERVICE_URL:-http://localhost:8000}
       - AiServices__ApiKey=${AI_SERVICE_API_KEY:-}
+      - VietQr__BaseUrl=${VIETQR_BASE_URL:-https://api.vietqr.io/}
+      - VietQr__ClientId=${VIETQR_CLIENT_ID:-}
+      - VietQr__ApiKey=${VIETQR_API_KEY:-}
       - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
       - Jwt__Issuer=MianeIdentityService
       - Jwt__Audience=MianeClients
@@ -111,6 +114,8 @@ services:
         condition: service_healthy
     ports:
       - "5129:5129"
+    volumes:
+      - expense_data_protection_keys:/root/.aspnet/DataProtection-Keys
     networks:
       - Miane-network
 
@@ -207,6 +212,7 @@ services:
 volumes:
   postgres_data:
   ai_image_cache:
+  expense_data_protection_keys:
 
 networks:
   Miane-network:

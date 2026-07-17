@@ -53,106 +53,104 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
 
     return SafeArea(
       top: false,
-      child: Column(
+      child: Stack(
         children: [
-          const SizedBox(height: 10),
-          Container(
-            width: 44,
-            height: 5,
-            decoration: BoxDecoration(
-              color: CupertinoColors.systemGrey
-                  .resolveFrom(context)
-                  .withValues(alpha: 0.68),
-              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                18,
-                14,
-                18,
-                math.max(26, keyboard + 26),
+          Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: CupertinoColors.systemGrey
+                      .resolveFrom(context)
+                      .withValues(alpha: 0.68),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                ),
               ),
-              children: [
-                IosAnimatedEntry(
-                  dy: 20,
-                  child: _CreateTripHero(
-                    title: _nameController.text.trim().isEmpty
-                        ? 'Tên chuyến đi'
-                        : _nameController.text.trim(),
-                    subtitle:
-                        '${_formatDate(_startDate)} → ${_formatDate(_endDate)}',
-                    coverBytes: _coverBytes,
-                    coverUrl:
-                        _coverBytes == null ? _aiThumbnail?.imageUrl : null,
-                    isGeneratingCover: _isGeneratingCover,
-                    onClose: () => Navigator.of(context).pop(),
-                    onSave: _isSubmitting ? null : _submit,
-                    onPickCover: _showCoverSourceSheet,
+              Expanded(
+                child: ListView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    18,
+                    14,
+                    18,
+                    math.max(26, keyboard + 26),
                   ),
+                  children: [
+                    IosAnimatedEntry(
+                      dy: 20,
+                      child: _CreateTripHero(
+                        title: _nameController.text.trim().isEmpty
+                            ? 'Tên chuyến đi'
+                            : _nameController.text.trim(),
+                        subtitle:
+                            '${_formatDate(_startDate)} → ${_formatDate(_endDate)}',
+                        coverBytes: _coverBytes,
+                        coverUrl:
+                            _coverBytes == null ? _aiThumbnail?.imageUrl : null,
+                        onClose: () => Navigator.of(context).pop(),
+                        onSave: _isSubmitting ? null : _submit,
+                        onPickCover: _showCoverSourceSheet,
+                      ),
+                    ),
+                    if (!_isGeneratingCover) ...[
+                      const SizedBox(height: 20),
+                      IosAnimatedEntry(
+                        delay: 0.08,
+                        child: _TripNameField(
+                          controller: _nameController,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      IosAnimatedEntry(
+                        delay: 0.14,
+                        child: _DestinationCard(
+                          place: _selectedPlace,
+                          onTap: _openPlaceSearch,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      IosAnimatedEntry(
+                        delay: 0.20,
+                        child: _DateRangeCard(
+                          startDate: _startDate,
+                          endDate: _endDate,
+                          durationDays: _durationDays,
+                          durationNights: _durationNights,
+                          onTap: _openDateRangePicker,
+                        ),
+                      ),
+                      if (_coverBytes != null || _coverError != null) ...[
+                        const SizedBox(height: 14),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 280),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          child: _coverStateWidget(context),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      IosPrimaryButton(
+                        label: _isSubmitting ? 'Đang tạo...' : 'Tạo chuyến đi',
+                        isLoading: _isSubmitting,
+                        onPressed: _isSubmitting ? null : _submit,
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 20),
-                IosAnimatedEntry(
-                  delay: 0.08,
-                  child: _TripNameField(
-                    controller: _nameController,
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                IosAnimatedEntry(
-                  delay: 0.14,
-                  child: _DestinationCard(
-                    place: _selectedPlace,
-                    onTap: _openPlaceSearch,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                IosAnimatedEntry(
-                  delay: 0.20,
-                  child: _DateRangeCard(
-                    startDate: _startDate,
-                    endDate: _endDate,
-                    durationDays: _durationDays,
-                    durationNights: _durationNights,
-                    onTap: _openDateRangePicker,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 280),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  child: _coverStateWidget(context),
-                ),
-                const SizedBox(height: 20),
-                IosPrimaryButton(
-                  label: _isSubmitting ? 'Đang tạo...' : 'Tạo chuyến đi',
-                  isLoading: _isSubmitting,
-                  onPressed: _isSubmitting ? null : _submit,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
+          if (_isGeneratingCover)
+            const Positioned.fill(child: _AiCoverScreenLoading()),
         ],
       ),
     );
   }
 
   Widget _coverStateWidget(BuildContext context) {
-    if (_isGeneratingCover) {
-      return const _CoverInfoPanel(
-        key: ValueKey('cover-loading'),
-        icon: CupertinoIcons.sparkles,
-        iconColor: AppTheme.iosGold,
-        title: 'Đang tạo ảnh cho chuyến đi...',
-        message: 'Khoảng 5-10 giây. Bạn vẫn có thể thay ảnh thủ công.',
-        showActivity: true,
-      );
-    }
-
     if (_coverError != null) {
       return _CoverErrorPanel(
         key: const ValueKey('cover-error'),
@@ -171,19 +169,6 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
         message: 'Ảnh thủ công luôn được ưu tiên hơn ảnh AI.',
         actionLabel: 'Xóa ảnh',
         onAction: _clearUserCover,
-      );
-    }
-
-    if (_aiThumbnail != null) {
-      final landmark = _aiThumbnail!.landmark.trim();
-      return _CoverInfoPanel(
-        key: const ValueKey('cover-ready'),
-        icon: CupertinoIcons.check_mark_circled_solid,
-        iconColor: AppTheme.iosGreen,
-        title: 'Ảnh AI đã sẵn sàng',
-        message: landmark.isEmpty
-            ? 'Bạn vẫn có thể đổi sang ảnh trong thư viện hoặc camera.'
-            : 'Ưu tiên landmark: $landmark.',
       );
     }
 
@@ -416,7 +401,6 @@ class _CreateTripHero extends StatelessWidget {
   final String subtitle;
   final Uint8List? coverBytes;
   final String? coverUrl;
-  final bool isGeneratingCover;
   final VoidCallback onClose;
   final VoidCallback? onSave;
   final VoidCallback onPickCover;
@@ -426,7 +410,6 @@ class _CreateTripHero extends StatelessWidget {
     required this.subtitle,
     required this.coverBytes,
     required this.coverUrl,
-    required this.isGeneratingCover,
     required this.onClose,
     required this.onSave,
     required this.onPickCover,
@@ -470,7 +453,6 @@ class _CreateTripHero extends StatelessWidget {
                 ),
               ),
             ),
-            if (isGeneratingCover) const _CoverLoadingOverlay(),
             Positioned(
               left: 14,
               right: 14,
@@ -537,6 +519,8 @@ class _CreateTripHero extends StatelessWidget {
       return Image.memory(
         coverBytes!,
         key: const ValueKey('manual-cover'),
+        width: double.infinity,
+        height: double.infinity,
         fit: BoxFit.cover,
       );
     }
@@ -545,6 +529,8 @@ class _CreateTripHero extends StatelessWidget {
       return Image.network(
         coverUrl!,
         key: ValueKey(coverUrl),
+        width: double.infinity,
+        height: double.infinity,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => const _CoverPlaceholder(),
       );
@@ -703,34 +689,31 @@ class _HeroCoverButton extends StatelessWidget {
   }
 }
 
-class _CoverLoadingOverlay extends StatelessWidget {
-  const _CoverLoadingOverlay();
+class _AiCoverScreenLoading extends StatelessWidget {
+  const _AiCoverScreenLoading();
 
   @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
+    return AbsorbPointer(
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: CupertinoColors.black.withValues(alpha: 0.24),
+          color: CupertinoColors.black.withValues(alpha: 0.72),
         ),
-        child: Align(
-          alignment: Alignment.topRight,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 60, right: 14),
-            child: ModernGlass(
-              radius: AppTheme.radiusPill,
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CupertinoActivityIndicator(radius: 7),
-                  const SizedBox(width: 7),
-                  Text(
-                    'Đang tạo ảnh',
-                    style: AppTheme.labelSm(color: CupertinoColors.white),
-                  ),
-                ],
-              ),
+        child: Center(
+          child: ModernGlass(
+            radius: 26,
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CupertinoActivityIndicator(radius: 14),
+                const SizedBox(height: 12),
+                Text(
+                  'Đang tạo ảnh',
+                  style: AppTheme.titleSm(color: CupertinoColors.white)
+                      .copyWith(fontWeight: FontWeight.w800),
+                ),
+              ],
             ),
           ),
         ),
@@ -1142,7 +1125,6 @@ class _CoverInfoPanel extends StatelessWidget {
   final Color iconColor;
   final String title;
   final String message;
-  final bool showActivity;
   final String? actionLabel;
   final VoidCallback? onAction;
 
@@ -1152,7 +1134,6 @@ class _CoverInfoPanel extends StatelessWidget {
     required this.iconColor,
     required this.title,
     required this.message,
-    this.showActivity = false,
     this.actionLabel,
     this.onAction,
   });
@@ -1164,10 +1145,7 @@ class _CoverInfoPanel extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       child: Row(
         children: [
-          if (showActivity)
-            const CupertinoActivityIndicator(radius: 9)
-          else
-            Icon(icon, color: iconColor, size: 21),
+          Icon(icon, color: iconColor, size: 21),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

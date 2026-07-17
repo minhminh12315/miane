@@ -10,6 +10,7 @@ class ApiEndpoints {
   static const String login = '/auth/login';
   static const String logout = '/auth/logout';
   static const String me = '/auth/me';
+  static const String uploadAvatar = '/auth/me/avatar';
   static const String upgradePro = '/auth/upgrade-pro';
   static const String googleLogin = '/auth/google';
 
@@ -35,6 +36,14 @@ class ApiEndpoints {
 
   static const String contributeToPool = '/expenses/pool/contribute';
   static String getPool(String tripId) => '/expenses/pool/$tripId';
+  static const String vietQrBanks = '/expenses/vietqr/banks';
+  static const String generateVietQr = '/expenses/vietqr/generate';
+  static String generateDebtVietQr(String debtRecordId) =>
+      '/expenses/vietqr/debts/$debtRecordId/generate';
+  static String generateFundContributionVietQr(String tripId) =>
+      '/expenses/vietqr/trips/$tripId/fund-contribution/generate';
+  static const String defaultReceivePaymentMethod =
+      '/expenses/payment-methods/default-receive';
 
   static const String notifications = '/notifications';
   static const String notificationDevices = '/notifications/devices';

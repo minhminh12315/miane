@@ -88,6 +88,7 @@ if (app.Environment.IsDevelopment())
         {
             var db = scope.ServiceProvider.GetRequiredService<TripDbContext>();
             db.Database.Migrate();
+            await TripDemoSeeder.SeedAsync(scope.ServiceProvider);
             break;
         }
         catch (Exception) when (attempt < retries)

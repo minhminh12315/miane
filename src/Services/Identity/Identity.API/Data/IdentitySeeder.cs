@@ -9,6 +9,7 @@ public static class IdentitySeeder
     {
         var userManager = services.GetRequiredService<UserManager<User>>();
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+        var environment = services.GetRequiredService<IHostEnvironment>();
 
         var roles = new[] { "Admin", "Employee" };
         foreach (var role in roles)
@@ -68,6 +69,36 @@ public static class IdentitySeeder
                 await userManager.AddClaimAsync(staff,
                     new System.Security.Claims.Claim("Permission", "dashboard.view"));
             }
+        }
+
+        if (environment.IsDevelopment())
+        {
+            await SeedDemoTripUsersAsync(userManager);
+        }
+    }
+
+    private static async Task SeedDemoTripUsersAsync(UserManager<User> userManager)
+    {
+        foreach (var demoUser in DemoTripSeedData.Users)
+        {
+            if (await userManager.FindByEmailAsync(demoUser.Email) is not null)
+            {
+                continue;
+            }
+
+            var user = new User
+            {
+                Id = demoUser.Id,
+                UserName = demoUser.Email,
+                Email = demoUser.Email,
+                FullName = demoUser.FullName,
+                EmailConfirmed = true,
+                IsActive = true,
+                IsEmployee = false,
+                UserTier = 0
+            };
+
+            await userManager.CreateAsync(user, DemoTripSeedData.Password);
         }
     }
 }

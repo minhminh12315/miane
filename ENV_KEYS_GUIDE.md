@@ -175,7 +175,32 @@ Nguồn chính thức:
 - FlutterFire FCM/APNs iOS setup: <https://firebase.flutter.dev/docs/messaging/apple-integration/>
 - Firebase Web Push certificates: <https://firebase.google.com/docs/cloud-messaging/js/client>
 
-## 4. Chạy lại sau khi điền key
+## 4. VietQR cho cấu hình ngân hàng và sinh mã QR
+
+Bank list dùng endpoint công khai của VietQR nên không cần key. Tạo QR bằng `POST /v2/generate` cần `Client ID` và `API key`, vì vậy MIANE giữ key ở backend `Expense.API`, không đưa xuống Flutter app.
+
+```dotenv
+VIETQR_BASE_URL=https://api.vietqr.io/
+VIETQR_CLIENT_ID=
+VIETQR_API_KEY=
+```
+
+Cách lấy key:
+
+1. Vào <https://my.vietqr.io/>.
+2. Tạo hoặc đăng nhập tài khoản VietQR.
+3. Lấy `Client ID` và `API Key`.
+4. Điền vào `.env`, sau đó chạy lại `expense-api` hoặc toàn bộ Docker Compose.
+
+Các endpoint MIANE đang dùng:
+
+- `GET /expenses/vietqr/banks`: lấy danh sách ngân hàng/BIN từ VietQR, cache 24 giờ.
+- `PUT /expenses/payment-methods/default-receive`: lưu tài khoản ngân hàng nhận tiền mặc định của người dùng.
+- `POST /expenses/vietqr/generate`: sinh QR từ tài khoản đã cấu hình hoặc từ thông tin tài khoản gửi trực tiếp.
+
+Lưu ý: VietQR giúp tạo mã QR chuyển khoản, chưa tự xác nhận giao dịch đã thanh toán. Muốn đối soát tự động cần thêm webhook/bank reconciliation từ Casso, payOS, ngân hàng, hoặc provider tương đương.
+
+## 5. Chạy lại sau khi điền key
 
 Với Docker Compose:
 
@@ -218,7 +243,7 @@ flutter run -d <iphone-device-id> \
 
 Khi iPhone gọi backend đang chạy trên máy dev trong cùng mạng LAN, không dùng `localhost` cho `API_URL` hoặc `MIANE_AI_IMAGE_URL`; dùng IP LAN của máy đang chạy backend.
 
-## 5. Kiểm tra tài khoản ngân hàng/ví
+## 6. Kiểm tra tài khoản ngân hàng/ví
 
 App hiện đã:
 

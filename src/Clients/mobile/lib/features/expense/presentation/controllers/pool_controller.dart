@@ -1,4 +1,5 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../../../core/payments/viet_qr_payment.dart';
 import '../../data/repositories/expense_repository_impl.dart';
 import '../../domain/models/expense_models.dart';
 
@@ -17,5 +18,13 @@ class TripPoolController extends _$TripPoolController {
     await repo.contributeToPool(tripId, amount, currency);
     ref.invalidateSelf();
     await future;
+  }
+
+  Future<VietQrPaymentQr> generateContributionQr(
+    double amount,
+    String currency,
+  ) async {
+    final repo = ref.read(expenseRepositoryProvider);
+    return repo.generateFundContributionQr(tripId, amount, currency);
   }
 }

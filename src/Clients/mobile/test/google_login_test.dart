@@ -71,6 +71,18 @@ class MockAuthRepository implements AuthRepository {
       );
 
   @override
+  Future<UserModel> uploadAvatar({
+    required List<int> fileBytes,
+    required String fileName,
+  }) async =>
+      UserModel(
+        id: '1',
+        email: 'test@google.com',
+        fullName: 'Google User',
+        avatarUrl: '/auth/avatars/$fileName',
+      );
+
+  @override
   Future<void> saveToken(String accessToken, String refreshToken) async {}
 
   @override

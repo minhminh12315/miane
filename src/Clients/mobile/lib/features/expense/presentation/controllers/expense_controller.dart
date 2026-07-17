@@ -1,4 +1,5 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../../../core/payments/viet_qr_payment.dart';
 import '../../data/repositories/expense_repository_impl.dart';
 import '../../domain/models/expense_models.dart';
 
@@ -64,5 +65,10 @@ class TripBalances extends _$TripBalances {
     await repo.settleDebt(debtRecordId);
     ref.invalidateSelf();
     await future;
+  }
+
+  Future<VietQrPaymentQr> generateDebtPaymentQr(String debtRecordId) async {
+    final repo = ref.read(expenseRepositoryProvider);
+    return repo.generateDebtPaymentQr(debtRecordId);
   }
 }

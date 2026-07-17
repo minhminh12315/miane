@@ -149,6 +149,9 @@ services:
       - Redis__ConnectionString=redis:6379
       - AiServices__BaseUrl=${AI_SERVICE_URL:-http://localhost:8000}
       - AiServices__ApiKey=${AI_SERVICE_API_KEY:-}
+      - VietQr__BaseUrl=${VIETQR_BASE_URL:-https://api.vietqr.io/}
+      - VietQr__ClientId=${VIETQR_CLIENT_ID:-}
+      - VietQr__ApiKey=${VIETQR_API_KEY:-}
       - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
       - Jwt__Issuer=MianeIdentityService
       - Jwt__Audience=MianeClients
@@ -164,6 +167,7 @@ services:
       - "5129:5129"
     volumes:
       - .:/src
+      - expense_data_protection_keys_dev:/root/.aspnet/DataProtection-Keys
       # Anonymous volumes to prevent bin/obj directories from being overwritten by the host system
       - /src/src/Services/Expense/Expense.API/bin
       - /src/src/Services/Expense/Expense.API/obj
@@ -316,6 +320,7 @@ volumes:
   redis_dev_data:
   ai_image_dev_cache:
   mobile_flutter_pub_cache:
+  expense_data_protection_keys_dev:
 
 networks:
   Miane-network-dev:

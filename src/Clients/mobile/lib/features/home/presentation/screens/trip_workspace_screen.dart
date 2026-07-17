@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
+import '../../../../core/payments/viet_qr_payment.dart';
 import '../../../../core/platform/document_open.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
@@ -347,7 +349,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                           ? CupertinoButton(
                               padding: EdgeInsets.zero,
                               minimumSize: Size.zero,
-                              onPressed: () => _settleDebt(debt),
+                              onPressed: () =>
+                                  _showDebtPaymentDialog(debt, detailsState),
                               child: const Text('Trả'),
                             )
                           : null,
@@ -2170,6 +2173,61 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     );
   }
 
+  Future<void> _showDebtPaymentDialog(
+    DebtModel debt,
+    AsyncValue<TripDetailModel> detailsState,
+  ) async {
+    try {
+      final qr = await ref
+          .read(tripBalancesProvider(widget.tripId).notifier)
+          .generateDebtPaymentQr(debt.debtRecordId);
+      if (!mounted) return;
+
+      final toName = _getMemberName(debt.toUserId, detailsState);
+      await _showTransferQrDialog(
+        title: 'Thanh toan khoan no',
+        qr: qr,
+        recipientLabel: toName,
+        confirmLabel: 'Da chuyen',
+        onConfirmed: () => _confirmDebtPaid(debt),
+      );
+    } catch (e) {
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message:
+              'Khong the tao VietQR: ${e.toString().replaceAll('ApiException: ', '')}',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmDebtPaid(DebtModel debt) async {
+    try {
+      await ref
+          .read(tripBalancesProvider(widget.tripId).notifier)
+          .settle(debt.debtRecordId);
+      if (mounted) {
+        await showIosMessage(
+          context,
+          title: 'Da thanh toan',
+          message: 'Khoan no da duoc xac nhan sau khi chuyen khoan.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message:
+              'Khong the thanh toan: ${e.toString().replaceAll('ApiException: ', '')}',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  // ignore: unused_element
   Future<void> _settleDebt(DebtModel debt) async {
     try {
       await ref
@@ -2223,10 +2281,24 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
               if (amount == null || amount <= 0) return;
 
               try {
-                await ref
+                final qr = await ref
                     .read(tripPoolControllerProvider(widget.tripId).notifier)
-                    .contribute(amount, widget.baseCurrency);
+                    .generateContributionQr(amount, widget.baseCurrency);
                 if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                if (!mounted) return;
+
+                await _showTransferQrDialog(
+                  title: 'Nop quy chuyen di',
+                  qr: qr,
+                  recipientLabel: 'Thu quy',
+                  confirmLabel: 'Da chuyen',
+                  onConfirmed: () async {
+                    await ref
+                        .read(
+                            tripPoolControllerProvider(widget.tripId).notifier)
+                        .contribute(amount, widget.baseCurrency);
+                  },
+                );
               } catch (e) {
                 if (context.mounted) {
                   await showIosMessage(
@@ -2243,6 +2315,101 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _showTransferQrDialog({
+    required String title,
+    required VietQrPaymentQr qr,
+    required String recipientLabel,
+    required String confirmLabel,
+    required Future<void> Function() onConfirmed,
+  }) async {
+    final qrImageBytes = _decodeQrDataUrl(qr.qrDataUrl);
+    var isConfirming = false;
+
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Future<void> confirm() async {
+            setDialogState(() => isConfirming = true);
+            var keepConfirmingState = true;
+            try {
+              await onConfirmed();
+              if (!dialogContext.mounted) return;
+              keepConfirmingState = false;
+              Navigator.of(dialogContext).pop();
+            } catch (e) {
+              if (!dialogContext.mounted) return;
+              await showIosMessage(
+                dialogContext,
+                message:
+                    'Khong the xac nhan: ${e.toString().replaceAll('ApiException: ', '')}',
+                isError: true,
+              );
+            } finally {
+              if (keepConfirmingState && dialogContext.mounted) {
+                setDialogState(() => isConfirming = false);
+              }
+            }
+          }
+
+          return CupertinoAlertDialog(
+            title: Text(title),
+            content: Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: 220,
+                    height: 220,
+                    child: qrImageBytes != null
+                        ? Image.memory(qrImageBytes, fit: BoxFit.contain)
+                        : QrImageView(
+                            data: qr.qrCode,
+                            backgroundColor: CupertinoColors.white,
+                          ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '$recipientLabel\n${qr.bankName} - ${qr.accountNumber}\n${qr.accountName}\n${formatMoney(qr.amount.toDouble())} VND\n${qr.addInfo}',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: isConfirming
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(),
+                child: const Text('Dong'),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: isConfirming ? null : confirm,
+                child: isConfirming
+                    ? const CupertinoActivityIndicator(radius: 9)
+                    : Text(confirmLabel),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Uint8List? _decodeQrDataUrl(String? dataUrl) {
+    final value = dataUrl?.trim() ?? '';
+    if (value.isEmpty) return null;
+    final commaIndex = value.indexOf(',');
+    final base64Value =
+        commaIndex >= 0 ? value.substring(commaIndex + 1) : value;
+    try {
+      return base64Decode(base64Value);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Expense creation is scan-only (no manual entry): the user picks whether

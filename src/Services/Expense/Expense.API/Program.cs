@@ -5,8 +5,10 @@ using BuildingBlocks.Middleware;
 using Expense.API.Data;
 using Expense.API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Options;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -68,6 +70,20 @@ builder.Services.AddStackExchangeRedisCache(options =>
 });
 builder.Services.AddSingleton<ICacheService, RedisCacheService>();
 
+// VietQR
+builder.Services.Configure<VietQrOptions>(builder.Configuration.GetSection("VietQr"));
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<PaymentAccountProtector>();
+builder.Services.AddHttpClient<IVietQrClient, VietQrClient>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<VietQrOptions>>().Value;
+    var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
+        ? "https://api.vietqr.io/"
+        : options.BaseUrl;
+    client.BaseAddress = new Uri(baseUrl.EndsWith('/') ? baseUrl : $"{baseUrl}/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+
 // BuildingBlocks
 builder.Services.AddBuildingBlocks(typeof(Program).Assembly);
 builder.Services.AddOutboxProcessor<ExpenseDbContext>();
@@ -96,6 +112,7 @@ if (app.Environment.IsDevelopment())
         {
             var db = scope.ServiceProvider.GetRequiredService<ExpenseDbContext>();
             db.Database.Migrate();
+            await ExpenseDemoSeeder.SeedAsync(scope.ServiceProvider);
             break;
         }
         catch (Exception) when (attempt < retries)

@@ -15,6 +15,15 @@ namespace Identity.API.Controllers
     [Route("auth")]
     public class AuthController : ControllerBase
     {
+        private const long MaxAvatarUploadBytes = 5 * 1024 * 1024;
+        private static readonly HashSet<string> AllowedAvatarExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".heic"
+        };
 
         private readonly IAuthService _authService;
         private readonly IWebHostEnvironment _env;
@@ -301,13 +310,16 @@ namespace Identity.API.Controllers
                     return BadRequest(new { message = "Liên kết ảnh đại diện không được vượt quá 1000 ký tự." });
                 }
 
-                if (!Uri.TryCreate(avatarUrl, UriKind.Absolute, out var parsedUri) ||
-                    (parsedUri.Scheme != Uri.UriSchemeHttp && parsedUri.Scheme != Uri.UriSchemeHttps))
+                var isStoredAvatar = avatarUrl.StartsWith("/auth/avatars/", StringComparison.OrdinalIgnoreCase);
+                if (!isStoredAvatar &&
+                    (!Uri.TryCreate(avatarUrl, UriKind.Absolute, out var parsedUri) ||
+                    (parsedUri.Scheme != Uri.UriSchemeHttp && parsedUri.Scheme != Uri.UriSchemeHttps)))
                 {
                     return BadRequest(new { message = "Ảnh đại diện phải là URL http hoặc https hợp lệ." });
                 }
             }
 
+            var previousAvatarUrl = user.AvatarUrl;
             user.FullName = fullName;
             user.AvatarUrl = avatarUrl;
 
@@ -317,8 +329,92 @@ namespace Identity.API.Controllers
                 return BadRequest(new { message = string.Join("; ", result.Errors.Select(e => e.Description)) });
             }
 
+            DeleteStoredAvatarIfReplaced(previousAvatarUrl, avatarUrl);
+
             var roles = await _userManager.GetRolesAsync(user);
             return Ok(ToProfileResponse(user, roles));
+        }
+
+        [Authorize]
+        [HttpPost("me/avatar")]
+        [RequestSizeLimit(MaxAvatarUploadBytes)]
+        public async Task<IActionResult> UploadAvatar([FromForm] IFormFile? file, CancellationToken ct)
+        {
+            var userId = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var parsedUserId))
+            {
+                return Unauthorized(new { message = "Invalid token subject" });
+            }
+
+            var user = await _userManager.FindByIdAsync(parsedUserId.ToString());
+            if (user == null || !user.IsActive)
+            {
+                return Unauthorized(new { message = "User not found or inactive" });
+            }
+
+            if (file is null || file.Length <= 0)
+            {
+                return BadRequest(new { message = "Vui lòng chọn ảnh đại diện." });
+            }
+
+            if (file.Length > MaxAvatarUploadBytes)
+            {
+                return BadRequest(new { message = "Ảnh đại diện không được vượt quá 5 MB." });
+            }
+
+            var originalFileName = Path.GetFileName(file.FileName);
+            var extension = Path.GetExtension(originalFileName);
+            if (string.IsNullOrWhiteSpace(extension) || !AllowedAvatarExtensions.Contains(extension))
+            {
+                return BadRequest(new { message = "Định dạng ảnh đại diện không được hỗ trợ." });
+            }
+
+            var storageName = $"{parsedUserId:N}-{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
+            var uploadDirectory = GetAvatarUploadDirectory();
+            Directory.CreateDirectory(uploadDirectory);
+
+            var absolutePath = Path.Combine(uploadDirectory, storageName);
+            await using (var stream = System.IO.File.Create(absolutePath))
+            {
+                await file.CopyToAsync(stream, ct);
+            }
+
+            var previousAvatarUrl = user.AvatarUrl;
+            user.AvatarUrl = BuildAvatarUrl(storageName);
+
+            var result = await _userManager.UpdateAsync(user);
+            if (!result.Succeeded)
+            {
+                System.IO.File.Delete(absolutePath);
+                return BadRequest(new { message = string.Join("; ", result.Errors.Select(e => e.Description)) });
+            }
+
+            DeleteStoredAvatarIfReplaced(previousAvatarUrl, user.AvatarUrl);
+
+            var roles = await _userManager.GetRolesAsync(user);
+            return Ok(ToProfileResponse(user, roles));
+        }
+
+        [AllowAnonymous]
+        [HttpGet("avatars/{storageName}")]
+        public IActionResult GetAvatar(string storageName)
+        {
+            var safeStorageName = Path.GetFileName(storageName);
+            if (safeStorageName != storageName)
+            {
+                return BadRequest(new { message = "Tên ảnh đại diện không hợp lệ." });
+            }
+
+            var absolutePath = Path.Combine(GetAvatarUploadDirectory(), safeStorageName);
+            if (!System.IO.File.Exists(absolutePath))
+            {
+                return NotFound(new { message = "Không tìm thấy ảnh đại diện." });
+            }
+
+            return PhysicalFile(
+                absolutePath,
+                GuessAvatarContentType(Path.GetExtension(safeStorageName)),
+                enableRangeProcessing: true);
         }
 
         private static object ToProfileResponse(User user, IList<string> roles) => new
@@ -330,6 +426,45 @@ namespace Identity.API.Controllers
             userTier = user.UserTier,
             roles
         };
+
+        private string GetAvatarUploadDirectory() =>
+            Path.Combine(_env.ContentRootPath, "uploads", "avatars");
+
+        private static string BuildAvatarUrl(string storageName) =>
+            $"/auth/avatars/{storageName}";
+
+        private void DeleteStoredAvatarIfReplaced(string? previousAvatarUrl, string? nextAvatarUrl)
+        {
+            if (string.IsNullOrWhiteSpace(previousAvatarUrl) ||
+                string.Equals(previousAvatarUrl, nextAvatarUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            const string marker = "/auth/avatars/";
+            var index = previousAvatarUrl.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (index < 0) return;
+
+            var storageName = previousAvatarUrl[(index + marker.Length)..];
+            storageName = Path.GetFileName(storageName);
+            if (string.IsNullOrWhiteSpace(storageName)) return;
+
+            var absolutePath = Path.Combine(GetAvatarUploadDirectory(), storageName);
+            if (System.IO.File.Exists(absolutePath))
+            {
+                System.IO.File.Delete(absolutePath);
+            }
+        }
+
+        private static string GuessAvatarContentType(string extension) =>
+            extension.ToLowerInvariant() switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".webp" => "image/webp",
+                ".heic" => "image/heic",
+                _ => "application/octet-stream"
+            };
 
     }
 

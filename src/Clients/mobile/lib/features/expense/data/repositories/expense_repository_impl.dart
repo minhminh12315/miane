@@ -1,5 +1,6 @@
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
+import '../../../../core/payments/viet_qr_payment.dart';
 import '../../domain/models/expense_models.dart';
 import '../../domain/repositories/expense_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -59,6 +60,23 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   }
 
   @override
+  Future<VietQrPaymentQr> generateDebtPaymentQr(String debtRecordId) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.generateDebtVietQr(debtRecordId),
+      body: {
+        'template': 'compact',
+        'format': 'text',
+      },
+    );
+
+    if (response is Map<String, dynamic>) {
+      return VietQrPaymentQr.fromJson(response);
+    }
+
+    throw ApiException(500, 'Khong the tao ma VietQR tra no.');
+  }
+
+  @override
   Future<TripPoolModel?> getPool(String tripId) async {
     try {
       final response = await _apiClient.get(ApiEndpoints.getPool(tripId));
@@ -70,7 +88,34 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   }
 
   @override
-  Future<void> contributeToPool(String tripId, double amount, String currency) async {
+  Future<VietQrPaymentQr> generateFundContributionQr(
+    String tripId,
+    double amount,
+    String currency,
+  ) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.generateFundContributionVietQr(tripId),
+      body: {
+        'amount': amount,
+        'currency': currency,
+        'template': 'compact',
+        'format': 'text',
+      },
+    );
+
+    if (response is Map<String, dynamic>) {
+      return VietQrPaymentQr.fromJson(response);
+    }
+
+    throw ApiException(500, 'Khong the tao ma VietQR nop quy.');
+  }
+
+  @override
+  Future<void> contributeToPool(
+    String tripId,
+    double amount,
+    String currency,
+  ) async {
     await _apiClient.post(
       ApiEndpoints.contributeToPool,
       body: {
