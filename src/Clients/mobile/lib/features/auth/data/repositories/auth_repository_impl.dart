@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../domain/models/auth_models.dart';
@@ -95,6 +96,22 @@ class AuthRepositoryImpl implements AuthRepository {
       await _apiClient.post(ApiEndpoints.logout);
     } catch (_) {}
     await clearSession();
+  }
+
+  @override
+  Future<bool> restoreSession() async {
+    final token = await getToken();
+    if (token == null || token.isEmpty) return false;
+
+    try {
+      if (!JwtDecoder.isExpired(token)) return true;
+      final restored = await _apiClient.refreshSession();
+      if (!restored) await clearSession();
+      return restored;
+    } catch (_) {
+      await clearSession();
+      return false;
+    }
   }
 
   @override

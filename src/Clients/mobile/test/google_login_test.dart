@@ -8,7 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class MockAuthRepository implements AuthRepository {
   bool loginGoogleCalled = false;
+  bool clearSessionCalled = false;
   String? passedToken;
+  UserModel? currentUser;
 
   @override
   Future<AuthResponseModel> login(String email, String password) async {
@@ -47,16 +49,23 @@ class MockAuthRepository implements AuthRepository {
   Future<AuthResponseModel> loginWithGoogle(String idToken) async {
     loginGoogleCalled = true;
     passedToken = idToken;
+    currentUser = UserModel(
+      id: idToken,
+      email: '$idToken@example.com',
+      fullName: 'User $idToken',
+    );
     return AuthResponseModel(
       accessToken: 'dummy_access_token',
       refreshToken: 'dummy_refresh_token',
-      user:
-          UserModel(id: '1', email: 'test@google.com', fullName: 'Google User'),
+      user: currentUser!,
     );
   }
 
   @override
-  Future<UserModel?> getMe() async => null;
+  Future<bool> restoreSession() async => false;
+
+  @override
+  Future<UserModel?> getMe() async => currentUser;
 
   @override
   Future<UserModel> updateMe({
@@ -89,7 +98,10 @@ class MockAuthRepository implements AuthRepository {
   Future<String?> getToken() async => null;
 
   @override
-  Future<void> clearSession() async {}
+  Future<void> clearSession() async {
+    clearSessionCalled = true;
+    currentUser = null;
+  }
 }
 
 void main() {
@@ -119,5 +131,45 @@ void main() {
     expect(mockRepo.loginGoogleCalled, true);
     expect(mockRepo.passedToken, 'test_google_token');
     expect(container.read(appAuthProvider), AppAuthStatus.authenticated);
+  });
+
+  test('switching identity invalidates cached current-user data', () async {
+    SharedPreferences.setMockInitialValues({});
+    final mockRepo = MockAuthRepository();
+    final container = ProviderContainer(
+      overrides: [authRepositoryProvider.overrideWithValue(mockRepo)],
+    );
+    addTearDown(container.dispose);
+    container.listen(appAuthProvider, (previous, next) {});
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    await container.read(appAuthProvider.notifier).loginWithGoogle('account-a');
+    expect(
+      (await container.read(currentUserProvider.future))?.email,
+      'account-a@example.com',
+    );
+
+    await container.read(appAuthProvider.notifier).loginWithGoogle('account-b');
+    expect(
+      (await container.read(currentUserProvider.future))?.email,
+      'account-b@example.com',
+    );
+  });
+
+  test('logout clears local session even when server logout fails', () async {
+    SharedPreferences.setMockInitialValues({});
+    final mockRepo = MockAuthRepository();
+    final container = ProviderContainer(
+      overrides: [authRepositoryProvider.overrideWithValue(mockRepo)],
+    );
+    addTearDown(container.dispose);
+    container.listen(appAuthProvider, (previous, next) {});
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await container.read(appAuthProvider.notifier).loginWithGoogle('account-a');
+
+    await container.read(appAuthProvider.notifier).logout();
+
+    expect(mockRepo.clearSessionCalled, true);
+    expect(container.read(appAuthProvider), AppAuthStatus.unauthenticated);
   });
 }

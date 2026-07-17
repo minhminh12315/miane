@@ -1,3 +1,5 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import '../../data/repositories/auth_repository_impl.dart';
@@ -14,6 +16,10 @@ enum AppAuthStatus {
   authenticated,
 }
 
+/// Changes whenever the authenticated identity changes. User-scoped providers
+/// watch this value so data from the previous account cannot survive a switch.
+final authSessionRevisionProvider = StateProvider<int>((ref) => 0);
+
 @riverpod
 class AppAuth extends _$AppAuth {
   @override
@@ -25,8 +31,8 @@ class AppAuth extends _$AppAuth {
   Future<void> _checkInitialState() async {
     try {
       final repo = ref.read(authRepositoryProvider);
-      final token = await repo.getToken();
-      if (token != null && token.isNotEmpty) {
+      if (await repo.restoreSession()) {
+        _advanceSessionRevision();
         state = AppAuthStatus.authenticated;
       } else {
         state = AppAuthStatus.welcome;
@@ -43,19 +49,19 @@ class AppAuth extends _$AppAuth {
   Future<void> login(String email, String password) async {
     final repo = ref.read(authRepositoryProvider);
     await repo.login(email, password);
-    state = AppAuthStatus.authenticated;
+    _completeAuthentication();
   }
 
   Future<void> loginWithGoogle(String idToken) async {
     final repo = ref.read(authRepositoryProvider);
     await repo.loginWithGoogle(idToken);
-    state = AppAuthStatus.authenticated;
+    _completeAuthentication();
   }
 
   Future<void> register(String email, String password, String fullName) async {
     final repo = ref.read(authRepositoryProvider);
     await repo.register(email, password, fullName);
-    state = AppAuthStatus.authenticated;
+    _completeAuthentication();
   }
 
   /// Phase 1: Send OTP to email. Does NOT create the account yet.
@@ -69,34 +75,53 @@ class AppAuth extends _$AppAuth {
   Future<void> verifyRegistrationOtp(String email, String otpCode) async {
     final repo = ref.read(authRepositoryProvider);
     await repo.verifyRegistrationOtp(email, otpCode);
-    state = AppAuthStatus.authenticated;
+    _completeAuthentication();
   }
 
   void completeSetup() {
     state = AppAuthStatus.authenticated;
   }
 
-  Future<void> loginFake() async {
-    // For quick testing and social bypass
-    state = AppAuthStatus.authenticated;
-  }
-
   Future<void> logout() async {
+    final repo = ref.read(authRepositoryProvider);
     try {
       await ref
           .read(pushNotificationSettingsProvider.notifier)
           .disableBestEffort();
-      final repo = ref.read(authRepositoryProvider);
+    } catch (_) {
+      // Push cleanup must never prevent auth cleanup.
+    }
+    try {
+      await GoogleSignIn().signOut();
+    } catch (_) {
+      // The user may have authenticated by email instead of Google.
+    }
+    try {
       await repo.logout();
     } catch (_) {
-      // Ignore errors on logout to ensure user can still sign out locally
+      // Server logout is best effort; local credentials are authoritative.
     } finally {
-      state = AppAuthStatus.unauthenticated;
+      try {
+        await repo.clearSession();
+      } finally {
+        _advanceSessionRevision();
+        state = AppAuthStatus.unauthenticated;
+      }
     }
+  }
+
+  void _completeAuthentication() {
+    _advanceSessionRevision();
+    state = AppAuthStatus.authenticated;
+  }
+
+  void _advanceSessionRevision() {
+    ref.read(authSessionRevisionProvider.notifier).state++;
   }
 }
 
 final currentUserIdProvider = FutureProvider<String?>((ref) async {
+  ref.watch(authSessionRevisionProvider);
   final repo = ref.watch(authRepositoryProvider);
   final token = await repo.getToken();
   if (token != null && token.isNotEmpty) {
@@ -109,6 +134,7 @@ final currentUserIdProvider = FutureProvider<String?>((ref) async {
 });
 
 final currentUserProvider = FutureProvider<UserModel?>((ref) async {
+  ref.watch(authSessionRevisionProvider);
   final repo = ref.watch(authRepositoryProvider);
   final user = await repo.getMe();
   if (user != null) return user;
@@ -134,6 +160,7 @@ final currentUserProvider = FutureProvider<UserModel?>((ref) async {
 /// 0 = Basic, 1 = Pro. Decoded from the JWT's `UserTier` claim — invalidate
 /// this provider after any call that reissues tokens (login, upgrade-pro).
 final currentUserTierProvider = FutureProvider<int>((ref) async {
+  ref.watch(authSessionRevisionProvider);
   final repo = ref.watch(authRepositoryProvider);
   final token = await repo.getToken();
   if (token != null && token.isNotEmpty) {

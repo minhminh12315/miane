@@ -10,6 +10,7 @@ abstract class AuthRepository {
   Future<void> logout();
   Future<AuthResponseModel> upgradeToPro();
   Future<AuthResponseModel> loginWithGoogle(String idToken);
+  Future<bool> restoreSession();
   Future<UserModel?> getMe();
   Future<UserModel> updateMe({
     required String fullName,

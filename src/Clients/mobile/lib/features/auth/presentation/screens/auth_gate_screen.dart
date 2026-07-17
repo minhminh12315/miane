@@ -1,11 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/ui/ios_ui.dart';
 import '../controllers/app_auth_provider.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
@@ -53,6 +55,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
       // clientId / serverClientId are read from ios/Runner/Info.plist
       // (GIDClientID / GIDServerClientID). See GOOGLE_SIGNIN_SETUP.md.
       final googleSignIn = GoogleSignIn(scopes: const ['email', 'profile']);
+      await googleSignIn.signOut();
       final account = await googleSignIn.signIn();
       if (account == null) {
         // User cancelled the Google sheet — do nothing.
@@ -68,14 +71,26 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
       // No idToken (misconfigured client id). Fall through to dev fallback.
       throw StateError('Google sign-in returned no idToken');
     } catch (e) {
-      // Dev fallback: until a real Google OAuth client id is configured in
-      // Info.plist, real auth can't complete, so log in as the backend's
-      // mock Google tester to keep the dev flow usable. Remove once the real
-      // client id is wired (see GOOGLE_SIGNIN_SETUP.md).
-      debugPrint('Google sign-in failed, using dev mock token: $e');
-      await ref
-          .read(appAuthProvider.notifier)
-          .loginWithGoogle('mock_google_token');
+      const allowMockFallback = bool.fromEnvironment(
+        'GOOGLE_AUTH_ALLOW_MOCK_FALLBACK',
+        defaultValue: false,
+      );
+      if (kDebugMode && allowMockFallback) {
+        debugPrint('Google sign-in failed, using explicit dev fallback: $e');
+        await ref
+            .read(appAuthProvider.notifier)
+            .loginWithGoogle('mock_google_token');
+        return;
+      }
+      debugPrint('Google sign-in failed: $e');
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message: 'Không thể đăng nhập Google. Vui lòng kiểm tra cấu hình '
+              'OAuth hoặc thử lại.',
+          isError: true,
+        );
+      }
     }
   }
 
@@ -139,8 +154,10 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
                               CupertinoColors.white.withValues(alpha: 0.24),
                           shadowColor:
                               CupertinoColors.white.withValues(alpha: 0.18),
-                          onPressed: () =>
-                              ref.read(appAuthProvider.notifier).loginFake(),
+                          onPressed: () => showIosMessage(
+                            context,
+                            message: 'Đăng nhập Apple chưa được cấu hình.',
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),

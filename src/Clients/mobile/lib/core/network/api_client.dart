@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api_endpoints.dart';
@@ -17,6 +19,7 @@ class ApiException implements Exception {
 
 class ApiClient {
   final http.Client _client;
+  Future<bool>? _refreshInFlight;
 
   ApiClient({http.Client? client}) : _client = client ?? http.Client();
 
@@ -28,13 +31,95 @@ class ApiClient {
 
     if (authenticated) {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('access_token');
+      var token = prefs.getString('access_token');
+      if (token != null && token.isNotEmpty) {
+        try {
+          if (JwtDecoder.isExpired(token)) {
+            final refreshed = await refreshSession();
+            token = refreshed ? prefs.getString('access_token') : null;
+          }
+        } catch (_) {
+          await _clearStoredTokens(prefs);
+          token = null;
+        }
+      }
       if (token != null && token.isNotEmpty) {
         headers['Authorization'] = 'Bearer $token';
       }
     }
 
     return headers;
+  }
+
+  Future<bool> refreshSession() {
+    return _refreshInFlight ??= _refreshSessionOnce().whenComplete(() {
+      _refreshInFlight = null;
+    });
+  }
+
+  Future<bool> _refreshSessionOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    final accessToken = prefs.getString('access_token');
+    final refreshToken = prefs.getString('refresh_token');
+    if (accessToken == null ||
+        accessToken.isEmpty ||
+        refreshToken == null ||
+        refreshToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      final decoded = JwtDecoder.decode(accessToken);
+      final userId = decoded['sub']?.toString() ??
+          decoded['nameid']?.toString() ??
+          decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier']
+              ?.toString();
+      if (userId == null || userId.isEmpty) {
+        await _clearStoredTokens(prefs);
+        return false;
+      }
+
+      final response = await _client.post(
+        Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.refreshToken}'),
+        headers: const {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'userId': userId,
+          'refreshToken': refreshToken,
+        }),
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        await _clearStoredTokens(prefs);
+        return false;
+      }
+
+      final body = jsonDecode(response.body);
+      if (body is! Map<String, dynamic>) {
+        await _clearStoredTokens(prefs);
+        return false;
+      }
+      final nextAccessToken = body['accessToken'] as String? ?? '';
+      final nextRefreshToken = body['refreshToken'] as String? ?? '';
+      if (nextAccessToken.isEmpty || nextRefreshToken.isEmpty) {
+        await _clearStoredTokens(prefs);
+        return false;
+      }
+
+      await prefs.setString('access_token', nextAccessToken);
+      await prefs.setString('refresh_token', nextRefreshToken);
+      return true;
+    } catch (_) {
+      await _clearStoredTokens(prefs);
+      return false;
+    }
+  }
+
+  Future<void> _clearStoredTokens(SharedPreferences prefs) async {
+    await prefs.remove('access_token');
+    await prefs.remove('refresh_token');
   }
 
   Future<dynamic> get(String endpoint, {bool authenticated = true}) async {
