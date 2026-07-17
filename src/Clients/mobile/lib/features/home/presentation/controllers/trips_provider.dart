@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart'
     show Ref, StateNotifier, StateNotifierProvider;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../../auth/presentation/controllers/app_auth_provider.dart';
 import '../../data/repositories/trip_repository_impl.dart';
 import '../../domain/models/trip_leg_model.dart';
 import '../../domain/models/trip_models.dart';
@@ -13,6 +14,7 @@ part 'trips_provider.g.dart';
 class Trips extends _$Trips {
   @override
   Future<List<TripModel>> build() async {
+    ref.watch(authSessionRevisionProvider);
     final repo = ref.watch(tripRepositoryProvider);
     return repo.getTrips();
   }
@@ -86,12 +88,14 @@ class _UpdateTripDates {
 
 final tripDetailsProvider =
     FutureProvider.family<TripDetailModel, String>((ref, tripId) async {
+  ref.watch(authSessionRevisionProvider);
   final repo = ref.watch(tripRepositoryProvider);
   return repo.getTrip(tripId);
 });
 
 final tripFilesProvider =
     FutureProvider.family<List<TripFileModel>, String>((ref, tripId) async {
+  ref.watch(authSessionRevisionProvider);
   final repo = ref.watch(tripRepositoryProvider);
   return repo.getTripFiles(tripId);
 });
@@ -99,6 +103,7 @@ final tripFilesProvider =
 /// Legs (segments) of a multi-stop trip, ordered.
 final tripLegsProvider =
     FutureProvider.family<List<TripLegModel>, String>((ref, tripId) async {
+  ref.watch(authSessionRevisionProvider);
   final repo = ref.watch(tripRepositoryProvider);
   return repo.getLegs(tripId);
 });
@@ -150,5 +155,8 @@ class TripCoverMemory extends StateNotifier<Map<String, Uint8List>> {
 
 final tripCoverMemoryProvider =
     StateNotifierProvider<TripCoverMemory, Map<String, Uint8List>>(
-  (ref) => TripCoverMemory(),
+  (ref) {
+    ref.watch(authSessionRevisionProvider);
+    return TripCoverMemory();
+  },
 );

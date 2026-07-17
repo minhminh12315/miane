@@ -1,8 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
+import '../../../auth/data/repositories/auth_repository_impl.dart';
+import '../../../auth/domain/repositories/auth_repository.dart';
+import '../../../auth/presentation/controllers/app_auth_provider.dart';
 import '../../../../core/payments/viet_qr_payment.dart';
 
 enum PaymentDestinationType { bank, wallet }
@@ -379,8 +383,10 @@ class PaymentAccountConfig {
 
 class PaymentAccountController extends StateNotifier<PaymentAccountConfig> {
   final ApiClient _apiClient;
+  final AuthRepository _authRepository;
+  late final Future<String> _storageScope = _resolveStorageScope();
 
-  PaymentAccountController(this._apiClient)
+  PaymentAccountController(this._apiClient, this._authRepository)
       : super(const PaymentAccountConfig.empty()) {
     _load();
   }
@@ -394,23 +400,26 @@ class PaymentAccountController extends StateNotifier<PaymentAccountConfig> {
 
   Future<void> _load() async {
     await _loadLocal();
+    if (!mounted) return;
     await refreshFromServer();
   }
 
   Future<void> _loadLocal() async {
     final prefs = await SharedPreferences.getInstance();
-    final bankName = prefs.getString(_bankNameKey) ?? '';
-    final bankBin = prefs.getString(_bankBinKey) ?? '';
-    final destinationCode = prefs.getString(_destinationCodeKey) ??
+    final scope = await _storageScope;
+    final bankName = prefs.getString(_key(_bankNameKey, scope)) ?? '';
+    final bankBin = prefs.getString(_key(_bankBinKey, scope)) ?? '';
+    final destinationCode = prefs.getString(_key(_destinationCodeKey, scope)) ??
         findPaymentDestinationByName(bankName)?.code ??
         '';
+    if (!mounted) return;
     state = PaymentAccountConfig(
       destinationCode: destinationCode,
       bankBin: bankBin,
       bankName: bankName,
-      bankLogoUrl: prefs.getString(_bankLogoUrlKey) ?? '',
-      accountNumber: prefs.getString(_accountNumberKey) ?? '',
-      accountHolder: prefs.getString(_accountHolderKey) ?? '',
+      bankLogoUrl: prefs.getString(_key(_bankLogoUrlKey, scope)) ?? '',
+      accountNumber: prefs.getString(_key(_accountNumberKey, scope)) ?? '',
+      accountHolder: prefs.getString(_key(_accountHolderKey, scope)) ?? '',
     );
   }
 
@@ -425,6 +434,7 @@ class PaymentAccountController extends StateNotifier<PaymentAccountConfig> {
 
       final next = PaymentAccountConfig.fromPaymentMethodJson(response);
       await _persist(next);
+      if (!mounted) return;
       state = next;
     } catch (_) {
       // Keep the local fallback usable when the user is offline or logged out.
@@ -477,6 +487,7 @@ class PaymentAccountController extends StateNotifier<PaymentAccountConfig> {
     }
 
     await _persist(next);
+    if (!mounted) return;
     state = next;
   }
 
@@ -503,24 +514,45 @@ class PaymentAccountController extends StateNotifier<PaymentAccountConfig> {
 
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_destinationCodeKey);
-    await prefs.remove(_bankBinKey);
-    await prefs.remove(_bankNameKey);
-    await prefs.remove(_bankLogoUrlKey);
-    await prefs.remove(_accountNumberKey);
-    await prefs.remove(_accountHolderKey);
+    final scope = await _storageScope;
+    await prefs.remove(_key(_destinationCodeKey, scope));
+    await prefs.remove(_key(_bankBinKey, scope));
+    await prefs.remove(_key(_bankNameKey, scope));
+    await prefs.remove(_key(_bankLogoUrlKey, scope));
+    await prefs.remove(_key(_accountNumberKey, scope));
+    await prefs.remove(_key(_accountHolderKey, scope));
+    if (!mounted) return;
     state = const PaymentAccountConfig.empty();
   }
 
   Future<void> _persist(PaymentAccountConfig next) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_destinationCodeKey, next.destinationCode);
-    await prefs.setString(_bankBinKey, next.bankBin);
-    await prefs.setString(_bankNameKey, next.bankName);
-    await prefs.setString(_bankLogoUrlKey, next.bankLogoUrl);
-    await prefs.setString(_accountNumberKey, next.accountNumber);
-    await prefs.setString(_accountHolderKey, next.accountHolder);
+    final scope = await _storageScope;
+    await prefs.setString(
+        _key(_destinationCodeKey, scope), next.destinationCode);
+    await prefs.setString(_key(_bankBinKey, scope), next.bankBin);
+    await prefs.setString(_key(_bankNameKey, scope), next.bankName);
+    await prefs.setString(_key(_bankLogoUrlKey, scope), next.bankLogoUrl);
+    await prefs.setString(_key(_accountNumberKey, scope), next.accountNumber);
+    await prefs.setString(_key(_accountHolderKey, scope), next.accountHolder);
   }
+
+  Future<String> _resolveStorageScope() async {
+    final token = await _authRepository.getToken();
+    if (token == null || token.isEmpty) return 'anonymous';
+    try {
+      final claims = JwtDecoder.decode(token);
+      return claims['sub']?.toString() ??
+          claims['nameid']?.toString() ??
+          claims['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier']
+              ?.toString() ??
+          'anonymous';
+    } catch (_) {
+      return 'anonymous';
+    }
+  }
+
+  String _key(String base, String scope) => '$base:$scope';
 }
 
 final paymentDestinationsProvider =
@@ -550,7 +582,13 @@ final paymentDestinationsProvider =
 
 final paymentAccountProvider =
     StateNotifierProvider<PaymentAccountController, PaymentAccountConfig>(
-  (ref) => PaymentAccountController(ref.watch(apiClientProvider)),
+  (ref) {
+    ref.watch(authSessionRevisionProvider);
+    return PaymentAccountController(
+      ref.watch(apiClientProvider),
+      ref.watch(authRepositoryProvider),
+    );
+  },
 );
 
 String? _normalizeVietnamPhone(String value) {

@@ -1,4 +1,5 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../../auth/presentation/controllers/app_auth_provider.dart';
 import '../../data/repositories/notification_repository_impl.dart';
 import '../../domain/models/notification_model.dart';
 
@@ -8,6 +9,7 @@ part 'notification_controller.g.dart';
 class Notifications extends _$Notifications {
   @override
   Future<List<NotificationModel>> build() async {
+    ref.watch(authSessionRevisionProvider);
     final repo = ref.watch(notificationRepositoryProvider);
     return repo.getNotifications();
   }

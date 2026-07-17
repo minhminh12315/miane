@@ -1,4 +1,5 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../../auth/presentation/controllers/app_auth_provider.dart';
 import '../../../../core/payments/viet_qr_payment.dart';
 import '../../data/repositories/expense_repository_impl.dart';
 import '../../domain/models/expense_models.dart';
@@ -9,6 +10,7 @@ part 'expense_controller.g.dart';
 class TripExpenses extends _$TripExpenses {
   @override
   Future<List<ExpenseModel>> build(String tripId) async {
+    ref.watch(authSessionRevisionProvider);
     final repo = ref.watch(expenseRepositoryProvider);
     return repo.getExpenses(tripId);
   }
@@ -48,6 +50,7 @@ class TripExpenses extends _$TripExpenses {
 class TripBalances extends _$TripBalances {
   @override
   Future<TripBalancesModel> build(String tripId) async {
+    ref.watch(authSessionRevisionProvider);
     final repo = ref.watch(expenseRepositoryProvider);
     return repo.getBalances(tripId);
   }
