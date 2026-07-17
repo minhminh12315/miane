@@ -376,6 +376,35 @@ namespace Identity.API.Services
         {
             await _cacheService.RemoveAsync($"session_{userId}");
         }
+
+        public async Task<AuthResponse?> RefreshAsync(RefreshTokenRequest request)
+        {
+            var cachedToken = await _cacheService.GetAsync<string>($"session_{request.UserId}");
+            if (string.IsNullOrWhiteSpace(cachedToken) ||
+                string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                return null;
+            }
+
+            var cachedBytes = Encoding.UTF8.GetBytes(cachedToken);
+            var providedBytes = Encoding.UTF8.GetBytes(request.RefreshToken);
+            if (cachedBytes.Length != providedBytes.Length ||
+                !CryptographicOperations.FixedTimeEquals(cachedBytes, providedBytes))
+            {
+                return null;
+            }
+
+            var user = await _userManager.FindByIdAsync(request.UserId.ToString());
+            if (user is null || !user.IsActive)
+            {
+                await _cacheService.RemoveAsync($"session_{request.UserId}");
+                return null;
+            }
+
+            // CreateAuthResponseAsync rotates the refresh token and replaces
+            // the cached session, preventing reuse of the previous token.
+            return await CreateAuthResponseAsync(user);
+        }
     }
 
     /// <summary>

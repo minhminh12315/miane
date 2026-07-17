@@ -174,6 +174,37 @@ namespace Identity.API.Controllers
             return NoContent();
         }
 
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
+        {
+            var response = await _authService.RefreshAsync(request);
+            if (response is null)
+            {
+                Response.Cookies.Delete("access_token");
+                Response.Cookies.Delete("refresh_token");
+                return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn." });
+            }
+
+            var accessCookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = !_env.IsDevelopment(),
+                SameSite = SameSiteMode.Strict,
+                Expires = response.ExpiresIn
+            };
+            var refreshCookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = !_env.IsDevelopment(),
+                SameSite = SameSiteMode.Strict,
+                Expires = DateTime.UtcNow.AddDays(7)
+            };
+
+            Response.Cookies.Append("access_token", response.AccessToken, accessCookieOptions);
+            Response.Cookies.Append("refresh_token", response.RefreshToken, refreshCookieOptions);
+            return Ok(response);
+        }
+
         /// <summary>
         /// Upgrades the authenticated user to MIANE Pro after a client-side
         /// StoreKit/Play Billing purchase completes.
