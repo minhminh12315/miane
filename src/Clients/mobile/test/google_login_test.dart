@@ -36,6 +36,20 @@ class MockAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<void> sendPasswordResetOtp(String email) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> resetPassword({
+    required String email,
+    required String otpCode,
+    required String newPassword,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> logout() async {
     throw UnimplementedError();
   }

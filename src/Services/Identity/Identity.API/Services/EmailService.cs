@@ -15,7 +15,32 @@ public class EmailService : IEmailService
         _logger = logger;
     }
 
-    public async Task SendOtpAsync(string toEmail, string otpCode)
+    public Task SendOtpAsync(string toEmail, string otpCode)
+    {
+        return SendOtpEmailAsync(
+            toEmail,
+            otpCode,
+            $"MIANE — Mã xác minh: {otpCode}",
+            "Xác minh email của bạn",
+            "Đây là mã xác minh để hoàn tất đăng ký tài khoản MIANE của bạn:");
+    }
+
+    public Task SendPasswordResetOtpAsync(string toEmail, string otpCode)
+    {
+        return SendOtpEmailAsync(
+            toEmail,
+            otpCode,
+            $"MIANE — Mã đặt lại mật khẩu: {otpCode}",
+            "Đặt lại mật khẩu",
+            "Dùng mã này để đặt lại mật khẩu tài khoản MIANE của bạn:");
+    }
+
+    private async Task SendOtpEmailAsync(
+        string toEmail,
+        string otpCode,
+        string subject,
+        string title,
+        string intro)
     {
         var smtpHost = GetSmtpSetting("Host", "smtp.gmail.com");
         var smtpPortValue = GetSmtpSetting("Port", "587");
@@ -34,11 +59,11 @@ public class EmailService : IEmailService
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(fromName, fromEmail));
         message.To.Add(MailboxAddress.Parse(toEmail));
-        message.Subject = $"MIANE — Mã xác minh: {otpCode}";
+        message.Subject = subject;
 
         var bodyBuilder = new BodyBuilder
         {
-            HtmlBody = BuildOtpEmailHtml(otpCode)
+            HtmlBody = BuildOtpEmailHtml(otpCode, title, intro)
         };
         message.Body = bodyBuilder.ToMessageBody();
 
@@ -53,7 +78,7 @@ public class EmailService : IEmailService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send OTP email to {Email} via SMTP.", toEmail);
-            throw new InvalidOperationException("Không thể gửi email xác minh. Vui lòng kiểm tra cấu hình SMTP hoặc thử lại sau.", ex);
+            throw new InvalidOperationException("Không thể gửi email. Vui lòng kiểm tra cấu hình SMTP hoặc thử lại sau.", ex);
         }
         finally
         {
@@ -107,7 +132,7 @@ public class EmailService : IEmailService
         }
     }
 
-    private static string BuildOtpEmailHtml(string otpCode)
+    private static string BuildOtpEmailHtml(string otpCode, string title, string intro)
     {
         var digits = otpCode.ToCharArray();
         var digitBoxes = string.Join("", digits.Select(d =>
@@ -126,14 +151,14 @@ public class EmailService : IEmailService
   <tr>
     <td style=""background:linear-gradient(135deg,#0D2C54,#4A90E2);padding:32px 32px 24px;text-align:center;"">
       <div style=""width:48px;height:48px;margin:0 auto 12px;background:rgba(255,255,255,0.15);border-radius:50%;line-height:48px;font-size:24px;"">🛫</div>
-      <h1 style=""margin:0;color:#FFFFFF;font-size:22px;font-weight:700;letter-spacing:-0.5px;"">Xác minh email của bạn</h1>
+      <h1 style=""margin:0;color:#FFFFFF;font-size:22px;font-weight:700;letter-spacing:-0.5px;"">{title}</h1>
     </td>
   </tr>
   <!-- Body -->
   <tr>
     <td style=""padding:32px;"">
       <p style=""margin:0 0 8px;color:#64748B;font-size:14px;line-height:1.6;"">Xin chào,</p>
-      <p style=""margin:0 0 24px;color:#64748B;font-size:14px;line-height:1.6;"">Đây là mã xác minh để hoàn tất đăng ký tài khoản MIANE của bạn:</p>
+      <p style=""margin:0 0 24px;color:#64748B;font-size:14px;line-height:1.6;"">{intro}</p>
       <!-- OTP Boxes -->
       <table cellpadding=""0"" cellspacing=""6"" style=""margin:0 auto 24px;"">
         <tr>{digitBoxes}</tr>

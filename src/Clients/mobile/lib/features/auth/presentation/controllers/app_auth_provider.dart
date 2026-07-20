@@ -78,6 +78,24 @@ class AppAuth extends _$AppAuth {
     _completeAuthentication();
   }
 
+  Future<void> sendPasswordResetOtp(String email) async {
+    final repo = ref.read(authRepositoryProvider);
+    await repo.sendPasswordResetOtp(email);
+  }
+
+  Future<void> resetPassword({
+    required String email,
+    required String otpCode,
+    required String newPassword,
+  }) async {
+    final repo = ref.read(authRepositoryProvider);
+    await repo.resetPassword(
+      email: email,
+      otpCode: otpCode,
+      newPassword: newPassword,
+    );
+  }
+
   void completeSetup() {
     state = AppAuthStatus.authenticated;
   }

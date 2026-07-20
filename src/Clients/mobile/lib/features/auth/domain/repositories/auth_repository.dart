@@ -7,6 +7,12 @@ abstract class AuthRepository {
   Future<void> sendRegistrationOtp(
       String email, String password, String fullName);
   Future<AuthResponseModel> verifyRegistrationOtp(String email, String otpCode);
+  Future<void> sendPasswordResetOtp(String email);
+  Future<void> resetPassword({
+    required String email,
+    required String otpCode,
+    required String newPassword,
+  });
   Future<void> logout();
   Future<AuthResponseModel> upgradeToPro();
   Future<AuthResponseModel> loginWithGoogle(String idToken);

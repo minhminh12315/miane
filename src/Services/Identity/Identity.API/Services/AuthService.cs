@@ -176,6 +176,71 @@ namespace Identity.API.Services
             return await CreateAuthResponseAsync(user);
         }
 
+        public async Task SendPasswordResetOtpAsync(ForgotPasswordRequest request)
+        {
+            var email = NormalizeEmail(request.Email);
+            _logger.LogInformation("[ForgotPassword] Password reset OTP requested for {Email}", email);
+
+            var user = await _userManager.FindByEmailAsync(email);
+            if (user is null || !user.IsActive)
+            {
+                _logger.LogInformation(
+                    "[ForgotPassword] Ignoring password reset request for unknown or inactive email {Email}",
+                    email);
+                return;
+            }
+
+            var otpCode = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+            var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var cacheKey = BuildPasswordResetOtpCacheKey(email);
+            var cacheData = new PasswordResetOtpData
+            {
+                UserId = user.Id,
+                Email = email,
+                OtpCode = otpCode,
+                ResetToken = resetToken,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _cacheService.SetAsync(cacheKey, cacheData, TimeSpan.FromMinutes(5));
+            await _emailService.SendPasswordResetOtpAsync(user.Email ?? email, otpCode);
+        }
+
+        public async Task ResetPasswordAsync(ResetPasswordRequest request)
+        {
+            var email = NormalizeEmail(request.Email);
+            var cacheKey = BuildPasswordResetOtpCacheKey(email);
+            var cachedData = await _cacheService.GetAsync<PasswordResetOtpData>(cacheKey);
+
+            if (cachedData is null)
+            {
+                throw new InvalidOperationException("Mã đặt lại mật khẩu đã hết hạn hoặc không tồn tại. Vui lòng yêu cầu mã mới.");
+            }
+
+            if (!SecureEquals(cachedData.OtpCode, request.OtpCode))
+            {
+                throw new InvalidOperationException("Mã đặt lại mật khẩu không chính xác.");
+            }
+
+            var user = await _userManager.FindByIdAsync(cachedData.UserId.ToString());
+            if (user is null ||
+                !user.IsActive ||
+                NormalizeEmail(user.Email ?? string.Empty) != cachedData.Email)
+            {
+                await _cacheService.RemoveAsync(cacheKey);
+                throw new InvalidOperationException("Mã đặt lại mật khẩu không hợp lệ. Vui lòng yêu cầu mã mới.");
+            }
+
+            var result = await _userManager.ResetPasswordAsync(user, cachedData.ResetToken, request.NewPassword);
+            if (!result.Succeeded)
+            {
+                throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => e.Description)));
+            }
+
+            await _cacheService.RemoveAsync(cacheKey);
+            await _cacheService.RemoveAsync($"session_{user.Id}");
+        }
+
         public async Task<AuthResponse?> LoginAsync(LoginRequest request) 
         {
             // 1. Find User by Email and check if active
@@ -405,6 +470,20 @@ namespace Identity.API.Services
             // the cached session, preventing reuse of the previous token.
             return await CreateAuthResponseAsync(user);
         }
+
+        private static string NormalizeEmail(string email) =>
+            email.Trim().ToLowerInvariant();
+
+        private static string BuildPasswordResetOtpCacheKey(string email) =>
+            $"password_reset_otp_{NormalizeEmail(email)}";
+
+        private static bool SecureEquals(string expected, string provided)
+        {
+            var expectedBytes = Encoding.UTF8.GetBytes(expected);
+            var providedBytes = Encoding.UTF8.GetBytes(provided);
+            return expectedBytes.Length == providedBytes.Length &&
+                   CryptographicOperations.FixedTimeEquals(expectedBytes, providedBytes);
+        }
     }
 
     /// <summary>
@@ -417,6 +496,15 @@ namespace Identity.API.Services
         public string Password { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
         public string? AvatarUrl { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    internal class PasswordResetOtpData
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string OtpCode { get; set; } = string.Empty;
+        public string ResetToken { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
     }
 }

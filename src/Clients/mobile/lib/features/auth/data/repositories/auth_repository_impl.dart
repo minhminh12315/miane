@@ -71,6 +71,32 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<void> sendPasswordResetOtp(String email) async {
+    await _apiClient.post(
+      ApiEndpoints.forgotPassword,
+      body: {'email': email},
+      authenticated: false,
+    );
+  }
+
+  @override
+  Future<void> resetPassword({
+    required String email,
+    required String otpCode,
+    required String newPassword,
+  }) async {
+    await _apiClient.post(
+      ApiEndpoints.resetPassword,
+      body: {
+        'email': email,
+        'otpCode': otpCode,
+        'newPassword': newPassword,
+      },
+      authenticated: false,
+    );
+  }
+
+  @override
   Future<AuthResponseModel> upgradeToPro() async {
     final response = await _apiClient.post(ApiEndpoints.upgradePro);
     final authResponse = AuthResponseModel.fromJson(response);

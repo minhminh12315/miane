@@ -96,6 +96,34 @@ namespace Identity.API.Controllers
             }
         }
 
+        [HttpPost("password/forgot")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+        {
+            try
+            {
+                await _authService.SendPasswordResetOtpAsync(request);
+                return Ok(new { message = "Nếu email tồn tại, mã đặt lại mật khẩu đã được gửi." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("password/reset")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+        {
+            try
+            {
+                await _authService.ResetPasswordAsync(request);
+                return Ok(new { message = "Mật khẩu đã được đặt lại. Vui lòng đăng nhập bằng mật khẩu mới." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {

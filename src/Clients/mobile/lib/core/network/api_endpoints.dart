@@ -7,6 +7,8 @@ class ApiEndpoints {
   static const String register = '/auth/register';
   static const String sendRegistrationOtp = '/auth/register/send-otp';
   static const String verifyRegistrationOtp = '/auth/register/verify-otp';
+  static const String forgotPassword = '/auth/password/forgot';
+  static const String resetPassword = '/auth/password/reset';
   static const String login = '/auth/login';
   static const String logout = '/auth/logout';
   static const String refreshToken = '/auth/refresh';
