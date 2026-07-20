@@ -11,7 +11,7 @@ Simple React admin dashboard for the MIANE system. No mock data.
 ## Pages
 
 - **Login** - real Identity.API auth, Admin-role gated
-- **Dashboard** - live stats (databases/users/trips/expenses) and recent activity
+- **Dashboard** - live stats (users/trips/expenses) and paginated recent activity
 - **Users** - create users (optionally as Admin), edit, activate/deactivate — no hard delete, deactivation is the safe reversible option
 - **Databases** - live schema browser: real tables, row counts, and columns for all 4 MIANE databases
 

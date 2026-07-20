@@ -165,7 +165,6 @@ app.get('/api/stats', async (req, res) => {
       adminFetch(EXPENSE_API_URL, '/expenses/admin', token),
     ])
     res.json({
-      databases: Object.keys(databases).length,
       users: users.length,
       trips: trips.length,
       expenses: expenses.length,
@@ -190,7 +189,6 @@ app.get('/api/activity', async (req, res) => {
     ]
     const combined = events
       .sort((a, b) => new Date(b.at) - new Date(a.at))
-      .slice(0, 8)
       .map((r, i) => ({ id: i, text: r.text, time: r.at }))
     res.json(combined)
   } catch (err) {

@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 
+const PAGE_SIZE = 5
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [activity, setActivity] = useState([])
+  const [page, setPage] = useState(1)
   const [error, setError] = useState(null)
 
   useEffect(() => {
@@ -24,11 +27,12 @@ export default function Dashboard() {
   }
 
   const cards = [
-    { label: 'Databases', value: stats.databases },
     { label: 'Users', value: stats.users },
     { label: 'Trips', value: stats.trips },
     { label: 'Expenses', value: stats.expenses },
   ]
+  const totalPages = Math.max(1, Math.ceil(activity.length / PAGE_SIZE))
+  const visibleActivity = activity.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div>
@@ -49,14 +53,34 @@ export default function Dashboard() {
         {activity.length === 0 ? (
           <p className="page-subtitle">No activity yet.</p>
         ) : (
-          <ul className="activity-list">
-            {activity.map((a) => (
-              <li key={a.id}>
-                <span>{a.text}</span>
-                <span className="activity-time">{new Date(a.time).toLocaleString()}</span>
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul className="activity-list">
+              {visibleActivity.map((a) => (
+                <li key={a.id}>
+                  <span>{a.text}</span>
+                  <span className="activity-time">{new Date(a.time).toLocaleString()}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="pagination">
+              <button
+                className="btn-secondary"
+                disabled={page === 1}
+                onClick={() => setPage((current) => current - 1)}
+              >
+                Previous
+              </button>
+              <span>Page {page} of {totalPages}</span>
+              <button
+                className="btn-secondary"
+                disabled={page === totalPages}
+                onClick={() => setPage((current) => current + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
