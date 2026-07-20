@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:file_picker/file_picker.dart';
@@ -2185,10 +2187,10 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
 
       final toName = _getMemberName(debt.toUserId, detailsState);
       await _showTransferQrDialog(
-        title: 'Thanh toan khoan no',
+        title: 'Thanh toán khoản nợ',
         qr: qr,
         recipientLabel: toName,
-        confirmLabel: 'Da chuyen',
+        confirmLabel: 'Đã chuyển',
         onConfirmed: () => _confirmDebtPaid(debt),
       );
     } catch (e) {
@@ -2196,7 +2198,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
         await showIosMessage(
           context,
           message:
-              'Khong the tao VietQR: ${e.toString().replaceAll('ApiException: ', '')}',
+              'Không thể tạo VietQR: ${e.toString().replaceAll('ApiException: ', '')}',
           isError: true,
         );
       }
@@ -2211,8 +2213,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
       if (mounted) {
         await showIosMessage(
           context,
-          title: 'Da thanh toan',
-          message: 'Khoan no da duoc xac nhan sau khi chuyen khoan.',
+          title: 'Đã thanh toán',
+          message: 'Khoản nợ đã được xác nhận sau khi chuyển khoản.',
         );
       }
     } catch (e) {
@@ -2220,7 +2222,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
         await showIosMessage(
           context,
           message:
-              'Khong the thanh toan: ${e.toString().replaceAll('ApiException: ', '')}',
+              'Không thể thanh toán: ${e.toString().replaceAll('ApiException: ', '')}',
           isError: true,
         );
       }
@@ -2288,10 +2290,10 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                 if (!mounted) return;
 
                 await _showTransferQrDialog(
-                  title: 'Nop quy chuyen di',
+                  title: 'Nộp quỹ chuyến đi',
                   qr: qr,
-                  recipientLabel: 'Thu quy',
-                  confirmLabel: 'Da chuyen',
+                  recipientLabel: 'Thủ quỹ',
+                  confirmLabel: 'Đã chuyển',
                   onConfirmed: () async {
                     await ref
                         .read(
@@ -2344,7 +2346,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
               await showIosMessage(
                 dialogContext,
                 message:
-                    'Khong the xac nhan: ${e.toString().replaceAll('ApiException: ', '')}',
+                    'Không thể xác nhận: ${e.toString().replaceAll('ApiException: ', '')}',
                 isError: true,
               );
             } finally {
@@ -2354,49 +2356,221 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
             }
           }
 
-          return CupertinoAlertDialog(
-            title: Text(title),
-            content: Padding(
-              padding: const EdgeInsets.only(top: 14),
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: 220,
-                    height: 220,
-                    child: qrImageBytes != null
-                        ? Image.memory(qrImageBytes, fit: BoxFit.contain)
-                        : QrImageView(
-                            data: qr.qrCode,
-                            backgroundColor: CupertinoColors.white,
+          final accountLine = [
+            qr.bankName.trim(),
+            qr.accountNumber.trim(),
+          ].where((value) => value.isNotEmpty).join(' - ');
+          final accountName = qr.accountName.trim().isEmpty
+              ? 'Chưa có tên tài khoản'
+              : qr.accountName.trim();
+
+          return SizedBox.expand(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+              child: ColoredBox(
+                color: CupertinoColors.black.withValues(alpha: 0.12),
+                child: SafeArea(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final dialogWidth = math.min(
+                        360.0,
+                        math.max(280.0, constraints.maxWidth - 48),
+                      );
+                      final qrSize = math.min(220.0, dialogWidth - 108);
+
+                      return Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: SizedBox(
+                            width: dialogWidth,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: AppTheme.surfaceDark
+                                    .withValues(alpha: 0.96),
+                                borderRadius:
+                                    BorderRadius.circular(AppTheme.radiusLg),
+                                border: Border.all(
+                                  color: CupertinoColors.white
+                                      .withValues(alpha: 0.13),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: CupertinoColors.black
+                                        .withValues(alpha: 0.48),
+                                    blurRadius: 34,
+                                    offset: const Offset(0, 18),
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius:
+                                    BorderRadius.circular(AppTheme.radiusLg),
+                                child: DefaultTextStyle(
+                                  style: AppTheme.bodyMd(),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          18,
+                                          18,
+                                          18,
+                                          14,
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            _TransferQrHeader(title: title),
+                                            const SizedBox(height: 16),
+                                            Container(
+                                              padding: const EdgeInsets.all(10),
+                                              decoration: BoxDecoration(
+                                                color: CupertinoColors.white,
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: AppTheme.iosBlue
+                                                        .withValues(
+                                                            alpha: 0.14),
+                                                    blurRadius: 24,
+                                                    offset: const Offset(0, 10),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                child: SizedBox(
+                                                  width: qrSize,
+                                                  height: qrSize,
+                                                  child: qrImageBytes != null
+                                                      ? Image.memory(
+                                                          qrImageBytes,
+                                                          fit: BoxFit.contain,
+                                                        )
+                                                      : QrImageView(
+                                                          data: qr.qrCode,
+                                                          backgroundColor:
+                                                              CupertinoColors
+                                                                  .white,
+                                                          padding:
+                                                              EdgeInsets.zero,
+                                                        ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 14),
+                                            _TransferAmountPill(
+                                              amount:
+                                                  '${formatMoney(qr.amount.toDouble())} VND',
+                                            ),
+                                            const SizedBox(height: 10),
+                                            _TransferQrInfoPanel(
+                                              rows: [
+                                                _TransferQrInfoData(
+                                                  icon: CupertinoIcons.person,
+                                                  label: 'Người nhận',
+                                                  value: recipientLabel,
+                                                ),
+                                                _TransferQrInfoData(
+                                                  icon:
+                                                      CupertinoIcons.creditcard,
+                                                  label: 'Tài khoản',
+                                                  value: accountLine.isEmpty
+                                                      ? 'Chưa có thông tin'
+                                                      : accountLine,
+                                                ),
+                                                _TransferQrInfoData(
+                                                  icon: CupertinoIcons.person,
+                                                  label: 'Chủ tài khoản',
+                                                  value: accountName,
+                                                ),
+                                                _TransferQrInfoData(
+                                                  icon: CupertinoIcons
+                                                      .text_alignleft,
+                                                  label: 'Nội dung',
+                                                  value: _displayTransferInfo(
+                                                    qr.addInfo,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        height: 0.5,
+                                        color: CupertinoColors.white
+                                            .withValues(alpha: 0.13),
+                                      ),
+                                      SizedBox(
+                                        height: 56,
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: _TransferDialogAction(
+                                                label: 'Đóng',
+                                                onPressed: isConfirming
+                                                    ? null
+                                                    : () => Navigator.of(
+                                                          dialogContext,
+                                                        ).pop(),
+                                              ),
+                                            ),
+                                            Container(
+                                              width: 0.5,
+                                              color: CupertinoColors.white
+                                                  .withValues(alpha: 0.13),
+                                            ),
+                                            Expanded(
+                                              child: _TransferDialogAction(
+                                                label: confirmLabel,
+                                                isPrimary: true,
+                                                isLoading: isConfirming,
+                                                onPressed: isConfirming
+                                                    ? null
+                                                    : confirm,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
+                        ),
+                      );
+                    },
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '$recipientLabel\n${qr.bankName} - ${qr.accountNumber}\n${qr.accountName}\n${formatMoney(qr.amount.toDouble())} VND\n${qr.addInfo}',
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+                ),
               ),
             ),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: isConfirming
-                    ? null
-                    : () => Navigator.of(dialogContext).pop(),
-                child: const Text('Dong'),
-              ),
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: isConfirming ? null : confirm,
-                child: isConfirming
-                    ? const CupertinoActivityIndicator(radius: 9)
-                    : Text(confirmLabel),
-              ),
-            ],
           );
         },
       ),
     );
+  }
+
+  String _displayTransferInfo(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return 'MIANE';
+
+    final upperValue = trimmed.toUpperCase();
+    const debtPrefix = 'MIANE TRA NO ';
+    const fundPrefix = 'MIANE NOP QUY ';
+
+    if (upperValue.startsWith(debtPrefix)) {
+      return 'MIANE trả nợ ${trimmed.substring(debtPrefix.length)}';
+    }
+    if (upperValue.startsWith(fundPrefix)) {
+      return 'MIANE nộp quỹ ${trimmed.substring(fundPrefix.length)}';
+    }
+
+    return trimmed;
   }
 
   Uint8List? _decodeQrDataUrl(String? dataUrl) {
@@ -2677,6 +2851,229 @@ String _formatDocumentDate(DateTime date) {
   final day = date.day.toString().padLeft(2, '0');
   final month = date.month.toString().padLeft(2, '0');
   return '$day/$month/${date.year}';
+}
+
+class _TransferQrHeader extends StatelessWidget {
+  final String title;
+
+  const _TransferQrHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: AppTheme.iosBlue.withValues(alpha: 0.18),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            CupertinoIcons.qrcode,
+            color: AppTheme.iosBlue,
+            size: 24,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.headlineMd(),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Sẵn sàng chuyển khoản',
+                style: AppTheme.bodySm(
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TransferAmountPill extends StatelessWidget {
+  final String amount;
+
+  const _TransferAmountPill({required this.amount});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.iosBlue.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppTheme.iosBlue.withValues(alpha: 0.28),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            CupertinoIcons.money_dollar_circle_fill,
+            color: AppTheme.iosBlue,
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'Số tiền',
+            style: AppTheme.bodySm(
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
+          ),
+          const Spacer(),
+          Flexible(
+            child: Text(
+              amount,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: AppTheme.titleSm(color: AppTheme.iosLight).copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TransferQrInfoData {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _TransferQrInfoData({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+}
+
+class _TransferQrInfoPanel extends StatelessWidget {
+  final List<_TransferQrInfoData> rows;
+
+  const _TransferQrInfoPanel({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceSecondaryDark.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: CupertinoColors.white.withValues(alpha: 0.09),
+        ),
+      ),
+      child: Column(
+        children: [
+          for (var index = 0; index < rows.length; index++) ...[
+            _TransferQrInfoRow(data: rows[index]),
+            if (index < rows.length - 1)
+              Padding(
+                padding: const EdgeInsets.only(left: 44),
+                child: Container(
+                  height: 0.5,
+                  color: CupertinoColors.white.withValues(alpha: 0.08),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TransferQrInfoRow extends StatelessWidget {
+  final _TransferQrInfoData data;
+
+  const _TransferQrInfoRow({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(data.icon, color: AppTheme.iosBlue, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.label,
+                  style: AppTheme.labelSm(
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  data.value,
+                  softWrap: true,
+                  style: AppTheme.bodyMd().copyWith(height: 1.25),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TransferDialogAction extends StatelessWidget {
+  final String label;
+  final VoidCallback? onPressed;
+  final bool isPrimary;
+  final bool isLoading;
+
+  const _TransferDialogAction({
+    required this.label,
+    required this.onPressed,
+    this.isPrimary = false,
+    this.isLoading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = onPressed != null;
+    final color = isPrimary ? AppTheme.iosBlue : AppTheme.iosBlue;
+
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      onPressed: onPressed,
+      child: Opacity(
+        opacity: isEnabled || isLoading ? 1 : 0.45,
+        child: Center(
+          child: isLoading
+              ? const CupertinoActivityIndicator(radius: 9)
+              : Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.titleSm(color: color).copyWith(
+                    fontWeight: isPrimary ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
 }
 
 class _DocumentSourceTile extends StatelessWidget {

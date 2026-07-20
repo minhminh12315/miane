@@ -62,7 +62,7 @@ public sealed class VietQrClient : IVietQrClient
         if (envelope?.Code != "00" || envelope.Data is null)
         {
             throw new DomainException(
-                $"Khong the lay danh sach ngan hang VietQR: {envelope?.Desc ?? "unknown error"}.",
+                $"Không thể lấy danh sách ngân hàng VietQR: {envelope?.Desc ?? "unknown error"}.",
                 "VIETQR_BANKS_FAILED");
         }
 
@@ -98,7 +98,7 @@ public sealed class VietQrClient : IVietQrClient
         if (string.IsNullOrWhiteSpace(_options.ClientId) || string.IsNullOrWhiteSpace(_options.ApiKey))
         {
             throw new DomainException(
-                "VietQR chua duoc cau hinh. Hay them VIETQR_CLIENT_ID va VIETQR_API_KEY vao moi truong backend.",
+                "VietQR chưa được cấu hình. Hãy thêm VIETQR_CLIENT_ID và VIETQR_API_KEY vào môi trường backend.",
                 "VIETQR_NOT_CONFIGURED");
         }
 
@@ -126,14 +126,14 @@ public sealed class VietQrClient : IVietQrClient
                 "VietQR generate request failed with status {StatusCode}: {Body}",
                 (int)response.StatusCode,
                 body);
-            throw new DomainException("Khong the tao ma VietQR luc nay.", "VIETQR_GENERATE_FAILED");
+            throw new DomainException("Không thể tạo mã VietQR lúc này.", "VIETQR_GENERATE_FAILED");
         }
 
         var envelope = JsonSerializer.Deserialize<VietQrEnvelope<VietQrGenerateDataDto>>(body, JsonOptions);
         if (envelope?.Code != "00" || envelope.Data is null)
         {
             throw new DomainException(
-                $"Khong the tao ma VietQR: {envelope?.Desc ?? "unknown error"}.",
+                $"Không thể tạo mã VietQR: {envelope?.Desc ?? "unknown error"}.",
                 "VIETQR_GENERATE_FAILED");
         }
 

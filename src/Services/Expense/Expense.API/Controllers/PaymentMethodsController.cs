@@ -69,24 +69,24 @@ public class PaymentMethodsController : ControllerBase
 
         if (bank is null)
         {
-            throw new DomainException("Ngan hang khong nam trong danh sach VietQR.", "VIETQR_BANK_NOT_SUPPORTED");
+            throw new DomainException("Ngân hàng không nằm trong danh sách VietQR.", "VIETQR_BANK_NOT_SUPPORTED");
         }
 
         if (!bank.TransferSupported)
         {
-            throw new DomainException("Ngan hang nay chua ho tro chuyen tien bang VietQR.", "VIETQR_TRANSFER_NOT_SUPPORTED");
+            throw new DomainException("Ngân hàng này chưa hỗ trợ chuyển tiền bằng VietQR.", "VIETQR_TRANSFER_NOT_SUPPORTED");
         }
 
         var accountNumber = VietQrTextNormalizer.DigitsOnly(request.AccountNumber);
         if (accountNumber.Length is < 6 or > 19)
         {
-            throw new DomainException("So tai khoan VietQR phai gom 6-19 chu so.", "INVALID_BANK_ACCOUNT_NUMBER");
+            throw new DomainException("Số tài khoản VietQR phải gồm 6-19 chữ số.", "INVALID_BANK_ACCOUNT_NUMBER");
         }
 
         var accountName = VietQrTextNormalizer.NormalizeAccountName(request.AccountName);
         if (accountName.Length is < 5 or > 50)
         {
-            throw new DomainException("Ten tai khoan VietQR phai co 5-50 ky tu hop le.", "INVALID_BANK_ACCOUNT_NAME");
+            throw new DomainException("Tên tài khoản VietQR phải có 5-50 ký tự hợp lệ.", "INVALID_BANK_ACCOUNT_NAME");
         }
 
         var userMethods = await _dbContext.PaymentMethods

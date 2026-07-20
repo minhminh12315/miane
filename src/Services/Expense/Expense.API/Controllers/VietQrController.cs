@@ -71,16 +71,16 @@ public class VietQrController : ControllerBase
         var debt = await _dbContext.DebtRecords
             .AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == debtRecordId, ct)
-            ?? throw new NotFoundException("khoan no", debtRecordId);
+            ?? throw new NotFoundException("khoản nợ", debtRecordId);
 
         if (debt.IsSettled)
         {
-            throw new DomainException("Khoan no nay da duoc danh dau la da thanh toan.", "DEBT_ALREADY_SETTLED");
+            throw new DomainException("Khoản nợ này đã được đánh dấu là đã thanh toán.", "DEBT_ALREADY_SETTLED");
         }
 
         if (debt.FromUserId != userId)
         {
-            throw new DomainException("Chi nguoi dang no moi co the tao ma VietQR thanh toan khoan no nay.", "DEBT_PAYMENT_NOT_ALLOWED");
+            throw new DomainException("Chỉ người đang nợ mới có thể tạo mã VietQR thanh toán khoản nợ này.", "DEBT_PAYMENT_NOT_ALLOWED");
         }
 
         ValidateVndCurrency(debt.Currency);
@@ -106,11 +106,11 @@ public class VietQrController : ControllerBase
                 item.TripId == tripId &&
                 item.Status == WalletStatus.Active,
                 ct)
-            ?? throw new DomainException("Chuyen di chua cau hinh thu quy de nhan tien quy.", "TRIP_CUSTODIAN_NOT_CONFIGURED");
+            ?? throw new DomainException("Chuyến đi chưa cấu hình thủ quỹ để nhận tiền quỹ.", "TRIP_CUSTODIAN_NOT_CONFIGURED");
 
         if (!wallet.CurrentCustodianUserId.HasValue)
         {
-            throw new DomainException("Chuyen di chua cau hinh thu quy de nhan tien quy.", "TRIP_CUSTODIAN_NOT_CONFIGURED");
+            throw new DomainException("Chuyến đi chưa cấu hình thủ quỹ để nhận tiền quỹ.", "TRIP_CUSTODIAN_NOT_CONFIGURED");
         }
 
         var receiveAccount = await ResolveStoredReceiveAccountAsync(wallet.CurrentCustodianUserId.Value, request.PaymentMethodId, ct);
@@ -163,20 +163,20 @@ public class VietQrController : ControllerBase
 
         if (paymentMethod is null)
         {
-            throw new DomainException("Nguoi nhan chua cau hinh tai khoan ngan hang VietQR.", "PAYMENT_METHOD_NOT_CONFIGURED");
+            throw new DomainException("Người nhận chưa cấu hình tài khoản ngân hàng VietQR.", "PAYMENT_METHOD_NOT_CONFIGURED");
         }
 
         var capabilities = PaymentMethodsController.ReadCapabilities(paymentMethod.CapabilitiesJson);
         var accountNumber = _protector.Unprotect(paymentMethod.BankAccountNoEncrypted);
         if (string.IsNullOrWhiteSpace(accountNumber))
         {
-            throw new DomainException("Khong the doc so tai khoan nhan tien da luu.", "PAYMENT_METHOD_INVALID");
+            throw new DomainException("Không thể đọc số tài khoản nhận tiền đã lưu.", "PAYMENT_METHOD_INVALID");
         }
 
         var bankBin = capabilities?.BankBin ?? paymentMethod.BankCode ?? string.Empty;
         if (!int.TryParse(bankBin, out _))
         {
-            throw new DomainException("Ma BIN ngan hang nhan tien khong hop le.", "PAYMENT_METHOD_INVALID");
+            throw new DomainException("Mã BIN ngân hàng nhận tiền không hợp lệ.", "PAYMENT_METHOD_INVALID");
         }
 
         return new ReceiveAccount(
@@ -197,19 +197,19 @@ public class VietQrController : ControllerBase
         var bank = banks.FirstOrDefault(item => item.Bin == normalizedBin);
         if (bank is null || !bank.TransferSupported)
         {
-            throw new DomainException("Ngan hang nhan tien khong ho tro VietQR.", "VIETQR_BANK_NOT_SUPPORTED");
+            throw new DomainException("Ngân hàng nhận tiền không hỗ trợ VietQR.", "VIETQR_BANK_NOT_SUPPORTED");
         }
 
         var accountNumber = VietQrTextNormalizer.DigitsOnly(request.AccountNumber ?? string.Empty);
         if (accountNumber.Length is < 6 or > 19)
         {
-            throw new DomainException("So tai khoan VietQR phai gom 6-19 chu so.", "INVALID_BANK_ACCOUNT_NUMBER");
+            throw new DomainException("Số tài khoản VietQR phải gồm 6-19 chữ số.", "INVALID_BANK_ACCOUNT_NUMBER");
         }
 
         var accountName = VietQrTextNormalizer.NormalizeAccountName(request.AccountName ?? string.Empty);
         if (accountName.Length is < 5 or > 50)
         {
-            throw new DomainException("Ten tai khoan VietQR phai co 5-50 ky tu hop le.", "INVALID_BANK_ACCOUNT_NAME");
+            throw new DomainException("Tên tài khoản VietQR phải có 5-50 ký tự hợp lệ.", "INVALID_BANK_ACCOUNT_NAME");
         }
 
         return new ReceiveAccount(bank.Bin, bank.Code, bank.Name, bank.ShortName, accountNumber, accountName);
@@ -250,18 +250,18 @@ public class VietQrController : ControllerBase
     {
         if (amount <= 0)
         {
-            throw new DomainException("So tien tao VietQR phai lon hon 0.", "INVALID_PAYMENT_AMOUNT");
+            throw new DomainException("Số tiền tạo VietQR phải lớn hơn 0.", "INVALID_PAYMENT_AMOUNT");
         }
 
         if (decimal.Truncate(amount) != amount)
         {
-            throw new DomainException("VietQR chi ho tro so tien VND nguyen.", "INVALID_PAYMENT_AMOUNT");
+            throw new DomainException("VietQR chỉ hỗ trợ số tiền VND nguyên.", "INVALID_PAYMENT_AMOUNT");
         }
 
         var integerAmount = (long)amount;
         if (integerAmount.ToString().Length > 13)
         {
-            throw new DomainException("So tien VietQR toi da 13 chu so.", "INVALID_PAYMENT_AMOUNT");
+            throw new DomainException("Số tiền VietQR tối đa 13 chữ số.", "INVALID_PAYMENT_AMOUNT");
         }
 
         return integerAmount;
@@ -271,7 +271,7 @@ public class VietQrController : ControllerBase
     {
         if (!string.Equals(currency.Trim(), "VND", StringComparison.OrdinalIgnoreCase))
         {
-            throw new DomainException("VietQR hien chi ho tro thanh toan bang VND.", "VIETQR_CURRENCY_NOT_SUPPORTED");
+            throw new DomainException("VietQR hiện chỉ hỗ trợ thanh toán bằng VND.", "VIETQR_CURRENCY_NOT_SUPPORTED");
         }
     }
 

@@ -73,7 +73,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
       return VietQrPaymentQr.fromJson(response);
     }
 
-    throw ApiException(500, 'Khong the tao ma VietQR tra no.');
+    throw ApiException(500, 'Không thể tạo mã VietQR trả nợ.');
   }
 
   @override
@@ -107,7 +107,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
       return VietQrPaymentQr.fromJson(response);
     }
 
-    throw ApiException(500, 'Khong the tao ma VietQR nop quy.');
+    throw ApiException(500, 'Không thể tạo mã VietQR nộp quỹ.');
   }
 
   @override
