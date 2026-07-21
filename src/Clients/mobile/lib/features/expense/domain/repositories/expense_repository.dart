@@ -16,10 +16,4 @@ abstract class ExpenseRepository {
   Future<void> settleDebt(String debtRecordId);
   Future<VietQrPaymentQr> generateDebtPaymentQr(String debtRecordId);
   Future<TripPoolModel?> getPool(String tripId);
-  Future<VietQrPaymentQr> generateFundContributionQr(
-    String tripId,
-    double amount,
-    String currency,
-  );
-  Future<void> contributeToPool(String tripId, double amount, String currency);
 }

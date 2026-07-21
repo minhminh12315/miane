@@ -37,14 +37,11 @@ class ApiEndpoints {
       '/expenses/trip/$tripId/balances';
   static const String settleDebt = '/expenses/settle';
 
-  static const String contributeToPool = '/expenses/pool/contribute';
   static String getPool(String tripId) => '/expenses/pool/$tripId';
   static const String vietQrBanks = '/expenses/vietqr/banks';
   static const String generateVietQr = '/expenses/vietqr/generate';
   static String generateDebtVietQr(String debtRecordId) =>
       '/expenses/vietqr/debts/$debtRecordId/generate';
-  static String generateFundContributionVietQr(String tripId) =>
-      '/expenses/vietqr/trips/$tripId/fund-contribution/generate';
   static const String defaultReceivePaymentMethod =
       '/expenses/payment-methods/default-receive';
 

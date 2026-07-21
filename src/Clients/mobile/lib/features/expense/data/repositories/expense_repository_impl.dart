@@ -86,45 +86,6 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     } catch (_) {}
     return null;
   }
-
-  @override
-  Future<VietQrPaymentQr> generateFundContributionQr(
-    String tripId,
-    double amount,
-    String currency,
-  ) async {
-    final response = await _apiClient.post(
-      ApiEndpoints.generateFundContributionVietQr(tripId),
-      body: {
-        'amount': amount,
-        'currency': currency,
-        'template': 'compact',
-        'format': 'text',
-      },
-    );
-
-    if (response is Map<String, dynamic>) {
-      return VietQrPaymentQr.fromJson(response);
-    }
-
-    throw ApiException(500, 'Không thể tạo mã VietQR nộp quỹ.');
-  }
-
-  @override
-  Future<void> contributeToPool(
-    String tripId,
-    double amount,
-    String currency,
-  ) async {
-    await _apiClient.post(
-      ApiEndpoints.contributeToPool,
-      body: {
-        'tripId': tripId,
-        'amount': amount,
-        'currency': currency,
-      },
-    );
-  }
 }
 
 final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {

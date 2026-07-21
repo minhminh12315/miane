@@ -32,7 +32,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final ImagePicker _avatarPicker = ImagePicker();
 
   String _language = 'Tiếng Việt';
-  String _region = 'Việt Nam (VND)';
 
   @override
   Widget build(BuildContext context) {
@@ -99,17 +98,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     values: const ['Tiếng Việt', 'English'],
                     current: _language,
                     onSelected: (value) => setState(() => _language = value),
-                  ),
-                ),
-                IosListTile(
-                  icon: CupertinoIcons.location,
-                  title: 'Quốc gia / Vùng',
-                  value: _region,
-                  onTap: () => _showChoiceSheet(
-                    title: 'Chọn quốc gia / vùng',
-                    values: const ['Việt Nam (VND)', 'Mỹ (USD)'],
-                    current: _region,
-                    onSelected: (value) => setState(() => _region = value),
                   ),
                 ),
                 IosListTile(

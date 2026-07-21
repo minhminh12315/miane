@@ -395,7 +395,6 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
           message: err.toString(),
         ),
         data: (pool) {
-          final contributions = pool?.contributions ?? [];
           final balance = pool?.balance ?? 0;
           final currency = pool?.currency ?? widget.baseCurrency;
 
@@ -410,34 +409,8 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                     title: 'Số dư hiện tại',
                     value: '${formatMoney(balance)} $currency',
                   ),
-                  IosListTile(
-                    icon: CupertinoIcons.add_circled,
-                    title: 'Đóng góp quỹ',
-                    onTap: () => _showContributeDialog(context),
-                  ),
                 ],
               ),
-              if (contributions.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 60),
-                  child: IosEmptyState(
-                    icon: CupertinoIcons.creditcard,
-                    title: 'Chưa có đóng góp',
-                    message: 'Các khoản nạp vào quỹ nhóm sẽ hiển thị tại đây.',
-                  ),
-                )
-              else
-                IosSection(
-                  header: 'Lịch sử đóng góp',
-                  children: contributions.map((contribution) {
-                    return IosListTile(
-                      icon: CupertinoIcons.person,
-                      title: _getMemberName(contribution.userId, detailsState),
-                      subtitle: _formatDate(contribution.contributedAt),
-                      value: '${formatMoney(contribution.amount)} $currency',
-                    );
-                  }).toList(),
-                ),
             ],
           );
         },
@@ -2255,71 +2228,6 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     }
   }
 
-  void _showContributeDialog(BuildContext context) {
-    final amountController = TextEditingController();
-
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('Đóng góp quỹ'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 14),
-          child: IosTextField(
-            controller: amountController,
-            placeholder: 'Số tiền (${widget.baseCurrency})',
-            prefixIcon: CupertinoIcons.money_dollar,
-            keyboardType: TextInputType.number,
-            inputFormatters: const [MoneyInputFormatter()],
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Hủy'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () async {
-              final amount = parseMoneyInput(amountController.text.trim());
-              if (amount == null || amount <= 0) return;
-
-              try {
-                final qr = await ref
-                    .read(tripPoolControllerProvider(widget.tripId).notifier)
-                    .generateContributionQr(amount, widget.baseCurrency);
-                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-                if (!mounted) return;
-
-                await _showTransferQrDialog(
-                  title: 'Nộp quỹ chuyến đi',
-                  qr: qr,
-                  recipientLabel: 'Thủ quỹ',
-                  confirmLabel: 'Đã chuyển',
-                  onConfirmed: () async {
-                    await ref
-                        .read(
-                            tripPoolControllerProvider(widget.tripId).notifier)
-                        .contribute(amount, widget.baseCurrency);
-                  },
-                );
-              } catch (e) {
-                if (context.mounted) {
-                  await showIosMessage(
-                    context,
-                    message:
-                        'Lỗi đóng góp: ${e.toString().replaceAll('ApiException: ', '')}',
-                    isError: true,
-                  );
-                }
-              }
-            },
-            child: const Text('Đóng góp'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _showTransferQrDialog({
     required String title,
     required VietQrPaymentQr qr,
@@ -2745,13 +2653,6 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     );
   }
 
-  String _formatDate(DateTime dt) {
-    final day = dt.day.toString().padLeft(2, '0');
-    final month = dt.month.toString().padLeft(2, '0');
-    final hour = dt.hour.toString().padLeft(2, '0');
-    final minute = dt.minute.toString().padLeft(2, '0');
-    return '$day/$month $hour:$minute';
-  }
 }
 
 const _documentFolders = <String>[
