@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../../core/payments/qr_download_helper.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
 import '../../domain/models/trip_models.dart';
@@ -101,17 +102,63 @@ class _TripShareSheet extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          _ShareAction(
-            icon: CupertinoIcons.qrcode,
-            label: 'Chia sẻ QR',
-            onTap: () => Share.share(
-              '${result.shareUrl}\nCode: ${result.inviteCode}',
-              subject: 'MIANE Trip ${result.inviteCode}',
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: _ShareAction(
+                  icon: CupertinoIcons.arrow_down_doc,
+                  label: 'Tải QR',
+                  onTap: () => _downloadQr(context),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _ShareAction(
+                  icon: CupertinoIcons.qrcode,
+                  label: 'Chia sẻ QR',
+                  onTap: () => Share.share(
+                    '${result.shareUrl}\nCode: ${result.inviteCode}',
+                    subject: 'MIANE Trip ${result.inviteCode}',
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _downloadQr(BuildContext context) async {
+    try {
+      final bytes = await renderQrPngBytes(
+        data: result.shareUrl,
+        eyeStyle: const QrEyeStyle(
+          eyeShape: QrEyeShape.circle,
+          color: CupertinoColors.black,
+        ),
+        dataModuleStyle: const QrDataModuleStyle(
+          dataModuleShape: QrDataModuleShape.circle,
+          color: CupertinoColors.black,
+        ),
+      );
+      final saved = await saveQrPngFile(
+        bytes: bytes,
+        fileName: 'miane-trip-${result.inviteCode}',
+      );
+      if (!context.mounted) return;
+      await showIosMessage(
+        context,
+        message: saved ? 'Đã tải mã QR.' : 'Đã hủy tải mã QR.',
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      await showIosMessage(
+        context,
+        message: 'Không thể tải mã QR: $error',
+        isError: true,
+      );
+    }
   }
 
   Future<void> _copy(BuildContext context, String value) async {

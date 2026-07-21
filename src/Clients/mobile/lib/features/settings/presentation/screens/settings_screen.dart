@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../core/network/api_endpoints.dart';
+import '../../../../core/payments/qr_download_helper.dart';
 import '../../../../core/payments/viet_qr_payment.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
@@ -709,6 +710,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   CupertinoDialogAction(
                     onPressed: isGenerating
                         ? null
+                        : () => _downloadVietQr(
+                              dialogContext,
+                              qr!,
+                              qrImageBytes,
+                            ),
+                    child: const Text('Tải QR'),
+                  ),
+                if (qr != null)
+                  CupertinoDialogAction(
+                    onPressed: isGenerating
+                        ? null
                         : () {
                             setDialogState(() {
                               qr = null;
@@ -734,6 +746,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } finally {
       amountController.dispose();
       infoController.dispose();
+    }
+  }
+
+  Future<void> _downloadVietQr(
+    BuildContext context,
+    VietQrPaymentQr qr,
+    Uint8List? qrImageBytes,
+  ) async {
+    try {
+      final bytes = qrImageBytes ??
+          await resolveQrPngBytes(
+            dataUrl: qr.qrDataUrl,
+            fallbackData: qr.qrCode,
+          );
+      final saved = await saveQrPngFile(
+        bytes: bytes,
+        fileName: 'miane-vietqr-${qr.accountNumber}-${qr.amount}',
+      );
+      if (!context.mounted) return;
+      await showIosMessage(
+        context,
+        message: saved ? 'Đã tải mã QR.' : 'Đã hủy tải mã QR.',
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      await showIosMessage(
+        context,
+        message: 'Không thể tải mã QR: $error',
+        isError: true,
+      );
     }
   }
 

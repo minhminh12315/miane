@@ -12,6 +12,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
+import '../../../../core/payments/qr_download_helper.dart';
 import '../../../../core/payments/viet_qr_payment.dart';
 import '../../../../core/platform/document_open.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -2525,6 +2526,23 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                                             ),
                                             Expanded(
                                               child: _TransferDialogAction(
+                                                label: 'Tải QR',
+                                                onPressed: isConfirming
+                                                    ? null
+                                                    : () => _downloadTransferQr(
+                                                          dialogContext,
+                                                          qr,
+                                                          qrImageBytes,
+                                                        ),
+                                              ),
+                                            ),
+                                            Container(
+                                              width: 0.5,
+                                              color: CupertinoColors.white
+                                                  .withValues(alpha: 0.13),
+                                            ),
+                                            Expanded(
+                                              child: _TransferDialogAction(
                                                 label: confirmLabel,
                                                 isPrimary: true,
                                                 isLoading: isConfirming,
@@ -2553,6 +2571,36 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
         },
       ),
     );
+  }
+
+  Future<void> _downloadTransferQr(
+    BuildContext context,
+    VietQrPaymentQr qr,
+    Uint8List? qrImageBytes,
+  ) async {
+    try {
+      final bytes = qrImageBytes ??
+          await resolveQrPngBytes(
+            dataUrl: qr.qrDataUrl,
+            fallbackData: qr.qrCode,
+          );
+      final saved = await saveQrPngFile(
+        bytes: bytes,
+        fileName: 'miane-vietqr-${qr.accountNumber}-${qr.amount}',
+      );
+      if (!context.mounted) return;
+      await showIosMessage(
+        context,
+        message: saved ? 'Đã tải mã QR.' : 'Đã hủy tải mã QR.',
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      await showIosMessage(
+        context,
+        message: 'Không thể tải mã QR: $error',
+        isError: true,
+      );
+    }
   }
 
   String _displayTransferInfo(String value) {
@@ -2906,11 +2954,42 @@ class _TransferAmountPill extends StatelessWidget {
 
   const _TransferAmountPill({required this.amount});
 
+  String get _amountValue {
+    final parts = amount.trim().split(RegExp(r'\s+'));
+    if (parts.length <= 1) return amount.trim();
+    return parts.take(parts.length - 1).join(' ');
+  }
+
+  String get _currency {
+    final parts = amount.trim().split(RegExp(r'\s+'));
+    return parts.length <= 1 ? '' : parts.last;
+  }
+
+  TextStyle _amountStyle() {
+    final digitCount = _amountValue.replaceAll(RegExp(r'\D'), '').length;
+    var fontSize = 26.0;
+    if (digitCount > 14) {
+      fontSize = 18.0;
+    } else if (digitCount > 10) {
+      fontSize = 22.0;
+    }
+
+    return AppTheme.headlineMd(color: AppTheme.iosLight).copyWith(
+      fontSize: fontSize,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0,
+      height: 1.05,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final amountValue = _amountValue;
+    final currency = _currency;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
         color: AppTheme.iosBlue.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(18),
@@ -2918,31 +2997,66 @@ class _TransferAmountPill extends StatelessWidget {
           color: AppTheme.iosBlue.withValues(alpha: 0.28),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            CupertinoIcons.money_dollar_circle_fill,
-            color: AppTheme.iosBlue,
-            size: 22,
-          ),
-          const SizedBox(width: 10),
-          Text(
-            'Số tiền',
-            style: AppTheme.bodySm(
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-            ),
-          ),
-          const Spacer(),
-          Flexible(
-            child: Text(
-              amount,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-              style: AppTheme.titleSm(color: AppTheme.iosLight).copyWith(
-                fontWeight: FontWeight.w800,
+          Row(
+            children: [
+              const Icon(
+                CupertinoIcons.money_dollar_circle_fill,
+                color: AppTheme.iosBlue,
+                size: 22,
               ),
-            ),
+              const SizedBox(width: 10),
+              Text(
+                'Số tiền',
+                style: AppTheme.bodySm(
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 32,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      amountValue,
+                      maxLines: 1,
+                      style: _amountStyle(),
+                    ),
+                  ),
+                ),
+              ),
+              if (currency.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: CupertinoColors.white.withValues(alpha: 0.10),
+                    ),
+                  ),
+                  child: Text(
+                    currency,
+                    style: AppTheme.labelSm(color: AppTheme.iosLight).copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),
