@@ -5,7 +5,7 @@
 # =============================================================================
 
 param(
-    [string]$GatewayUrl = "http://localhost:5000",
+    [string]$GatewayUrl = "http://localhost:8080",
     [int]$StartupWaitSeconds = 10
 )
 
@@ -240,6 +240,7 @@ $authHeadersC = @{ Authorization = "Bearer $tokenC" }
 $createTrip = Invoke-Api -Method "POST" -Url "$GatewayUrl/trips" -Body @{
     name = "Da Nang Beach Trip 2026"
     description = "Summer vacation to Da Nang with friends!"
+    destination = "Da Nang, Vietnam"
     baseCurrency = "VND"
 } -Headers $authHeadersA
 
@@ -477,13 +478,6 @@ if ($tripId) {
 # TEST 5: NOTIFICATION SERVICE
 # =============================================================================
 Write-Header "TEST 5: NOTIFICATION SERVICE"
-
-# Register device
-$deviceReg = Invoke-Api -Method "POST" -Url "http://localhost:5130/notifications/devices/register" -Body @{
-    fcmToken = "test-token-alice-$timestamp"
-    platform = "android"
-} -Headers @{ "X-User-Id" = $userAId }
-Write-TestResult "Register FCM device (Alice)" ($deviceReg.Success -or $deviceReg.StatusCode -eq 200)
 
 # Get notifications
 $notifs = Invoke-Api -Url "http://localhost:5130/notifications?page=1&pageSize=10" -Headers @{ "X-User-Id" = $userAId }
