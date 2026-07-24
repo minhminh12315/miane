@@ -1,5 +1,4 @@
 using BuildingBlocks.Caching;
-using BuildingBlocks.Notifications;
 using BuildingBlocks.Middleware;
 using Identity.API.Data;
 using Identity.API.Models;
@@ -90,8 +89,6 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 builder.Services.AddSingleton<ICacheService, RedisCacheService>();
-builder.Services.AddFirebaseNotifications(builder.Configuration);
-
 var app = builder.Build();
 
 app.UseMiddleware<RequestLoggingMiddleware>();

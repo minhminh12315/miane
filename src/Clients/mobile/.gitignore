@@ -26,9 +26,6 @@ app.*.map.json
 /windows/
 /web/*
 !/web/
-!/web/firebase-config.example.json
-!/web/firebase-messaging-sw.js
-/web/firebase-config.json
 
 # ── IDE & Editor ─────────────────────────────────────────────────────────────
 .idea/

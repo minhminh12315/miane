@@ -6,7 +6,6 @@ namespace Notification.API.Data;
 
 public class NotificationDbContext : BaseDbContext
 {
-    public DbSet<DeviceRegistration> DeviceRegistrations => Set<DeviceRegistration>();
     public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
 
     public NotificationDbContext(DbContextOptions<NotificationDbContext> options) : base(options)
@@ -16,16 +15,6 @@ public class NotificationDbContext : BaseDbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
-        modelBuilder.Entity<DeviceRegistration>(entity =>
-        {
-            entity.ToTable("DeviceRegistrations");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.FcmToken).HasMaxLength(500).IsRequired();
-            entity.Property(e => e.DevicePlatform).HasMaxLength(20).IsRequired();
-            entity.HasIndex(e => e.UserId).HasDatabaseName("IX_DeviceRegistrations_UserId");
-            entity.HasIndex(e => e.FcmToken).IsUnique().HasDatabaseName("IX_DeviceRegistrations_FcmToken");
-        });
 
         modelBuilder.Entity<NotificationLog>(entity =>
         {
