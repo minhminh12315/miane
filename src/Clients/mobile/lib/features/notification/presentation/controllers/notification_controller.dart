@@ -15,15 +15,25 @@ class Notifications extends _$Notifications {
   Timer? _pollTimer;
   String? _latestId;
   int _unreadCount = 0;
+  int _pollGeneration = 0;
 
   @override
   Future<NotificationFeed> build() async {
+    final generation = ++_pollGeneration;
     ref.watch(authSessionRevisionProvider);
-    ref.onDispose(() => _pollTimer?.cancel());
+    _pollTimer?.cancel();
+    ref.onDispose(() {
+      if (_pollGeneration == generation) {
+        _pollGeneration++;
+        _pollTimer?.cancel();
+      }
+    });
 
     final feed = await _loadFeed();
-    _rememberSnapshot(feed);
-    _startPolling();
+    if (_pollGeneration == generation) {
+      _rememberSnapshot(feed);
+      _startPolling(generation);
+    }
 
     return feed;
   }
@@ -51,17 +61,18 @@ class Notifications extends _$Notifications {
     await future;
   }
 
-  void _startPolling() {
+  void _startPolling(int generation) {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(_pollInterval, (_) => _pollForUpdates());
+    _pollTimer =
+        Timer.periodic(_pollInterval, (_) => _pollForUpdates(generation));
   }
 
-  Future<void> _pollForUpdates() async {
-    if (!ref.mounted) return;
+  Future<void> _pollForUpdates(int generation) async {
+    if (_pollGeneration != generation) return;
 
     try {
       final feed = await _loadFeed();
-      if (!_hasChanges(feed)) return;
+      if (_pollGeneration != generation || !_hasChanges(feed)) return;
 
       _rememberSnapshot(feed);
       state = AsyncValue.data(feed);
