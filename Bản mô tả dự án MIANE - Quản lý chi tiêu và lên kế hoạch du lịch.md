@@ -27,7 +27,7 @@ Hệ thống được xây dựng theo mô hình phân tán (Distributed/Microse
 | ---                    | ---                    | ---                                                                                                                     |
 | **Database**           | SQLSever               | Lưu trữ dữ liệu có cấu trúc ổn định, tối ưu hóa các câu truy vấn phức tạp về mối quan hệ dòng tiền giữa các thành viên. |
 | ---                    | ---                    | ---                                                                                                                     |
-| **Cloud / Serverless** | Firebase               | Xác thực tài khoản qua mạng xã hội (OAuth2: Google, Apple ID) và đẩy thông báo (Push Notification) thời gian thực.      |
+| **Thông báo**          | Notification API       | Lưu lịch sử thông báo trong PostgreSQL và hiển thị trực tiếp trong ứng dụng.                                           |
 | ---                    | ---                    | ---                                                                                                                     |
 
 ## 3\. Mô Hình Phân Chia Tính Năng (Free vs Pro)
@@ -64,7 +64,7 @@ Hệ thống được xây dựng theo mô hình phân tán (Distributed/Microse
   - Tích hợp QR động (Viet QR / MoMo): Hệ thống tự động sinh mã QR chứa số tài khoản người nhận, số tiền chính xác, kèm nội dung chuyển khoản (Memo) cố định duy nhất (gợi ý định dạng: MIANE_98234) để phục vụ việc tự động gạch nợ.
   - Quy trình thực hiện phía Người Nợ (Người đi trả): Tại màn hình Quyết toán, người nợ chỉ cần chọn nút "Thanh toán ngay". Hệ thống áp dụng cơ chế App-to-App (Deep Linking) tự động gọi ứng dụng Ngân hàng/MoMo và điền sẵn mọi thông tin. Người nợ chỉ cần xác thực FaceID/Vân tay để hoàn tất thanh toán trong 1 chạm.
   - Quy trình thực hiện phía Người Nhận (Người được trả): Hoàn toàn thụ động nhận tiền. Người nhận bắt buộc phải liên kết Ngân hàng/Số tài khoản/MoMo vào mục Cài đặt ví trên Profile trước đó để hệ thống có cơ sở tạo QR động.
-  - Cơ chế Tự động Gạch Nợ (Auto-Reconciliation): Hệ thống Backend (ASP.NET Core) tích hợp Webhook/Open API ngân hàng. Khi giao dịch thành công khớp đúng mã nội dung Memo, hệ thống lập tức cập nhật trạng thái "Đã thanh toán" trong DB, đồng thời gửi thông báo Firebase thời gian thực để xóa khoản nợ khỏi danh sách mà người nhận không cần kiểm tra sao kê thủ công.
+  - Cơ chế Tự động Gạch Nợ (Auto-Reconciliation): Hệ thống Backend (ASP.NET Core) tích hợp Webhook/Open API ngân hàng. Khi giao dịch thành công khớp đúng mã nội dung Memo, hệ thống cập nhật trạng thái "Đã thanh toán" trong DB và tạo thông báo trong ứng dụng.
 
 ### B. Nhóm Tính Năng Thông Minh (AI-Powered Features - Độc quyền bản Pro)
 
@@ -96,6 +96,6 @@ Hệ thống được xây dựng theo mô hình phân tán (Distributed/Microse
 
 ## 6\. Lộ Trình Phát Triển Đề Xuất (Project Roadmap)
 
-- **Giai đoạn 1 (Xây dựng MVP - Bản Basic):** Hoàn thiện các tính năng cốt lõi bao gồm tạo nhóm chuyến đi (giới hạn), cấu hình cài đặt Vùng & Ngôn ngữ nền tảng để định dạng hiển thị, ghi chép sổ cái chi tiêu thủ công đơn tiền tệ, tích hợp cổng VietQR động quyết toán và đồng bộ hóa thời gian thực thông qua Firebase và cơ sở dữ liệu PostgreSQL.
+- **Giai đoạn 1 (Xây dựng MVP - Bản Basic):** Hoàn thiện các tính năng cốt lõi bao gồm tạo nhóm chuyến đi (giới hạn), cấu hình cài đặt Vùng & Ngôn ngữ nền tảng để định dạng hiển thị, ghi chép sổ cái chi tiêu thủ công đơn tiền tệ, tích hợp cổng VietQR động quyết toán và lưu dữ liệu bằng PostgreSQL.
 - **Giai đoạn 2 (Tích hợp Trí tuệ nhân tạo & Bản Pro):\*\* Triển khai dịch vụ AI chạy trên nền tảng Python FastAPI để xử lý module tự động lên lịch trình du lịch thông minh (AI Trip Planner) và bóc tách dữ liệu hóa đơn (AI OCR). Bổ sung hệ thống chia tiền nâng cao, mở khóa tính năng tự động quy đổi đa tiền tệ theo tỷ giá thời gian thực dựa trên cài đặt Vùng và cấp quyền lưu trữ không giới hạn cho tài khoản Pro.**
 - **Giai đoạn 3 (Tối ưu hóa, Thương mại hóa & Phát hành):\*\* Chuẩn hóa toàn diện giao diện UI/UX bao gồm hệ thống paywall (màn hình thanh toán gói cước), kiểm soát request qua Middleware của ASP.NET Core, hoàn thiện chế độ ngoại tuyến Offline Mode trước khi đưa lên các kho ứng dụng App Store và Google Play.**

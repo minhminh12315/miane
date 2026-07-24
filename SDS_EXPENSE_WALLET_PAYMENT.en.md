@@ -3,7 +3,7 @@
 **Version:** 1.0  
 **Date:** 2026-07-10  
 **Scope:** Expense Service, Trip Wallet, Debt Settlement, Payment Integration, Mobile UX  
-**Current architecture:** Flutter mobile + ASP.NET Core microservices + PostgreSQL + Redis + Firebase FCM + Transactional Outbox
+**Current architecture:** Flutter mobile + ASP.NET Core microservices + PostgreSQL + Redis + in-app notifications + Transactional Outbox
 
 ---
 

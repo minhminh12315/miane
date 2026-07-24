@@ -1,603 +1,683 @@
 <div align="center">
 
-# ✈️ MIANE
+# MIANE
 
-**Smart Travel Itinerary Planner & Group Expense Splitter**
-
-*Plan together. Spend smarter. Travel further.*
+Ứng dụng lập kế hoạch chuyến đi và quản lý chi tiêu nhóm.
 
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
-[![Flutter](https://img.shields.io/badge/Flutter-SDK%203.5%2B-02569B?logo=flutter)](https://flutter.dev/)
+[![Flutter](https://img.shields.io/badge/Flutter-Dart%20%5E3.5-02569B?logo=flutter)](https://flutter.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://docs.docker.com/compose/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 </div>
 
----
+> MIANE hiện là một codebase phục vụ phát triển và demo local. README này mô
+> tả những gì đang có trong code tại thời điểm hiện tại, bao gồm cả các giới
+> hạn chưa hoàn thiện.
 
-## 📖 Table of Contents
+## Mục lục
 
-1. [Project Overview](#1-project-overview)
-2. [Architecture & Tech Stack](#2-architecture--tech-stack)
-3. [Prerequisites](#3-prerequisites)
-4. [Environment Variables & Secrets](#4-environment-variables--secrets)
-5. [Getting Started](#5-getting-started)
-   - [Option A — Docker Compose (Recommended)](#option-a--docker-compose-recommended)
-   - [Option B — Local Development (Run Services Individually)](#option-b--local-development-run-services-individually)
-6. [Project Structure](#6-project-structure)
-7. [API Gateway & Service Endpoints](#7-api-gateway--service-endpoints)
-8. [Database Schema Overview](#8-database-schema-overview)
-9. [Running Tests](#9-running-tests)
-10. [Contribution Guidelines](#10-contribution-guidelines)
+- [Chức năng hiện có](#chức-năng-hiện-có)
+- [Kiến trúc và công nghệ](#kiến-trúc-và-công-nghệ)
+- [Chạy nhanh bằng Docker](#chạy-nhanh-bằng-docker)
+- [Cấu hình `.env`](#cấu-hình-env)
+- [Chạy Flutter trên iOS Simulator hoặc thiết bị thật](#chạy-flutter-trên-ios-simulator-hoặc-thiết-bị-thật)
+- [Chạy chế độ phát triển](#chạy-chế-độ-phát-triển)
+- [Admin Dashboard](#admin-dashboard)
+- [Dữ liệu mẫu và reset dữ liệu](#dữ-liệu-mẫu-và-reset-dữ-liệu)
+- [Kiểm thử](#kiểm-thử)
+- [Giới hạn hiện tại](#giới-hạn-hiện-tại)
+- [Xử lý lỗi thường gặp](#xử-lý-lỗi-thường-gặp)
 
----
+## Chức năng hiện có
 
-## 1. Project Overview
+### Tài khoản
 
-**MIANE** is a premium mobile-first application for groups of travelers to:
+- Đăng ký và đăng nhập bằng email.
+- OTP qua SMTP cho đăng ký và quên mật khẩu.
+- Access token, refresh token và phiên đăng nhập lưu trong Redis.
+- Đăng nhập Google trên iOS khi OAuth client được cấu hình đúng.
+- Hồ sơ người dùng, avatar và phân quyền Admin/Employee.
+- Nút đăng nhập Apple đang có trên giao diện nhưng **chưa được tích hợp**.
 
-- 🗺️ **Plan trips collaboratively** — create shared itineraries, invite members via a unique 8-character code, and manage trip lifecycle from planning to completion.
-- 💸 **Split expenses fairly** — log group expenses with equal or custom splits, handle multi-currency payments with automatic conversion, and track who owes whom.
-- 🏦 **Manage a shared Trip Pool** — contribute to a group fund and pay shared expenses directly from it.
-- 📊 **Simplify debts** — a debt simplification algorithm minimizes the number of transactions needed to settle all balances within a trip.
-- 🤖 **AI-assisted features** — AI-powered trip planning suggestions and OCR-based receipt scanning to auto-fill expense details.
-- 🔔 **Real-time push notifications** — Firebase Cloud Messaging (FCM) delivers instant updates for expense creation, debt settlements, and member changes.
+### Chuyến đi
 
-The system follows a **microservices architecture**, with a Flutter mobile client (targeting iOS and Android) communicating with four independent backend services through a centralized YARP API Gateway.
+- Tạo, sửa, xóa, tham gia bằng invite code và quản lý thành viên.
+- Kiểm tra tên, địa điểm, thứ tự ngày; cảnh báo khi tạo chuyến trong quá khứ
+  hoặc chuyến quá dài.
+- Quản lý các chặng đi, tài liệu, ghi chú và file của chuyến.
+- Upload ảnh bìa lên `Trip.API`.
+- Tạo ảnh bìa bằng OpenAI thông qua service FastAPI và cache kết quả.
 
----
+### Chi tiêu
 
-## 2. Architecture & Tech Stack
+- Tạo và chia khoản chi, xem số dư và công nợ.
+- Trip Pool/Wallet, yêu cầu góp quỹ và thay đổi người giữ quỹ.
+- Lưu tài khoản nhận tiền, lấy danh sách ngân hàng và tạo VietQR.
+- Quét hóa đơn hoặc biên lai chuyển khoản trên iOS bằng Apple Vision; text
+  được xử lý on-device và đi qua parser rule-based tiếng Việt trước khi người
+  dùng xác nhận.
+- OCR không gửi ảnh lên OpenAI.
 
-### System Architecture Diagram
+### Thông báo và quản trị
 
-```
-┌───────────────────────────────────────────────────────────┐
-│                   Flutter Mobile Client                    │
-│       (Riverpod · http · JWT · Google Fonts)              │
-└───────────────────────┬───────────────────────────────────┘
-                        │ HTTP (port 5000)
-                        ▼
-┌───────────────────────────────────────────────────────────┐
-│               Web.Gateway (YARP Reverse Proxy)            │
-│   JWT Validation · Rate Limiting · Header Propagation     │
-│                 ASP.NET Core / .NET 10                    │
-└────┬──────────────┬────────────────┬───────────────┬──────┘
-     │ :5127        │ :5128          │ :5129         │ :5130
-     ▼              ▼                ▼               ▼
-┌─────────┐  ┌──────────┐  ┌─────────────┐  ┌──────────────┐
-│Identity │  │  Trip    │  │   Expense   │  │Notification  │
-│  .API   │  │  .API    │  │    .API     │  │    .API      │
-│ASP.NET  │  │ASP.NET   │  │  ASP.NET   │  │  ASP.NET     │
-│.NET 10  │  │.NET 10   │  │  .NET 10   │  │  .NET 10     │
-└────┬────┘  └────┬─────┘  └──────┬──────┘  └──────┬───────┘
-     │            │               │                 │
-     ▼            ▼               ▼                 ▼
-┌─────────────────────────────────────────────────────────┐
-│           PostgreSQL 16   (4 separate databases)        │
-│   Miane_identity · Miane_trip · Miane_expense           │
-│   Miane_notification                                    │
-└─────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────┐
-│       Redis 7   (Caching · OTP · Token Blacklist)       │
-└─────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────┐
-│   Firebase (FCM Push · Auth Google OAuth)               │
-└─────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────┐
-│   External AI Service  (Trip Planner · OCR Receipt)     │
-│   HTTP client in BuildingBlocks.AI → configurable URL   │
-└─────────────────────────────────────────────────────────┘
+- Notification service lưu lịch sử thông báo trong PostgreSQL và mobile có
+  màn hình đọc/đánh dấu đã đọc.
+- Admin Dashboard riêng bằng React + Node/Express, dùng API thật và dữ liệu
+  thật từ PostgreSQL.
+- Thông báo hiện là in-app notification; project không dùng dịch vụ push bên
+  ngoài.
+
+## Kiến trúc và công nghệ
+
+```text
+Flutter iOS/Web
+    ├── HTTP/JWT ──> Web.Gateway :8080
+    │                   ├── Identity.API     :5127
+    │                   ├── Trip.API         :5128
+    │                   ├── Expense.API      :5129
+    │                   └── Notification.API :5130
+    │                         │
+    │                  PostgreSQL + Redis
+    │
+    └── tạo ảnh bìa ──> FastAPI AI Image :8000 ──> OpenAI Images API
+
+Admin React :5173 ──> Admin Node :4000 ──> các API backend
 ```
 
-### Tech Stack Table
-
-| Layer | Technology | Version |
-|-------|-----------|---------|
-| **Mobile Client** | Flutter + Dart | SDK `^3.5.0` |
-| **State Management** | Riverpod (`flutter_riverpod` + `riverpod_generator`) | `^2.5.1` / `^2.4.0` |
-| **Backend Framework** | ASP.NET Core | .NET 10 |
-| **API Gateway** | YARP Reverse Proxy | `2.3.0` |
-| **ORM** | Entity Framework Core + Npgsql | `10.0.8` / `10.0.1` |
-| **Database** | PostgreSQL | `16-alpine` |
-| **Cache / Session** | Redis (StackExchange.Redis) | `7-alpine` |
-| **Auth** | ASP.NET Core Identity + JWT Bearer | .NET 10 |
-| **Email (OTP)** | MailKit | `4.12.1` |
-| **CQRS / Messaging** | MediatR | `12.4.1` |
-| **Validation** | FluentValidation | `11.11.0` |
-| **Async Reliability** | Transactional Outbox Pattern (EF Core) | Custom (`BuildingBlocks`) |
-| **Push Notifications** | Firebase Admin SDK | `3.2.0` |
-| **HTTP Client (Fonts)** | `google_fonts` Flutter package | `^8.1.0` |
-| **Containerisation** | Docker + Docker Compose | Latest |
-
----
-
-## 3. Prerequisites
-
-Install the following tools before cloning the repository:
-
-| Tool | Required Version | Download |
-|------|-----------------|---------|
-| **Docker Desktop** | Latest stable | [docker.com](https://www.docker.com/products/docker-desktop/) |
-| **.NET SDK** | **10.0** | [dotnet.microsoft.com](https://dotnet.microsoft.com/download) |
-| **Flutter SDK** | **3.5.0 or later** (Dart SDK `^3.5.0`) | [flutter.dev](https://docs.flutter.dev/get-started/install) |
-| **Git** | Any modern version | [git-scm.com](https://git-scm.com/) |
-| **PowerShell** | 7+ (for integration tests) | [learn.microsoft.com](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell) |
-
-**Verify your environment:**
-
-```bash
-dotnet --version       # Must be 10.x
-flutter --version      # Must be 3.5+
-docker --version
-docker compose version
-```
-
-> **Firebase** (optional for local dev): You need a Firebase project only if you want to test push notifications. See [Section 4](#4-environment-variables--secrets) for details.
-
----
-
-## 4. Environment Variables & Secrets
-
-### 4.1 Create a `.env` file in the project root
-
-When running with Docker Compose, the `docker-compose.yml` reads from a `.env` file (or from shell environment variables). Create `.env` in the project root:
-
-```dotenv
-# ─── JWT ────────────────────────────────────────────────────────────────────
-# CHANGE THIS in production! Must be at least 32 characters.
-JWT_SIGNING_KEY=Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#
-
-# ─── Database Connection Strings (defaults match docker-compose postgres) ───
-# Leave blank to use the built-in defaults. Override only for remote databases.
-IDENTITY_DB_CONNECTION_STRING=
-TRIP_DB_CONNECTION_STRING=
-EXPENSE_DB_CONNECTION_STRING=
-NOTIFICATION_DB_CONNECTION_STRING=
-
-# ─── Firebase (Push Notifications) ──────────────────────────────────────────
-# Path to your Firebase service account JSON file, mounted into the container.
-# Leave blank to skip push notification functionality.
-FIREBASE_SERVICE_ACCOUNT_PATH=
-FIREBASE_PROJECT_ID=
-
-# ─── SMTP Email (OTP Registration) ───────────────────────────────────────────
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=your-email@gmail.com
-SMTP_PASSWORD=your-app-password
-SMTP_FROM_EMAIL=your-email@gmail.com
-SMTP_FROM_NAME=MIANE
-
-# ─── External AI Service ─────────────────────────────────────────────────────
-# URL of the AI service (trip planner + OCR). Leave blank if not running.
-AI_SERVICE_URL=http://localhost:8000
-AI_SERVICE_API_KEY=
-```
-
-### 4.2 Local Development — `appsettings.Development.json`
-
-When running services individually with `dotnet run`, each service reads its own `appsettings.Development.json`. The defaults connect to `localhost` PostgreSQL and Redis. The files already exist in each service directory with safe development defaults.
-
-| Service | Config File Path |
-|---------|-----------------|
-| Identity | `src/Services/Identity/Identity.API/appsettings.Development.json` |
-| Trip | `src/Services/Trip/Trip.API/appsettings.Development.json` |
-| Expense | `src/Services/Expense/Expense.API/appsettings.Development.json` |
-| Notification | `src/Services/Notification/Notification.API/appsettings.Development.json` |
-| Web.Gateway | `src/ApiGateways/Web.Gateway/appsettings.Development.json` |
-
-**Keys you MUST configure for full functionality:**
-
-| Key | Service | Description |
-|-----|---------|-------------|
-| `Jwt:Key` | Identity, Gateway | JWT signing secret (min 32 chars) |
-| `Firebase:ServiceAccountPath` | Identity, Notification | Path to Firebase service account JSON |
-| `Firebase:ProjectId` | Identity, Notification | Firebase project ID |
-| `Smtp:Username` / `Smtp:Password` | Identity | Gmail credentials (or SMTP relay) for OTP emails |
-| `AiServices:BaseUrl` | Expense | URL to the Python AI service |
-| `AiServices:ApiKey` | Expense | API key for the AI service |
-
----
-
-## 5. Getting Started
-
-### Option A — Docker Compose (Recommended)
-
-This is the fastest way to spin up the entire stack with a single command.
-
-**Step 1 — Clone the repository**
-
-```bash
-git clone https://github.com/minhminh12315/miane.git
-cd miane
-```
-
-**Step 2 — Create the `.env` file**
-
-Copy the template from [Section 4.1](#41-create-a-env-file-in-the-project-root) and fill in your values. At minimum, SMTP credentials are needed for registration OTPs to work.
-
-**Step 3 — Start all services**
-
-```bash
-docker compose up --build
-```
-
-This command will:
-- Pull and start **PostgreSQL 16** and **Redis 7** containers.
-- Run the `docker/postgres-init.sql` init script to create the four service databases (`Miane_trip`, `Miane_expense`, `Miane_notification`) alongside the default `Miane_identity`.
-- Build and start the four microservice APIs.
-- Build and start the **Web.Gateway** (YARP).
-- Build and start the **Flutter mobile client** (served via Nginx on port `3000`).
-
-Each ASP.NET Core service **automatically runs EF Core migrations on startup** — no manual migration step is required.
-
-**Step 4 — Verify the stack is healthy**
-
-```
-Service           Port     URL
-─────────────────────────────────────────────
-Web Gateway       5000     http://localhost:5000
-Identity API      5127     http://localhost:5127
-Trip API          5128     http://localhost:5128
-Expense API       5129     http://localhost:5129
-Notification API  5130     http://localhost:5130
-Mobile Client     3000     http://localhost:3000
-PostgreSQL        5432     localhost:5432
-Redis             6370     localhost:6370
-```
-
-Hit the gateway health endpoint:
-```bash
-curl http://localhost:5000/
-# Expected: "Miane Web Gateway"
-```
-
-**Step 5 — Tear down**
-
-```bash
-docker compose down            # Stop containers (keeps volumes)
-docker compose down -v         # Stop and delete all data volumes
-```
-
----
-
-### Option B — Local Development (Run Services Individually)
-
-Use this approach when you want hot-reload and IDE debugging for a specific service.
-
-#### Step 1 — Start infrastructure
-
-```bash
-docker compose up postgres redis -d
-```
-
-This starts only the PostgreSQL and Redis containers, leaving the application services for you to run locally.
-
-#### Step 2 — Run database migrations
-
-Each service manages its own database. The services auto-migrate on startup in `Development` mode, so simply running the service is sufficient. If you want to run migrations manually:
-
-```bash
-# Identity
-cd src/Services/Identity/Identity.API
-dotnet ef database update
-
-# Trip
-cd src/Services/Trip/Trip.API
-dotnet ef database update
-
-# Expense
-cd src/Services/Expense/Expense.API
-dotnet ef database update
-
-# Notification
-cd src/Services/Notification/Notification.API
-dotnet ef database update
-```
-
-#### Step 3 — Run the backend services
-
-Open four separate terminals:
-
-```bash
-# Terminal 1 — Identity API (port 5127)
-cd src/Services/Identity/Identity.API
-dotnet run
-
-# Terminal 2 — Trip API (port 5128)
-cd src/Services/Trip/Trip.API
-dotnet run
-
-# Terminal 3 — Expense API (port 5129)
-cd src/Services/Expense/Expense.API
-dotnet run
-
-# Terminal 4 — Notification API (port 5130)
-cd src/Services/Notification/Notification.API
-dotnet run
-```
-
-#### Step 4 — Run the API Gateway
-
-```bash
-# Terminal 5 — Web Gateway (port 8080 → mapped to 5000 externally in Docker, or 8080 locally)
-cd src/ApiGateways/Web.Gateway
-dotnet run
-```
-
-> **Note:** When running locally, the gateway connects to services by internal hostname. You may need to update `appsettings.Development.json` in `Web.Gateway` to use `http://localhost` cluster addresses instead of Docker service names.
-
-#### Step 5 — Run the Flutter mobile app
-
-```bash
-cd src/Clients/mobile
-
-# Install dependencies
-flutter pub get
-
-# Generate Riverpod code (required after any @riverpod changes)
-flutter pub run build_runner build --delete-conflicting-outputs
-
-# Run on a connected device or emulator
-flutter run
-```
-
-> The app connects to the API Gateway. Update the base URL in `src/Clients/mobile/lib/core/network/` to point to your local gateway address if needed.
-
----
-
-## 6. Project Structure
-
-```
+| Thành phần | Công nghệ |
+|---|---|
+| Mobile/Web client | Flutter, Dart `^3.5.0`, Riverpod |
+| OCR iOS | Apple Vision `VNRecognizeTextRequest` + parser Dart |
+| Backend | ASP.NET Core / .NET 10, EF Core, MediatR |
+| Gateway | YARP, JWT validation, rate limiting |
+| Database | PostgreSQL 16, 4 database tách biệt |
+| Cache/session | Redis 7 |
+| AI cover | FastAPI + OpenAI Images API |
+| Admin | React 19, Vite, Node/Express |
+
+Các database:
+
+- `Miane_identity`
+- `Miane_trip`
+- `Miane_expense`
+- `Miane_notification`
+
+Migrations trong từng service là nguồn thông tin schema chính xác nhất.
+[`database_schema.md`](./database_schema.md) là tài liệu tham khảo bổ sung và
+có thể chậm hơn migration mới nhất.
+
+## Cấu trúc chính
+
+```text
 miane/
-│
-├── docker-compose.yml              # Full-stack orchestration (all 6 containers)
-├── docker/
-│   └── postgres-init.sql           # Creates Miane_trip, Miane_expense, Miane_notification DBs
-│
-├── Miane.sln                       # Visual Studio solution file
-│
+├── .env.example
+├── docker-compose.yml
+├── docker-compose.dev.yml
+├── docker/postgres-init.sql
+├── services/ai-image/
+├── admin-dashboard/
 ├── src/
-│   │
-│   ├── BuildingBlocks/             # Shared class library (referenced by all services)
-│   │   ├── AI/                     # HTTP clients for AI Trip Planner & OCR service
-│   │   ├── Behaviors/              # MediatR pipeline behaviors (validation, logging)
-│   │   ├── Caching/                # ICacheService + RedisCacheService abstraction
-│   │   ├── CQRS/                   # ICommand, IQuery, ICommandHandler, IQueryHandler interfaces
-│   │   ├── Data/                   # BaseDbContext with Outbox table + OutboxProcessor background service
-│   │   ├── Domain/                 # Base domain entity types
-│   │   ├── EventBus/               # In-process event bus (IEventBus, IIntegrationEvent)
-│   │   ├── Exceptions/             # Domain exception types
-│   │   ├── Extensions/             # AddBuildingBlocks() & AddOutboxProcessor() DI extensions
-│   │   ├── Middleware/             # ExceptionHandlingMiddleware (global error handler)
-│   │   ├── Notifications/          # Firebase Admin SDK integration (AddFirebaseNotifications())
-│   │   └── BuildingBlocks.csproj   # Target: net10.0
-│   │
-│   ├── ApiGateways/
-│   │   └── Web.Gateway/            # YARP Reverse Proxy — single entry point for all clients
-│   │       ├── Program.cs          # JWT validation, rate limiting, X-User-Id header propagation
-│   │       └── appsettings.json    # Route table: /auth, /users, /trips, /expenses, /notifications
-│   │
-│   ├── Services/
-│   │   │
-│   │   ├── Identity/
-│   │   │   └── Identity.API/       # User registration, login, JWT issuance, OTP (port 5127)
-│   │   │       ├── Controllers/    # AuthController (register, login, logout, validate, me)
-│   │   │       ├── Data/           # AppDbContext (ASP.NET Core Identity + EF Core + Npgsql)
-│   │   │       ├── Models/         # User entity, auth request/response models
-│   │   │       └── Services/       # IAuthService (JWT + OTP), IEmailService (MailKit SMTP)
-│   │   │
-│   │   ├── Trip/
-│   │   │   └── Trip.API/           # Trip & member management (port 5128)
-│   │   │       ├── Controllers/    # Trip CRUD + member operations
-│   │   │       ├── Data/           # TripDbContext, TripRepository
-│   │   │       ├── Domain/         # Trip, TripMember entities
-│   │   │       ├── Features/       # CQRS handlers: CreateTrip, GetTrip, GetUserTrips,
-│   │   │       │                   #   JoinTrip, LeaveTrip, RemoveMember, UpdateTrip
-│   │   │       ├── IntegrationEvents/  # Events published to Outbox
-│   │   │       └── Migrations/     # EF Core migration files
-│   │   │
-│   │   ├── Expense/
-│   │   │   └── Expense.API/        # Expense tracking, debt management (port 5129)
-│   │   │       ├── Controllers/    # Expense endpoints
-│   │   │       ├── Data/           # ExpenseDbContext
-│   │   │       ├── Domain/         # Expense, ExpenseSplit, TripPool, PoolContribution,
-│   │   │       │                   #   DebtRecord entities
-│   │   │       ├── Features/       # CQRS handlers: CreateExpense, GetTripExpenses,
-│   │   │       │                   #   GetTripBalances, GetTripPool, ContributeToPool,
-│   │   │       │                   #   ScanBill (AI OCR), SettleDebt
-│   │   │       ├── Services/       # CurrencyConversionService, DebtSimplificationService,
-│   │   │       │                   #   StaticExchangeRateProvider
-│   │   │       ├── IntegrationEvents/  # Events published to Outbox
-│   │   │       └── Migrations/     # EF Core migration files
-│   │   │
-│   │   └── Notification/
-│   │       └── Notification.API/   # FCM push notifications & notification history (port 5130)
-│   │           ├── Controllers/    # DevicesController, NotificationsController, EventsController
-│   │           ├── Data/           # NotificationDbContext
-│   │           ├── Domain/         # DeviceRegistration, NotificationLog entities
-│   │           ├── EventHandlers/  # NotificationEventProcessor (processes Outbox events)
-│   │           └── Migrations/     # EF Core migration files
-│   │
-│   └── Clients/
-│       └── mobile/                 # Flutter cross-platform mobile application
-│           ├── lib/
-│           │   ├── main.dart       # App entry; ProviderScope + AppAuthStatus routing
-│           │   ├── core/
-│           │   │   ├── network/    # HTTP client configuration, API base URL
-│           │   │   └── theme/      # AppTheme (Heritage Navy, Luminous Azure, Sand Gold tokens)
-│           │   └── features/       # Feature-first folder structure
-│           │       ├── auth/       # Registration, OTP verify, login, welcome flow
-│           │       ├── expense/    # Expense list, add expense, debt balances
-│           │       ├── home/       # Main layout screen, navigation shell
-│           │       ├── notification/ # Notification list & push handling
-│           │       ├── search/     # Trip/user search
-│           │       ├── settings/   # App settings
-│           │       ├── user_profile/ # Profile setup & edit
-│           │       └── analytics/  # Trip analytics & spending insights
-│           ├── DESIGN.md           # Design system tokens (colors, typography, spacing, radius)
-│           └── pubspec.yaml        # Flutter dependencies
-│
-├── tests/
-│   └── integration-test.ps1        # Full end-to-end PowerShell integration test suite
-│
-├── database_schema.md              # Detailed DB schema for all 4 microservice databases
-└── Miane.sln                       # .NET solution file
+│   ├── ApiGateways/Web.Gateway/
+│   ├── BuildingBlocks/
+│   ├── Clients/mobile/
+│   └── Services/
+│       ├── Identity/Identity.API/
+│       ├── Trip/Trip.API/
+│       ├── Expense/Expense.API/
+│       └── Notification/Notification.API/
+└── tests/integration-test.ps1
 ```
 
----
+## Yêu cầu môi trường
 
-## 7. API Gateway & Service Endpoints
+### Chạy toàn bộ bằng Docker
 
-All client requests should go through the **Web Gateway at `http://localhost:5000`**. The gateway validates JWTs and forwards requests to the appropriate microservice.
+- Docker Desktop có Docker Compose v2.
+- Git.
 
-### Public Routes (no authentication required)
+### Phát triển native/local
 
-| Method | Path | Service | Description |
-|--------|------|---------|-------------|
-| `POST` | `/auth/register` | Identity | Register a new user |
-| `POST` | `/auth/register/send-otp` | Identity | Send OTP email for registration |
-| `POST` | `/auth/register/verify-otp` | Identity | Verify OTP and issue tokens |
-| `POST` | `/auth/login` | Identity | Login; returns JWT access + refresh tokens (HttpOnly cookies) |
+- .NET SDK 10.
+- Flutter có Dart tương thích `^3.5.0`.
+- Xcode và CocoaPods khi chạy iOS.
+- Node.js/npm khi chạy Admin Dashboard.
+- PowerShell 7 nếu chạy `tests/integration-test.ps1`.
 
-### Protected Routes (Bearer token required)
+Kiểm tra nhanh:
 
-| Method | Path | Service | Description |
-|--------|------|---------|-------------|
-| `GET` | `/auth/me` | Identity | Get current user profile |
-| `GET` | `/auth/validate` | Identity | Validate current JWT |
-| `POST` | `/auth/logout` | Identity | Invalidate session |
-| `GET` | `/users/{**catch-all}` | Identity | User management endpoints |
-| `GET/POST` | `/trips` | Trip | List user trips / Create a trip |
-| `GET/PUT` | `/trips/{id}` | Trip | Get trip details / Update trip |
-| `POST` | `/trips/join` | Trip | Join a trip via invite code |
-| `POST` | `/trips/{id}/leave` | Trip | Leave a trip |
-| `GET/POST` | `/expenses` | Expense | List/create expenses |
-| `GET` | `/expenses/trip/{id}` | Expense | Get all expenses for a trip |
-| `GET` | `/expenses/trip/{id}/balances` | Expense | Get simplified debt balances |
-| `POST` | `/expenses/settle` | Expense | Settle a specific debt record |
-| `GET/POST` | `/expenses/pool/{tripId}` | Expense | Get pool / contribute funds |
-| `GET` | `/notifications` | Notification | Get notification history |
+```bash
+docker compose version
+dotnet --version
+flutter --version
+node --version
+```
 
-> The gateway propagates **`X-User-Id`** and **`X-User-Tier`** HTTP headers (extracted from JWT claims) to all downstream services, so individual services do not validate JWTs directly.
+## Chạy nhanh bằng Docker
 
----
+### 1. Tạo file cấu hình
 
-## 8. Database Schema Overview
+Tại thư mục gốc:
 
-The system uses **4 isolated PostgreSQL databases**, one per microservice. Each service manages its own schema via EF Core migrations.
+```bash
+cp .env.example .env
+```
 
-| Database | Managed By | Key Tables |
-|----------|-----------|-----------|
-| `Miane_identity` | Identity.API | `Users`, `Roles`, `UserRoles`, `UserTokens`, `OutboxMessages` |
-| `Miane_trip` | Trip.API | `Trips`, `TripMembers`, `OutboxMessages` |
-| `Miane_expense` | Expense.API | `Expenses`, `ExpenseSplits`, `TripPools`, `PoolContributions`, `DebtRecords`, `OutboxMessages` |
-| `Miane_notification` | Notification.API | `DeviceRegistrations`, `NotificationLogs` |
-
-All databases except `Miane_identity` include an `OutboxMessages` table for the **Transactional Outbox Pattern**, ensuring reliable event delivery between services without a message broker. See [`database_schema.md`](./database_schema.md) for the full column-level schema documentation.
-
----
-
-## 9. Running Tests
-
-### Integration Tests (Full End-to-End)
-
-The `tests/integration-test.ps1` script performs a complete user journey test across all microservices through the API Gateway. It covers:
-
-- ✅ User registration, OTP flow, login, JWT claim validation
-- ✅ Trip creation, joining via invite code, member management
-- ✅ Expense creation (equal split, custom split, multi-currency)
-- ✅ Debt simplification algorithm validation
-- ✅ Debt settlement flow
-- ✅ Trip Pool contribution and balance checks
-- ✅ FCM device registration and notification retrieval
-- ✅ Authorization enforcement (403 Forbidden for non-members)
-- ✅ Input validation (400 for negative amounts, 404 for bad invite codes, 409 for duplicate joins)
-
-**Run the tests** (requires the full stack to be running):
+Windows PowerShell:
 
 ```powershell
-# From the project root
-.\tests\integration-test.ps1
-
-# With custom gateway URL or extended startup wait
-.\tests\integration-test.ps1 -GatewayUrl "http://localhost:5000" -StartupWaitSeconds 15
+Copy-Item .env.example .env
 ```
 
-### Flutter Unit & Widget Tests
+Sau đó mở `.env` và ít nhất hãy:
+
+- đổi `JWT_SIGNING_KEY`;
+- cấu hình SMTP nếu muốn đăng ký/đặt lại mật khẩu từ mobile;
+- thêm `OPENAI_API_KEY` nếu muốn tạo ảnh bìa AI;
+- thêm VietQR credentials nếu muốn sinh QR chuyển khoản.
+
+Không commit `.env`. File này đã được `.gitignore`.
+
+### 2. Kiểm tra Compose
+
+```bash
+docker compose --env-file .env config --quiet
+```
+
+Lệnh trên chỉ kiểm tra cú pháp. Không nên gửi output đầy đủ của
+`docker compose config` cho người khác vì output có thể chứa secret đã được
+nội suy.
+
+### 3. Khởi động
+
+```bash
+docker compose --env-file .env up -d --build
+```
+
+Theo dõi trạng thái:
+
+```bash
+docker compose ps
+docker compose logs -f web-gateway identity-api trip-api expense-api notification-api ai-image
+```
+
+### 4. Kiểm tra
+
+```bash
+curl http://localhost:8080/
+# Miane Web Gateway
+
+curl http://localhost:8000/health
+```
+
+| Thành phần | URL/cổng host | Ghi chú |
+|---|---|---|
+| Flutter Web | <http://localhost:3000> | Build release do Nginx phục vụ |
+| Web Gateway | <http://localhost:8080> | Điểm vào API của client |
+| Identity API | <http://localhost:5127> | Direct dev access |
+| Trip API | <http://localhost:5128> | Direct dev access |
+| Expense API | <http://localhost:5129> | Direct dev access |
+| Notification API | <http://localhost:5130> | Direct dev access |
+| AI Image | <http://localhost:8000> | Health + tạo/cache ảnh |
+| PostgreSQL | `localhost:5432` | User mặc định `Miane` |
+| Redis | `localhost:6370` | Container dùng cổng nội bộ `6379` |
+
+OpenAPI chỉ được map trong môi trường Development và có thể xem trực tiếp tại
+`http://localhost:<service-port>/openapi/v1.json`.
+
+## Cấu hình `.env`
+
+### `.env` được sử dụng ở đâu?
+
+- `docker compose` tự đọc `.env` ở thư mục project.
+- `docker-compose.yml` truyền các giá trị runtime vào backend/AI service và
+  truyền build arguments vào Flutter Web.
+- `flutter run` chạy trực tiếp **không đọc `.env`**. Các giá trị cho Flutter
+  native phải truyền bằng `--dart-define`.
+- `appsettings*.json` cung cấp cấu hình mặc định cho .NET; biến môi trường của
+  Compose ghi đè chúng bằng cú pháp `Section__Key`.
+
+Nếu dùng file khác:
+
+```bash
+docker compose --env-file .env.local up -d --build
+```
+
+Không đặt `COMPOSE_FILE` trong `.env` trừ khi bạn chủ động muốn Compose tự ghép
+nhiều file. Để chọn cấu hình dev, dùng `-f docker-compose.dev.yml` rõ ràng.
+
+### Cú pháp và secret
+
+- Viết `KEY=value`, không thêm khoảng trắng quanh dấu `=`.
+- Với giá trị chứa khoảng trắng, `$` hoặc `#`, nên dùng dấu nháy đơn:
+
+```dotenv
+SMTP_PASSWORD='app password or special#value'
+```
+
+- Dùng một JWT key riêng cho mỗi môi trường:
+
+```bash
+openssl rand -hex 32
+```
+
+- Không đưa API key, service-account JSON, App Password hoặc connection string
+  production vào Git, ảnh chụp màn hình hay log hỗ trợ.
+
+### Cấu hình tối thiểu cho local
+
+```dotenv
+MOBILE_API_URL=http://localhost:8080
+MIANE_AI_IMAGE_URL=http://localhost:8000/api/v1/image/generate-trip-thumbnail
+
+JWT_SIGNING_KEY=<chuoi-random-it-nhat-32-ky-tu>
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_FROM_EMAIL=
+SMTP_FROM_NAME=MIANE
+
+OPENAI_API_KEY=
+OPENAI_IMAGE_MODEL=gpt-image-1.5
+OPENAI_IMAGE_SIZE=1536x1024
+OPENAI_IMAGE_QUALITY=medium
+OPENAI_IMAGE_FORMAT=jpeg
+AI_IMAGE_PUBLIC_BASE_URL=http://localhost:8000
+
+VIETQR_CLIENT_ID=
+VIETQR_API_KEY=
+```
+
+Giá trị trống của các connection string sẽ dùng PostgreSQL trong Compose.
+
+### Bảng biến quan trọng
+
+| Biến | Thành phần đọc | Khi nào cần | Mặc định/hành vi |
+|---|---|---|---|
+| `MOBILE_API_URL` | Flutter Web build/dev Compose | Luôn cần client gọi backend | `http://localhost:8080` |
+| `MIANE_AI_IMAGE_URL` | Flutter Web build/dev Compose | Khi dùng tạo ảnh AI | Endpoint AI local |
+| `JWT_SIGNING_KEY` | Identity, Trip, Expense, Notification, Gateway | Bắt buộc; mọi service phải cùng key | Có fallback chỉ dành cho development |
+| `*_DB_CONNECTION_STRING` | Từng .NET service | Chỉ khi không dùng PostgreSQL Compose | Blank dùng host `postgres` |
+| `SMTP_*` | Identity API | OTP đăng ký và quên mật khẩu | Blank làm luồng gửi OTP lỗi |
+| `GOOGLE_CLIENT_ID` | Identity API | Xác minh Google ID token | Phải khớp audience của token |
+| `GOOGLE_BYPASS_VALIDATION` | Identity API | Chỉ mock/debug có chủ đích | `false` |
+| `OPENAI_API_KEY` | AI Image service | Nút tạo ảnh bằng AI | Blank trả lỗi cấu hình; upload tay vẫn hoạt động |
+| `OPENAI_IMAGE_*` | AI Image service | Tùy chỉnh model/size/chất lượng/format | Xem `.env.example` |
+| `AI_IMAGE_PUBLIC_BASE_URL` | AI Image service | URL ảnh trả về cho client | `http://localhost:8000` |
+| `AI_IMAGE_CACHE_DIR` | AI Image service | Đổi thư mục cache trong container | `/app/cache` |
+| `AI_IMAGE_USE_OLLAMA` | AI Image service | Chọn landmark bằng Ollama local | `false` |
+| `OLLAMA_BASE_URL` | AI Image service | Khi bật Ollama | `http://localhost:11434` |
+| `VIETQR_CLIENT_ID`, `VIETQR_API_KEY` | Expense API | Sinh VietQR | Bank list vẫn dùng được khi để trống |
+| `AI_SERVICE_URL`, `AI_SERVICE_API_KEY` | .NET AI planner client | Hiện chưa có user flow gọi tới | Reserved |
+
+Danh sách đầy đủ và hướng dẫn theo từng nhà cung cấp nằm trong
+[`ENV_KEYS_GUIDE.md`](./ENV_KEYS_GUIDE.md).
+
+### Sau khi sửa `.env`
+
+Biến backend và AI là runtime environment của container. Tạo lại container:
+
+```bash
+docker compose --env-file .env up -d --force-recreate \
+  identity-api trip-api expense-api notification-api web-gateway ai-image
+```
+
+`MOBILE_API_URL` và `MIANE_AI_IMAGE_URL` là build-time values của Flutter Web.
+Build lại mobile container:
+
+```bash
+docker compose --env-file .env up -d --build mobile-client
+```
+
+## Cấu hình theo tính năng
+
+### Email OTP
+
+Mobile registration và forgot-password gọi SMTP thật. Với Gmail:
+
+1. Bật 2-Step Verification.
+2. Tạo Google App Password.
+3. Đặt App Password vào `SMTP_PASSWORD`, không dùng mật khẩu Gmail thường.
+4. `SMTP_FROM_EMAIL` thường giống `SMTP_USERNAME`.
+
+```dotenv
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=you@example.com
+SMTP_PASSWORD='16-character-app-password'
+SMTP_FROM_EMAIL=you@example.com
+SMTP_FROM_NAME=MIANE
+```
+
+Sau khi đổi:
+
+```bash
+docker compose up -d --force-recreate identity-api
+docker compose logs -f identity-api
+```
+
+### OpenAI tạo ảnh bìa
+
+```dotenv
+OPENAI_API_KEY=sk-...
+OPENAI_IMAGE_MODEL=gpt-image-1.5
+OPENAI_IMAGE_SIZE=1536x1024
+OPENAI_IMAGE_QUALITY=medium
+OPENAI_IMAGE_FORMAT=jpeg
+AI_IMAGE_PUBLIC_BASE_URL=http://localhost:8000
+```
+
+`medium` và `jpeg` là cấu hình local hiện tại để giảm thời gian và kích thước
+ảnh. Test:
+
+```bash
+curl http://localhost:8000/health
+
+curl -X POST http://localhost:8000/api/v1/image/generate-trip-thumbnail \
+  -H 'Content-Type: application/json' \
+  -d '{"placeName":"Đà Lạt","country":"Vietnam"}'
+```
+
+### Google Sign-In
+
+Có hai phía khác nhau:
+
+- `GOOGLE_CLIENT_ID` trong `.env`: backend dùng để xác minh `aud` của ID token.
+- `GIDClientID`/`GIDServerClientID`: iOS đọc từ
+  `src/Clients/mobile/ios/Runner/Info.plist`.
+
+Hai phía phải thuộc cấu hình OAuth tương thích. Xem
+[`GOOGLE_SIGNIN_SETUP.md`](./GOOGLE_SIGNIN_SETUP.md).
+
+Không bật `GOOGLE_BYPASS_VALIDATION=true` ở môi trường dùng chung hoặc
+production.
+
+### VietQR
+
+```dotenv
+VIETQR_BASE_URL=https://api.vietqr.io/
+VIETQR_CLIENT_ID=
+VIETQR_API_KEY=
+```
+
+- Lấy bank list: không cần credentials.
+- Sinh QR: cần cả Client ID và API key.
+- VietQR chỉ tạo payload/ảnh QR; code hiện không tự xác nhận tiền đã vào ngân
+  hàng.
+
+### Thông báo
+
+Notification service lưu và trả lịch sử thông báo từ PostgreSQL. Mobile đọc,
+đánh dấu từng thông báo hoặc đánh dấu tất cả đã đọc qua Gateway. Project không
+tích hợp dịch vụ push bên ngoài và không cần key thông báo trong `.env`.
+
+## Chạy Flutter trên iOS Simulator hoặc thiết bị thật
+
+Khởi động backend trước:
+
+```bash
+docker compose --env-file .env up -d \
+  postgres redis identity-api trip-api expense-api notification-api web-gateway ai-image
+```
+
+Cài dependency và generate Riverpod:
 
 ```bash
 cd src/Clients/mobile
-
-# Run all Flutter tests
-flutter test
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
 ```
 
-### Static Analysis
+### iOS Simulator trên cùng máy
 
 ```bash
-# .NET — all services
-dotnet analyze
+flutter run \
+  --dart-define=API_URL=http://localhost:8080 \
+  --dart-define=MIANE_AI_IMAGE_URL=http://localhost:8000/api/v1/image/generate-trip-thumbnail
+```
 
-# Flutter
+### iPhone thật trong cùng mạng LAN
+
+`localhost` trên điện thoại là điện thoại, không phải máy dev. Tìm LAN IP của
+máy, ví dụ `192.168.1.10`, rồi:
+
+```bash
+flutter run -d <device-id> \
+  --dart-define=API_URL=http://192.168.1.10:8080 \
+  --dart-define=MIANE_AI_IMAGE_URL=http://192.168.1.10:8000/api/v1/image/generate-trip-thumbnail
+```
+
+Đồng thời sửa `.env`:
+
+```dotenv
+AI_IMAGE_PUBLIC_BASE_URL=http://192.168.1.10:8000
+```
+
+và tạo lại AI container:
+
+```bash
+docker compose up -d --force-recreate ai-image
+```
+
+Máy và iPhone phải cùng mạng; firewall phải cho phép các cổng cần dùng.
+
+Project hiện có platform folders cho iOS và Web. OCR native được cài trong
+`ios/Runner/AppDelegate.swift`, vì vậy luồng quét hóa đơn/biên lai hiện chỉ
+được hỗ trợ đúng trên iOS/iOS Simulator.
+
+## Chạy chế độ phát triển
+
+### Full stack với `docker-compose.dev.yml`
+
+File dev dùng `dotnet watch`, mount source và chạy Flutter web-server:
+
+```bash
+docker compose -f docker-compose.dev.yml --env-file .env up -d --build
+```
+
+Xem log:
+
+```bash
+docker compose -f docker-compose.dev.yml logs -f
+```
+
+Dừng:
+
+```bash
+docker compose -f docker-compose.dev.yml down
+```
+
+### Chỉ chạy PostgreSQL và Redis trong Docker
+
+```bash
+docker compose -f docker-compose.dev.yml up -d postgres redis
+```
+
+Sau đó có thể chạy từng .NET service bằng `dotnet run`. Lưu ý cấu hình gateway
+mặc định chứa hostname Docker (`identity-api`, `trip-api`, ...); nếu chạy
+gateway trực tiếp trên host, phải override các YARP destination sang
+`http://localhost:<port>`.
+
+## Admin Dashboard
+
+Admin Dashboard không nằm trong Docker Compose chính.
+
+Khởi động backend:
+
+```bash
+docker compose up -d postgres redis identity-api trip-api expense-api notification-api
+```
+
+Terminal 1:
+
+```bash
+cd admin-dashboard/server
+npm install
+npm start
+```
+
+Terminal 2:
+
+```bash
+cd admin-dashboard
+npm install
+npm run dev
+```
+
+Mở <http://localhost:5173>. Tài khoản development được seed:
+
+```text
+admin@Miane.local / Admin@123
+```
+
+Đây là credentials demo hard-coded trong seeder. Không dùng nguyên trạng ngoài
+local development. Xem thêm [`admin-dashboard/README.md`](./admin-dashboard/README.md).
+
+## Dữ liệu mẫu và reset dữ liệu
+
+Khi chạy với `ASPNETCORE_ENVIRONMENT=Development`, service tự:
+
+- chạy EF Core migrations;
+- seed Admin/Employee;
+- seed 6 người dùng demo;
+- seed chuyến Đà Nẵng, expenses, debts, payment methods và trip wallet mẫu.
+
+Vì vậy `docker compose down -v` rồi chạy lại sẽ tạo database mới nhưng **không
+hoàn toàn trống**: dữ liệu development sẽ được seed lại. Hiện chưa có biến môi
+trường để tắt demo seeder.
+
+Dừng và giữ các named volume (PostgreSQL, ảnh/cache, uploads và keys):
+
+```bash
+docker compose down
+```
+
+Redis trong `docker-compose.yml` không có named volume, nên cache/session Redis
+sẽ mất khi container bị xóa dù không dùng `-v`.
+
+Xóa toàn bộ volume của riêng project:
+
+```bash
+docker compose down --volumes --remove-orphans
+docker compose up -d --build
+```
+
+Lệnh trên xóa không thể khôi phục:
+
+- PostgreSQL;
+- cache ảnh AI;
+- ảnh bìa và file chuyến đi trong `trip_uploads`;
+- Data Protection keys của Expense API.
+
+Không cần dùng `docker system prune`, vì lệnh đó có thể ảnh hưởng project khác.
+
+## Kiểm thử
+
+### Backend build
+
+```bash
+dotnet build Miane.sln
+```
+
+### Flutter
+
+```bash
 cd src/Clients/mobile
 flutter analyze
+flutter test
+flutter build ios --simulator --no-codesign
 ```
 
----
+### Integration PowerShell
 
-## 10. Contribution Guidelines
+Full stack phải đang chạy:
 
-### Branching Strategy
-
-```
-main              ← production-ready code only
-  └── develop     ← integration branch for all features
-        └── feature/<short-description>   ← new features
-        └── fix/<short-description>       ← bug fixes
-        └── chore/<short-description>     ← tooling, deps, CI
+```powershell
+pwsh ./tests/integration-test.ps1
 ```
 
-### Commit Message Convention
+Gateway mặc định của script là `http://localhost:8080`. Có thể override:
 
-Follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
-
-```
-<type>(<scope>): <short summary>
-
-Examples:
-feat(expense): add multi-currency conversion on expense creation
-fix(identity): correct OTP expiry comparison to use UTC
-chore(deps): bump EF Core to 10.0.8
-docs(readme): update getting started guide
+```powershell
+pwsh ./tests/integration-test.ps1 `
+  -GatewayUrl "http://localhost:8080" `
+  -StartupWaitSeconds 15
 ```
 
-**Types:** `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`
+## Giới hạn hiện tại
 
-### Pull Request Process
+- Apple Sign-In chưa được cấu hình.
+- Thông báo hiện chỉ hiển thị trong app, không có push notification.
+- AI service trong `services/ai-image` chỉ tạo ảnh bìa. Interface .NET cho AI
+  trip planner có tồn tại nhưng chưa có user-facing endpoint sử dụng, và
+  FastAPI hiện không triển khai `/api/planner/suggest`.
+- OCR chỉ có native implementation trên iOS; parser vẫn là heuristic nên mọi
+  kết quả đều cần màn hình xác nhận trước khi lưu.
+- Tỷ giá trong Expense service là static provider, không phải tỷ giá live.
+- Admin Dashboard giữ session trong RAM của Node server; restart server sẽ
+  đăng xuất tất cả admin.
+- Các API nghiệp vụ của Trip/Expense/Notification tin `X-User-Id` do Gateway
+  truyền; client bình thường phải gọi qua Gateway, không gọi trực tiếp service.
 
-1. Branch from `develop` (never from `main` directly).
-2. Keep PRs focused — one feature or fix per PR.
-3. Ensure all services compile: `dotnet build Miane.sln`.
-4. Run static analysis and fix all warnings: `dotnet analyze`.
-5. Run the integration test suite against your local stack.
-6. For Flutter changes, run `flutter analyze` and `flutter test`.
-7. If you changed any `@riverpod` or `@freezed` annotated code, regenerate: `flutter pub run build_runner build --delete-conflicting-outputs`.
-8. Request review from at least one team member before merging.
+## Xử lý lỗi thường gặp
 
-### Code Style
+### `401 Unauthorized`
 
-- **Backend (.NET):** Follow standard C# conventions; use `async/await` throughout; prefer `record` types for DTOs.
-- **Flutter/Dart:** Follow the project's `analysis_options.yaml` linting rules; use Riverpod `AsyncNotifier` / `Notifier` (no `setState`-heavy widgets); structure all features under `lib/features/{feature_name}/data/`, `domain/`, and `presentation/`.
-- **No placeholder code:** All committed code must be complete and production-ready. Do not commit `// TODO` blocks without an accompanying GitHub Issue.
+- Kiểm tra tất cả service và Gateway dùng cùng `JWT_SIGNING_KEY`.
+- Đăng xuất/đăng nhập lại sau khi đổi JWT key.
+- Không gọi protected API trực tiếp nếu không hiểu cơ chế header/JWT của service.
 
----
+### OTP không gửi
 
-<div align="center">
+```bash
+docker compose logs -f identity-api
+```
 
-**MIT License** · Copyright © 2026 Quang Minh
+Kiểm tra `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`; Gmail yêu cầu App
+Password khi bật xác minh hai bước.
 
-</div>
+### Tạo ảnh AI lỗi hoặc chậm
+
+```bash
+docker compose logs -f ai-image
+curl http://localhost:8000/health
+```
+
+Kiểm tra `OPENAI_API_KEY`, billing/quota và URL mà client có thể truy cập.
+
+### App trên iPhone không gọi được backend
+
+- Không dùng `localhost`.
+- Dùng LAN IP của máy dev cho `API_URL`, `MIANE_AI_IMAGE_URL` và
+  `AI_IMAGE_PUBLIC_BASE_URL`.
+- Kiểm tra cùng Wi-Fi và firewall.
+
+### Đổi `.env` nhưng app web vẫn dùng URL cũ
+
+URL Flutter Web được nhúng lúc build:
+
+```bash
+docker compose up -d --build mobile-client
+```
+
+### Database mới nhưng vẫn có dữ liệu
+
+Đó là dữ liệu từ development seeders, không phải volume cũ. Xem
+[Dữ liệu mẫu và reset dữ liệu](#dữ-liệu-mẫu-và-reset-dữ-liệu).
+
+## Tài liệu liên quan
+
+- [Hướng dẫn biến môi trường](./ENV_KEYS_GUIDE.md)
+- [Google Sign-In](./GOOGLE_SIGNIN_SETUP.md)
+- [Yêu cầu OCR local](./AI_OCR_LOCAL_REQUIREMENTS.md)
+- [AI Image service](./services/ai-image/README.md)
+- [Admin Dashboard](./admin-dashboard/README.md)
+- [SRS tiếng Việt](./SRS_vi.md)
+- [Database schema](./database_schema.md)
+
+## License
+
+[MIT](./LICENSE)

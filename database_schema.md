@@ -155,21 +155,7 @@ Bảng lưu các giao dịch nợ đã được tối ưu hóa (Debt Simplificat
 ---
 
 ## 4. Database: `Miane_notification`
-Quản lý đăng ký thiết bị nhận thông báo đẩy FCM (Firebase Cloud Messaging) và lịch sử thông báo.
-
-### Bảng: `DeviceRegistrations`
-Đăng ký token thiết bị để gửi thông báo đẩy.
-
-| Tên Cột | Kiểu Dữ Liệu | Ràng Buộc | Mô tả |
-| :--- | :--- | :--- | :--- |
-| `Id` | `uuid` | PK | ID đăng ký |
-| `UserId` | `uuid` | Index | ID người dùng |
-| `FcmToken` | `varchar(500)` | Unique, Not Null | Token thiết bị cấp bởi Firebase FCM |
-| `DevicePlatform` | `varchar(20)` | Not Null (ios/android/web) | Nền tảng thiết bị |
-| `RegisteredAt` | `timestamp` | Not Null, Default `UTC` | Thời điểm đăng ký |
-| `IsActive` | `boolean` | Not Null, Default `true` | Trạng thái hoạt động của token |
-| `CreatedAt` | `timestamp` | Not Null | Thời gian tạo |
-| `UpdatedAt` | `timestamp` | Nullable | Thời gian cập nhật |
+Lưu lịch sử thông báo trong app.
 
 ### Bảng: `NotificationLogs`
 Lịch sử thông báo đã gửi cho người dùng.

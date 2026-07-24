@@ -7,7 +7,7 @@
 
 ## 1. System Overview
 
-MIANE is a mobile-first group travel management application that solves two core problems: **collaborative trip planning** and **automated expense splitting**. The system uses a microservices architecture with a Flutter client (iOS & Android), ASP.NET Core backend services, a Python/FastAPI AI service, and Firebase push notifications.
+MIANE is a mobile-first group travel management application that solves two core problems: **collaborative trip planning** and **automated expense splitting**. The system uses a microservices architecture with a Flutter client, ASP.NET Core backend services, a Python/FastAPI AI service, and in-app notifications stored by Notification API.
 
 ### 1.1 Target Users
 
@@ -49,7 +49,7 @@ Web Gateway (YARP Reverse Proxy :8080)
 Infrastructure:
   PostgreSQL 16  — 4 separate databases (Miane_identity, Miane_trip, Miane_expense, Miane_notification)
   Redis 7        — session cache, token store
-  Firebase FCM   — push notifications
+  Notification API — in-app notification history
   AI Service     — FastAPI (:8000), trip cover image generation + trip planning
                    (receipt OCR runs on-device in the Flutter app, not here — see 3.3a)
 ```
@@ -291,22 +291,6 @@ Returns paginated list of the user's notifications:
 
 - Bulk update via `ExecuteUpdateAsync` (single SQL statement)
 
-#### FR-NOTIF-04: Register Device for Push
-
-`POST /notifications/devices/register` *(protected)*
-
-- Upserts FCM token for the authenticated user
-- Supports multiple platforms (`ios`, `android`, `web`)
-- Prevents duplicate token registrations
-
-#### FR-NOTIF-05: Unregister Device
-
-`DELETE /notifications/devices/{token}` *(protected)*
-
-- Soft-deletes: sets `IsActive = false`
-
----
-
 ## 4. Non-Functional Requirements
 
 ### 4.1 Security
@@ -414,8 +398,6 @@ DebtRecord (computed by DebtSimplificationService)
 | GET | `/notifications` | Notification | Get notification history |
 | PUT | `/notifications/{id}/read` | Notification | Mark notification read |
 | PUT | `/notifications/read-all` | Notification | Mark all read |
-| POST | `/notifications/devices/register` | Notification | Register FCM device |
-| DELETE | `/notifications/devices/{token}` | Notification | Unregister FCM device |
 
 ---
 
@@ -434,7 +416,7 @@ Expense API
               │
               ▼
         Notification API
-          └── Send FCM push to all trip members
+          └── Store in-app notifications for relevant users
 ```
 
 ```
@@ -454,7 +436,7 @@ Identity API
 
 | Feature | Notes |
 |---|---|
-| Google / Apple OAuth login | Firebase auth planned, not wired |
+| Apple OAuth login | Not implemented |
 | AI Trip Planner | AI service exists, trip planning endpoint not yet exposed |
 | VietQR / MoMo deep linking | Designed but not implemented in current API |
 | Bank webhook auto-reconciliation | Planned for Phase 2 |
@@ -509,7 +491,6 @@ PostgreSQL 16, one database per service (database-per-service pattern). All non-
 
 | Table | Key Columns | Notes |
 |---|---|---|
-| `DeviceRegistrations` | `Id`, `UserId` (index), `FcmToken` (unique), `DevicePlatform` (ios/android/web), `RegisteredAt`, `IsActive` | Upserted by token |
 | `NotificationLogs` | `Id`, `UserId` (composite index w/ IsRead), `Title`, `Body`, `EventType`, `SentAt`, `IsRead`, `Data` (JSON) | |
 
 ### 9.5 Shared: Outbox Pattern
@@ -628,12 +609,6 @@ erDiagram
         bool IsRead
     }
 
-    DEVICE_REGISTRATIONS {
-        uuid Id PK
-        uuid UserId
-        string FcmToken UK
-        string DevicePlatform
-    }
 ```
 
-**Note:** `USERS` lives in `Miane_identity`; `TRIPS`/`TRIP_*` live in `Miane_trip`; `EXPENSES`/`EXPENSE_SPLITS`/`TRIP_POOLS`/`POOL_CONTRIBUTIONS`/`DEBT_RECORDS` live in `Miane_expense`; `NOTIFICATION_LOGS`/`DEVICE_REGISTRATIONS` live in `Miane_notification`. Cross-database relationships (dashed in a true diagram) are enforced at the application level via `UserId`/`TripId` references only — there are no physical foreign keys across service boundaries.
+**Note:** `USERS` lives in `Miane_identity`; `TRIPS`/`TRIP_*` live in `Miane_trip`; `EXPENSES`/`EXPENSE_SPLITS`/`TRIP_POOLS`/`POOL_CONTRIBUTIONS`/`DEBT_RECORDS` live in `Miane_expense`; `NOTIFICATION_LOGS` lives in `Miane_notification`. Cross-database relationships (dashed in a true diagram) are enforced at the application level via `UserId`/`TripId` references only — there are no physical foreign keys across service boundaries.

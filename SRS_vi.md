@@ -7,7 +7,7 @@
 
 ## 1. Tổng quan Hệ thống
 
-MIANE là ứng dụng quản lý du lịch nhóm ưu tiên di động, giải quyết hai bài toán cốt lõi: **lập kế hoạch chuyến đi có sự cộng tác** và **chia chi phí tự động**. Hệ thống sử dụng kiến trúc microservices với client Flutter (iOS & Android), các dịch vụ backend ASP.NET Core, dịch vụ AI Python/FastAPI, và thông báo đẩy Firebase.
+MIANE là ứng dụng quản lý du lịch nhóm ưu tiên di động, giải quyết hai bài toán cốt lõi: **lập kế hoạch chuyến đi có sự cộng tác** và **chia chi phí tự động**. Hệ thống sử dụng kiến trúc microservices với client Flutter, các dịch vụ backend ASP.NET Core, dịch vụ AI Python/FastAPI và thông báo trong app lưu tại Notification API.
 
 ### 1.1 Người dùng Mục tiêu
 
@@ -49,7 +49,7 @@ Web Gateway (YARP Reverse Proxy :8080)
 Hạ tầng:
   PostgreSQL 16  — 4 database riêng biệt (Miane_identity, Miane_trip, Miane_expense, Miane_notification)
   Redis 7        — cache phiên đăng nhập, lưu trữ token
-  Firebase FCM   — thông báo đẩy
+  Notification API — lịch sử thông báo trong app
   AI Service     — FastAPI (:8000), tạo ảnh bìa chuyến đi + lập kế hoạch chuyến đi
                    (quét hóa đơn OCR chạy ngay trên thiết bị Flutter, không qua service này — xem mục 3.3a)
 ```
@@ -292,22 +292,6 @@ Trả về danh sách thông báo phân trang của người dùng:
 
 - Cập nhật hàng loạt qua `ExecuteUpdateAsync` (một câu lệnh SQL duy nhất)
 
-#### FR-NOTIF-04: Đăng ký Thiết bị Nhận Thông báo Đẩy
-
-`POST /notifications/devices/register` *(được bảo vệ)*
-
-- Upsert token FCM cho người dùng đã xác thực
-- Hỗ trợ nhiều nền tảng (`ios`, `android`, `web`)
-- Ngăn chặn đăng ký token trùng lặp
-
-#### FR-NOTIF-05: Hủy Đăng ký Thiết bị
-
-`DELETE /notifications/devices/{token}` *(được bảo vệ)*
-
-- Xóa mềm: đặt `IsActive = false`
-
----
-
 ## 4. Yêu cầu Phi Chức năng
 
 ### 4.1 Bảo mật
@@ -415,8 +399,6 @@ DebtRecord (tính toán bởi DebtSimplificationService)
 | GET | `/notifications` | Notification | Lấy lịch sử thông báo |
 | PUT | `/notifications/{id}/read` | Notification | Đánh dấu thông báo đã đọc |
 | PUT | `/notifications/read-all` | Notification | Đánh dấu tất cả đã đọc |
-| POST | `/notifications/devices/register` | Notification | Đăng ký thiết bị FCM |
-| DELETE | `/notifications/devices/{token}` | Notification | Hủy đăng ký thiết bị FCM |
 
 ---
 
@@ -435,7 +417,7 @@ Expense API
               │
               ▼
         Notification API
-          └── Gửi thông báo đẩy FCM đến tất cả thành viên chuyến đi
+          └── Lưu thông báo trong app cho người dùng liên quan
 ```
 
 ```
@@ -455,7 +437,7 @@ Identity API
 
 | Tính năng | Ghi chú |
 |---|---|
-| Đăng nhập Google / Apple OAuth | Đã lên kế hoạch dùng Firebase auth, chưa tích hợp |
+| Đăng nhập Apple OAuth | Chưa tích hợp |
 | AI Trip Planner (lập kế hoạch chuyến đi bằng AI) | Dịch vụ AI đã có, endpoint lập kế hoạch chuyến đi chưa được công bố |
 | Deep linking VietQR / MoMo | Đã thiết kế nhưng chưa triển khai trong API hiện tại |
 | Tự động đối soát qua webhook ngân hàng | Dự kiến cho Giai đoạn 2 |
@@ -510,7 +492,6 @@ PostgreSQL 16, mỗi dịch vụ một database riêng (mô hình database-per-s
 
 | Bảng | Cột chính | Ghi chú |
 |---|---|---|
-| `DeviceRegistrations` | `Id`, `UserId` (index), `FcmToken` (duy nhất), `DevicePlatform` (ios/android/web), `RegisteredAt`, `IsActive` | Upsert theo token |
 | `NotificationLogs` | `Id`, `UserId` (composite index với IsRead), `Title`, `Body`, `EventType`, `SentAt`, `IsRead`, `Data` (JSON) | |
 
 ### 9.5 Chung: Mẫu Outbox
@@ -629,13 +610,6 @@ erDiagram
         bool IsRead
     }
 
-    DEVICE_REGISTRATIONS {
-        uuid Id PK
-        uuid UserId
-        string FcmToken UK
-        string DevicePlatform
-    }
 ```
 
-**Ghi chú:** `USERS` nằm trong `Miane_identity`; `TRIPS`/`TRIP_*` nằm trong `Miane_trip`; `EXPENSES`/`EXPENSE_SPLITS`/`TRIP_POOLS`/`POOL_CONTRIBUTIONS`/`DEBT_RECORDS` nằm trong `Miane_expense`; `NOTIFICATION_LOGS`/`DEVICE_REGISTRATIONS` nằm trong `Miane_notification`. Các quan hệ liên database (đường nét đứt trong sơ đồ thực) chỉ được thực thi ở tầng ứng dụng thông qua tham chiếu `UserId`/`TripId` — không có khóa ngoại vật lý xuyên ranh giới dịch vụ.
-
+**Ghi chú:** `USERS` nằm trong `Miane_identity`; `TRIPS`/`TRIP_*` nằm trong `Miane_trip`; `EXPENSES`/`EXPENSE_SPLITS`/`TRIP_POOLS`/`POOL_CONTRIBUTIONS`/`DEBT_RECORDS` nằm trong `Miane_expense`; `NOTIFICATION_LOGS` nằm trong `Miane_notification`. Các quan hệ liên database (đường nét đứt trong sơ đồ thực) chỉ được thực thi ở tầng ứng dụng thông qua tham chiếu `UserId`/`TripId` — không có khóa ngoại vật lý xuyên ranh giới dịch vụ.

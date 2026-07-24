@@ -3,7 +3,7 @@
 **Phiên bản:** 1.0  
 **Ngày:** 10/07/2026  
 **Phạm vi:** Expense Service, Trip Wallet, Debt Settlement, Payment Integration, Mobile UX  
-**Kiến trúc hiện tại:** Flutter mobile + ASP.NET Core microservices + PostgreSQL + Redis + Firebase FCM + Transactional Outbox
+**Kiến trúc hiện tại:** Flutter mobile + ASP.NET Core microservices + PostgreSQL + Redis + thông báo trong app + Transactional Outbox
 
 ---
 

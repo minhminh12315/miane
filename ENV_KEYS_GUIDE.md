@@ -1,183 +1,380 @@
-# Hướng dẫn lấy và cấu hình key cho MIANE
+# Hướng dẫn cấu hình `.env` cho MIANE
 
-File mẫu đã được cập nhật ở `.env.example`. Khi chạy local, tạo file `.env` ở thư mục gốc:
+Tài liệu này mô tả các biến môi trường đang xuất hiện trong
+`docker-compose.yml`, `docker-compose.dev.yml`, Flutter build và AI Image
+service.
+
+> `.env.example` chỉ chứa tên biến và development defaults. Secret thật phải
+> nằm trong `.env` local hoặc secret manager của môi trường triển khai.
+
+## 1. Tạo và kiểm tra file
+
+macOS/Linux:
+
+```bash
+cp .env.example .env
+```
+
+Windows PowerShell:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Sau đó điền các key thật vào `.env`, không commit file `.env`.
+Kiểm tra cú pháp mà không in secret ra terminal:
 
-## 1. OpenAI key cho tạo ảnh chuyến đi
-
-MIANE đang dùng service `services/ai-image` để tạo ảnh bìa từ địa điểm. Mobile app gọi endpoint:
-
-```dotenv
-MIANE_AI_IMAGE_URL=http://localhost:8000/api/v1/image/generate-trip-thumbnail
+```bash
+docker compose --env-file .env config --quiet
 ```
 
-Service ảnh cần các biến:
+Docker Compose tự đọc `.env` nếu chạy từ thư mục gốc, nhưng ghi rõ
+`--env-file` giúp tránh nhầm file:
+
+```bash
+docker compose --env-file .env up -d --build
+```
+
+### Quy tắc an toàn
+
+- Không commit `.env`.
+- Không gửi output đầy đủ của `docker compose config`, vì secret đã được nội
+  suy có thể xuất hiện trong output.
+- Không dùng development JWT key ở staging/production.
+- Không để `GOOGLE_BYPASS_VALIDATION=true` ngoài debug local.
+- Không đưa OpenAI key, SMTP App Password hoặc VietQR key vào Flutter
+  `--dart-define`; client binary không phải nơi giữ secret.
+
+Giá trị có ký tự đặc biệt nên đặt trong nháy đơn:
+
+```dotenv
+SMTP_PASSWORD='special value with # or $'
+```
+
+Tạo JWT key local mới:
+
+```bash
+openssl rand -hex 32
+```
+
+## 2. Giá trị tối thiểu theo nhu cầu
+
+### Chỉ chạy backend và đăng nhập tài khoản seed
+
+```dotenv
+MOBILE_API_URL=http://localhost:8080
+JWT_SIGNING_KEY=<random-key-at-least-32-characters>
+```
+
+SMTP, OpenAI và VietQR có thể để trống. Bạn vẫn đăng nhập được bằng tài khoản
+development đã seed.
+
+### Test đăng ký và quên mật khẩu từ mobile
+
+Thêm:
+
+```dotenv
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=you@example.com
+SMTP_PASSWORD='gmail-app-password'
+SMTP_FROM_EMAIL=you@example.com
+SMTP_FROM_NAME=MIANE
+```
+
+### Test tạo ảnh bìa AI
+
+Thêm:
 
 ```dotenv
 OPENAI_API_KEY=sk-...
 OPENAI_IMAGE_MODEL=gpt-image-1.5
 OPENAI_IMAGE_SIZE=1536x1024
-OPENAI_IMAGE_QUALITY=high
+OPENAI_IMAGE_QUALITY=medium
 OPENAI_IMAGE_FORMAT=jpeg
 AI_IMAGE_PUBLIC_BASE_URL=http://localhost:8000
 ```
 
-Các bước lấy OpenAI API key:
+### Test tạo VietQR
 
-1. Vào <https://platform.openai.com/>.
-2. Đăng nhập tài khoản OpenAI.
-3. Vào API keys trong dashboard.
-4. Chọn Create new secret key hoặc tạo key trong project phù hợp.
-5. Copy key vào `OPENAI_API_KEY`.
-6. Kiểm tra billing/quota của project nếu request tạo ảnh trả lỗi quota hoặc billing.
-
-Test nhanh service ảnh:
-
-```powershell
-docker compose up ai-image --build
-Invoke-RestMethod http://localhost:8000/health
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:8000/api/v1/image/generate-trip-thumbnail `
-  -ContentType 'application/json' `
-  -Body '{"placeName":"Đà Lạt","country":"Vietnam"}'
-```
-
-Nếu chạy app trên thiết bị thật, `localhost` là chính thiết bị, không phải máy dev. Khi đó đổi:
+Thêm:
 
 ```dotenv
-MIANE_AI_IMAGE_URL=http://<LAN-IP-may-dev>:8000/api/v1/image/generate-trip-thumbnail
-AI_IMAGE_PUBLIC_BASE_URL=http://<LAN-IP-may-dev>:8000
+VIETQR_CLIENT_ID=<client-id>
+VIETQR_API_KEY=<api-key>
 ```
 
-Nguồn chính thức:
+## 3. Client URLs
 
-- OpenAI quickstart/API key: <https://developers.openai.com/api/docs/quickstart>
-- OpenAI Images API: <https://developers.openai.com/api/reference/resources/images>
+### `MOBILE_API_URL`
 
-## 2. Google Sign-In
-
-Biến cần kiểm tra khi đăng nhập Google bị sai tài khoản hoặc rơi vào mock:
+Gateway URL được nhúng vào Flutter Web khi Docker build `mobile-client`.
 
 ```dotenv
-GOOGLE_CLIENT_ID=135347207127-oido4n87prcqp44lvjtiovfqafr5qkbe.apps.googleusercontent.com
+MOBILE_API_URL=http://localhost:8080
+```
+
+Được dùng bởi:
+
+- build argument `API_URL` trong `docker-compose.yml`;
+- `--dart-define=API_URL` trong `docker-compose.dev.yml`.
+
+Khi thay đổi:
+
+```bash
+docker compose --env-file .env up -d --build mobile-client
+```
+
+### `MIANE_AI_IMAGE_URL`
+
+Endpoint Flutter gọi trực tiếp để tạo ảnh:
+
+```dotenv
+MIANE_AI_IMAGE_URL=http://localhost:8000/api/v1/image/generate-trip-thumbnail
+```
+
+Đây là URL phía **client** nhìn thấy. Không dùng hostname Docker như
+`http://ai-image:8000`, vì browser/iPhone không phân giải được hostname đó.
+
+### `AI_IMAGE_PUBLIC_BASE_URL`
+
+Base URL được AI service đặt vào `imageUrl` của response:
+
+```dotenv
+AI_IMAGE_PUBLIC_BASE_URL=http://localhost:8000
+```
+
+Nó cũng phải là URL client truy cập được:
+
+| Client | API URL | AI public URL |
+|---|---|---|
+| Flutter Web trên máy dev | `http://localhost:8080` | `http://localhost:8000` |
+| iOS Simulator trên cùng Mac | `http://localhost:8080` | `http://localhost:8000` |
+| iPhone thật | `http://<LAN-IP>:8080` | `http://<LAN-IP>:8000` |
+
+Sau khi đổi `AI_IMAGE_PUBLIC_BASE_URL`:
+
+```bash
+docker compose up -d --force-recreate ai-image
+```
+
+## 4. Flutter native không đọc `.env`
+
+`.env` chỉ được Docker Compose đọc. Lệnh `flutter run` trực tiếp cần
+`--dart-define`.
+
+iOS Simulator:
+
+```bash
+cd src/Clients/mobile
+
+flutter run \
+  --dart-define=API_URL=http://localhost:8080 \
+  --dart-define=MIANE_AI_IMAGE_URL=http://localhost:8000/api/v1/image/generate-trip-thumbnail
+```
+
+iPhone thật, ví dụ máy dev là `192.168.1.10`:
+
+```bash
+flutter run -d <device-id> \
+  --dart-define=API_URL=http://192.168.1.10:8080 \
+  --dart-define=MIANE_AI_IMAGE_URL=http://192.168.1.10:8000/api/v1/image/generate-trip-thumbnail
+```
+
+Flutter define khác đang có trong code:
+
+```text
+GOOGLE_AUTH_ALLOW_MOCK_FALLBACK
+```
+
+Chỉ bật trong debug local có chủ đích:
+
+```bash
+flutter run \
+  --dart-define=GOOGLE_AUTH_ALLOW_MOCK_FALLBACK=true
+```
+
+Khi bật, client có thể gửi `mock_google_token` nếu native Google Sign-In lỗi.
+Backend hiện chấp nhận token mock chính xác này trong code development. Không
+đưa build/cấu hình này lên môi trường public.
+
+## 5. JWT
+
+```dotenv
+JWT_SIGNING_KEY=<unique-random-secret>
+```
+
+Key được truyền vào:
+
+- Identity API;
+- Trip API;
+- Expense API;
+- Notification API;
+- Web Gateway.
+
+Tất cả phải dùng cùng một key để JWT do Identity phát hành được Gateway và các
+admin endpoint xác minh.
+
+Sau khi đổi JWT key:
+
+```bash
+docker compose up -d --force-recreate \
+  identity-api trip-api expense-api notification-api web-gateway
+```
+
+Token cũ sẽ không còn hợp lệ. Xóa session local hoặc đăng xuất/đăng nhập lại.
+
+## 6. PostgreSQL
+
+```dotenv
+IDENTITY_DB_CONNECTION_STRING=
+TRIP_DB_CONNECTION_STRING=
+EXPENSE_DB_CONNECTION_STRING=
+NOTIFICATION_DB_CONNECTION_STRING=
+```
+
+Để trống nghĩa là Compose dùng:
+
+```text
+Host=postgres
+Port=5432
+Username=Miane
+Password=Miane_password
+```
+
+và database tương ứng:
+
+- `Miane_identity`
+- `Miane_trip`
+- `Miane_expense`
+- `Miane_notification`
+
+Ví dụ dùng PostgreSQL ngoài:
+
+```dotenv
+IDENTITY_DB_CONNECTION_STRING='Host=db.example;Port=5432;Database=Miane_identity;Username=miane;Password=...'
+TRIP_DB_CONNECTION_STRING='Host=db.example;Port=5432;Database=Miane_trip;Username=miane;Password=...'
+EXPENSE_DB_CONNECTION_STRING='Host=db.example;Port=5432;Database=Miane_expense;Username=miane;Password=...'
+NOTIFICATION_DB_CONNECTION_STRING='Host=db.example;Port=5432;Database=Miane_notification;Username=miane;Password=...'
+```
+
+Khi dùng database ngoài, `docker/postgres-init.sql` không chạy trên server đó.
+Bạn phải tạo đủ bốn database trước. Các service sẽ tự chạy EF migrations khi
+`ASPNETCORE_ENVIRONMENT=Development`.
+
+## 7. SMTP cho OTP
+
+```dotenv
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_FROM_EMAIL=
+SMTP_FROM_NAME=MIANE
+```
+
+`Identity.API` yêu cầu username, password và from email khi gửi:
+
+- OTP đăng ký;
+- OTP đặt lại mật khẩu.
+
+Nếu thiếu, endpoint gửi OTP trả lỗi cấu hình. Không có cơ chế tự in OTP ra log.
+
+### Gmail
+
+1. Bật 2-Step Verification.
+2. Tạo App Password.
+3. Dùng App Password làm `SMTP_PASSWORD`.
+4. Đặt `SMTP_FROM_EMAIL` giống `SMTP_USERNAME` nếu tài khoản không có alias
+   được phép.
+
+Áp dụng thay đổi:
+
+```bash
+docker compose up -d --force-recreate identity-api
+docker compose logs -f identity-api
+```
+
+## 8. Google Sign-In
+
+```dotenv
+GOOGLE_CLIENT_ID=...
 GOOGLE_BYPASS_VALIDATION=false
 ```
 
-`GOOGLE_CLIENT_ID` phải khớp audience của `idToken` mà mobile app nhận được. Với cấu hình iOS hiện tại, client id nằm trong `ios/Runner/Info.plist`. Xem thêm `GOOGLE_SIGNIN_SETUP.md` trong repo.
+### Backend
 
-## 3. Firebase push notification cho web và iOS
+`GOOGLE_CLIENT_ID` là audience mà `Identity.API` yêu cầu khi xác minh Google ID
+token.
 
-Firebase push notification cần 3 nhóm cấu hình:
+`GOOGLE_BYPASS_VALIDATION=true` cho phép fallback mock khi token validation
+thất bại. Đây là development switch nguy hiểm và phải giữ `false` theo mặc
+định.
 
-- Backend `Notification.API` dùng Firebase Admin SDK để gửi FCM message.
-- Flutter web client dùng Firebase Web App config và Web Push VAPID key để test trên Windows.
-- Flutter iOS client dùng Firebase iOS App config, APNs key và capability trong Xcode để demo trên iPhone thật.
+### iOS
+
+Native Google Sign-In không đọc `GOOGLE_CLIENT_ID` từ `.env`. Nó đọc:
+
+- `GIDClientID`;
+- `GIDServerClientID`;
+- URL scheme.
+
+từ `src/Clients/mobile/ios/Runner/Info.plist`. Cấu hình chi tiết tại
+[`GOOGLE_SIGNIN_SETUP.md`](./GOOGLE_SIGNIN_SETUP.md).
+
+## 9. AI Image service
 
 ```dotenv
-FIREBASE_SERVICE_ACCOUNT_PATH=C:\path\to\firebase-service-account.json
-FIREBASE_PROJECT_ID=your-firebase-project-id
-GOOGLE_APPLICATION_CREDENTIALS=C:\path\to\firebase-service-account.json
-
-FIREBASE_WEB_API_KEY=AIza...
-FIREBASE_WEB_AUTH_DOMAIN=your-project-id.firebaseapp.com
-FIREBASE_WEB_PROJECT_ID=your-project-id
-FIREBASE_WEB_STORAGE_BUCKET=your-project-id.firebasestorage.app
-FIREBASE_WEB_MESSAGING_SENDER_ID=1234567890
-FIREBASE_WEB_APP_ID=1:1234567890:web:abcdef123456
-FIREBASE_WEB_MEASUREMENT_ID=
-FIREBASE_WEB_VAPID_KEY=BN...
-
-FIREBASE_IOS_API_KEY=AIza...
-FIREBASE_IOS_PROJECT_ID=your-firebase-project-id
-FIREBASE_IOS_STORAGE_BUCKET=your-project-id.firebasestorage.app
-FIREBASE_IOS_MESSAGING_SENDER_ID=1234567890
-FIREBASE_IOS_APP_ID=1:1234567890:ios:abcdef123456
-FIREBASE_IOS_BUNDLE_ID=com.yourcompany.miane
-FIREBASE_IOS_CLIENT_ID=
+OPENAI_API_KEY=
+OPENAI_IMAGE_MODEL=gpt-image-1.5
+OPENAI_IMAGE_SIZE=1536x1024
+OPENAI_IMAGE_QUALITY=medium
+OPENAI_IMAGE_FORMAT=jpeg
+AI_IMAGE_PUBLIC_BASE_URL=http://localhost:8000
+AI_IMAGE_CACHE_DIR=/app/cache
 ```
 
-### 3.1 Backend Admin SDK
+| Biến | Ý nghĩa |
+|---|---|
+| `OPENAI_API_KEY` | Secret gọi OpenAI Images API |
+| `OPENAI_IMAGE_MODEL` | Model ảnh |
+| `OPENAI_IMAGE_SIZE` | Kích thước request |
+| `OPENAI_IMAGE_QUALITY` | `medium` đang cân bằng tốc độ/chất lượng cho cover |
+| `OPENAI_IMAGE_FORMAT` | `jpeg` giảm dung lượng so với PNG |
+| `AI_IMAGE_PUBLIC_BASE_URL` | URL ảnh mà client truy cập |
+| `AI_IMAGE_CACHE_DIR` | Thư mục cache bên trong container |
 
-Các bước lấy file service account cho backend:
+Không có `OPENAI_API_KEY` thì health endpoint vẫn chạy, nhưng endpoint tạo ảnh
+trả lỗi cấu hình. Upload cover thủ công không phụ thuộc OpenAI.
 
-1. Vào Firebase Console: <https://console.firebase.google.com/>.
-2. Chọn project Firebase.
-3. Vào Project settings > Service accounts.
-4. Chọn Generate new private key.
-5. Lưu file JSON ngoài repo.
-6. Điền đường dẫn file vào `FIREBASE_SERVICE_ACCOUNT_PATH` và `GOOGLE_APPLICATION_CREDENTIALS`.
-7. Điền project id vào `FIREBASE_PROJECT_ID`.
+Test:
 
-Lưu ý khi chạy backend trong container: `FIREBASE_SERVICE_ACCOUNT_PATH` hoặc `GOOGLE_APPLICATION_CREDENTIALS` phải là đường dẫn mà container đọc được. Cách gọn nhất là mount file JSON vào container bằng compose override rồi trỏ biến tới đường dẫn trong container, ví dụ `/run/secrets/firebase-service-account.json`.
+```bash
+curl http://localhost:8000/health
 
-### 3.2 Web push để test trên Windows
+curl -X POST http://localhost:8000/api/v1/image/generate-trip-thumbnail \
+  -H 'Content-Type: application/json' \
+  -d '{"placeName":"Hội An","country":"Vietnam"}'
+```
 
-Các bước lấy Web App config:
+### Ollama tùy chọn
 
-1. Trong Firebase Console, vào Project settings > General > Your apps.
-2. Chọn Add app > Web.
-3. Đặt tên app, đăng ký app, sau đó copy object `firebaseConfig`.
-4. Điền các giá trị tương ứng vào `FIREBASE_WEB_API_KEY`, `FIREBASE_WEB_AUTH_DOMAIN`, `FIREBASE_WEB_PROJECT_ID`, `FIREBASE_WEB_STORAGE_BUCKET`, `FIREBASE_WEB_MESSAGING_SENDER_ID`, `FIREBASE_WEB_APP_ID`, `FIREBASE_WEB_MEASUREMENT_ID`.
+```dotenv
+AI_IMAGE_USE_OLLAMA=false
+OLLAMA_BASE_URL=http://localhost:11434
+AI_IMAGE_LANDMARK_MODEL=llama3.2:3b
+```
 
-Các bước lấy Web Push VAPID key:
+Ollama chỉ chọn landmark để làm giàu prompt; ảnh cuối vẫn do OpenAI tạo.
 
-1. Trong Firebase Console, vào Project settings > Cloud Messaging.
-2. Ở Web configuration > Web Push certificates, chọn Generate key pair nếu chưa có.
-3. Copy public key vào `FIREBASE_WEB_VAPID_KEY`.
+Nếu Ollama chạy trên host còn AI service chạy trong Docker Desktop, dùng:
 
-Với Docker Compose, `docker-compose.yml` và `docker-compose.dev.yml` sẽ tự truyền các biến `FIREBASE_WEB_*` vào Flutter build/dev server và tự sinh `web/firebase-config.json` cho service worker.
+```dotenv
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
 
-Với Flutter chạy trực tiếp trên Windows, tạo `src\Clients\mobile\web\firebase-config.json` từ `src\Clients\mobile\web\firebase-config.example.json`, điền các giá trị web config tương ứng, rồi truyền cùng các giá trị qua `--dart-define`.
+Không bật Ollama nếu chưa pull model hoặc không cần bước chọn landmark.
 
-### 3.3 iOS push để demo trên MacBook
-
-Các bước lấy iOS App config:
-
-1. Trên MacBook, nếu chưa có thư mục iOS thì chạy `flutter create --platforms ios .` trong `src/Clients/mobile`.
-2. Mở Xcode hoặc đọc bundle id trong `ios/Runner.xcodeproj`; bundle id này phải khớp Firebase và Apple Developer.
-3. Trong Firebase Console, vào Project settings > General > Your apps.
-4. Chọn Add app > Apple > iOS, nhập đúng bundle id.
-5. Tải `GoogleService-Info.plist`.
-6. Copy các giá trị từ file này vào `.env`:
-   - `API_KEY` -> `FIREBASE_IOS_API_KEY`
-   - `GOOGLE_APP_ID` -> `FIREBASE_IOS_APP_ID`
-   - `GCM_SENDER_ID` -> `FIREBASE_IOS_MESSAGING_SENDER_ID`
-   - `PROJECT_ID` -> `FIREBASE_IOS_PROJECT_ID`
-   - `STORAGE_BUCKET` -> `FIREBASE_IOS_STORAGE_BUCKET`
-   - `BUNDLE_ID` -> `FIREBASE_IOS_BUNDLE_ID`
-   - `CLIENT_ID` -> `FIREBASE_IOS_CLIENT_ID` nếu có
-7. Có thể đặt thêm `GoogleService-Info.plist` vào `ios/Runner/GoogleService-Info.plist` để Xcode/Firebase native đọc được khi cần, nhưng app hiện vẫn cần các biến `FIREBASE_IOS_*` qua `--dart-define`.
-
-Các bước APNs bắt buộc cho iOS:
-
-1. Cần tài khoản Apple Developer đang hoạt động.
-2. Trong Apple Developer > Certificates, Identifiers & Profiles > Keys, tạo APNs Auth Key, bật Apple Push Notifications service, tải file `.p8` và lưu lại Key ID.
-3. Ghi lại Apple Team ID.
-4. Trong Firebase Console > Project settings > Cloud Messaging, phần iOS app configuration, upload APNs auth key `.p8`, nhập Key ID và Team ID.
-5. Trong Xcode, mở `ios/Runner.xcworkspace`.
-6. Chọn target Runner > Signing & Capabilities.
-7. Thêm capability Push Notifications.
-8. Thêm capability Background Modes, bật Background fetch và Remote notifications.
-9. Chạy trên iPhone thật. iOS Simulator không nhận APNs push notification như thiết bị thật.
-
-App hiện đợi APNs token trước khi lấy FCM token trên iOS, vì FCM iOS cần APNs token sẵn sàng trước khi gọi `getToken()`.
-
-Nguồn chính thức:
-
-- Firebase Admin setup: <https://firebase.google.com/docs/admin/setup>
-- Firebase FCM Flutter setup: <https://firebase.google.com/docs/cloud-messaging/flutter/get-started>
-- FlutterFire FCM/APNs iOS setup: <https://firebase.flutter.dev/docs/messaging/apple-integration/>
-- Firebase Web Push certificates: <https://firebase.google.com/docs/cloud-messaging/js/client>
-
-## 4. VietQR cho cấu hình ngân hàng và sinh mã QR
-
-Bank list dùng endpoint công khai của VietQR nên không cần key. Tạo QR bằng `POST /v2/generate` cần `Client ID` và `API key`, vì vậy MIANE giữ key ở backend `Expense.API`, không đưa xuống Flutter app.
+## 10. VietQR
 
 ```dotenv
 VIETQR_BASE_URL=https://api.vietqr.io/
@@ -185,75 +382,98 @@ VIETQR_CLIENT_ID=
 VIETQR_API_KEY=
 ```
 
-Cách lấy key:
+- `GET /expenses/vietqr/banks`: dùng public bank list, không cần key.
+- Các endpoint generate QR: cần Client ID và API key.
+- Key chỉ nằm ở Expense API; không đưa xuống Flutter.
+- VietQR tạo QR chuyển khoản, không phải webhook xác nhận thanh toán.
 
-1. Vào <https://my.vietqr.io/>.
-2. Tạo hoặc đăng nhập tài khoản VietQR.
-3. Lấy `Client ID` và `API Key`.
-4. Điền vào `.env`, sau đó chạy lại `expense-api` hoặc toàn bộ Docker Compose.
-
-Các endpoint MIANE đang dùng:
-
-- `GET /expenses/vietqr/banks`: lấy danh sách ngân hàng/BIN từ VietQR, cache 24 giờ.
-- `PUT /expenses/payment-methods/default-receive`: lưu tài khoản ngân hàng nhận tiền mặc định của người dùng.
-- `POST /expenses/vietqr/generate`: sinh QR từ tài khoản đã cấu hình hoặc từ thông tin tài khoản gửi trực tiếp.
-
-Lưu ý: VietQR giúp tạo mã QR chuyển khoản, chưa tự xác nhận giao dịch đã thanh toán. Muốn đối soát tự động cần thêm webhook/bank reconciliation từ Casso, payOS, ngân hàng, hoặc provider tương đương.
-
-## 5. Chạy lại sau khi điền key
-
-Với Docker Compose:
-
-```powershell
-docker compose --env-file .env up --build
-```
-
-Với Flutter web chạy trực tiếp trên Windows:
-
-```powershell
-cd src\Clients\mobile
-flutter run `
-  --dart-define=API_URL=http://localhost:8080 `
-  --dart-define=MIANE_AI_IMAGE_URL=http://localhost:8000/api/v1/image/generate-trip-thumbnail `
-  --dart-define=FIREBASE_WEB_API_KEY=<FIREBASE_WEB_API_KEY> `
-  --dart-define=FIREBASE_WEB_AUTH_DOMAIN=<FIREBASE_WEB_AUTH_DOMAIN> `
-  --dart-define=FIREBASE_WEB_PROJECT_ID=<FIREBASE_WEB_PROJECT_ID> `
-  --dart-define=FIREBASE_WEB_STORAGE_BUCKET=<FIREBASE_WEB_STORAGE_BUCKET> `
-  --dart-define=FIREBASE_WEB_MESSAGING_SENDER_ID=<FIREBASE_WEB_MESSAGING_SENDER_ID> `
-  --dart-define=FIREBASE_WEB_APP_ID=<FIREBASE_WEB_APP_ID> `
-  --dart-define=FIREBASE_WEB_MEASUREMENT_ID=<FIREBASE_WEB_MEASUREMENT_ID> `
-  --dart-define=FIREBASE_WEB_VAPID_KEY=<FIREBASE_WEB_VAPID_KEY>
-```
-
-Với Flutter iOS chạy trực tiếp trên MacBook:
+Sau khi đổi:
 
 ```bash
-cd src/Clients/mobile
-flutter run -d <iphone-device-id> \
-  --dart-define=API_URL=http://<LAN-IP-may-dev>:8080 \
-  --dart-define=MIANE_AI_IMAGE_URL=http://<LAN-IP-may-dev>:8000/api/v1/image/generate-trip-thumbnail \
-  --dart-define=FIREBASE_IOS_API_KEY=<FIREBASE_IOS_API_KEY> \
-  --dart-define=FIREBASE_IOS_PROJECT_ID=<FIREBASE_IOS_PROJECT_ID> \
-  --dart-define=FIREBASE_IOS_STORAGE_BUCKET=<FIREBASE_IOS_STORAGE_BUCKET> \
-  --dart-define=FIREBASE_IOS_MESSAGING_SENDER_ID=<FIREBASE_IOS_MESSAGING_SENDER_ID> \
-  --dart-define=FIREBASE_IOS_APP_ID=<FIREBASE_IOS_APP_ID> \
-  --dart-define=FIREBASE_IOS_BUNDLE_ID=<FIREBASE_IOS_BUNDLE_ID> \
-  --dart-define=FIREBASE_IOS_CLIENT_ID=<FIREBASE_IOS_CLIENT_ID>
+docker compose up -d --force-recreate expense-api
 ```
 
-Khi iPhone gọi backend đang chạy trên máy dev trong cùng mạng LAN, không dùng `localhost` cho `API_URL` hoặc `MIANE_AI_IMAGE_URL`; dùng IP LAN của máy đang chạy backend.
+## 11. AI planner variables: reserved
 
-## 6. Kiểm tra tài khoản ngân hàng/ví
+```dotenv
+AI_SERVICE_URL=http://localhost:8000
+AI_SERVICE_API_KEY=
+```
 
-App hiện đã:
+Expense API hiện đăng ký `IAiTripPlannerService`, nhưng:
 
-- Bắt chọn Ngân hàng/Ví nhận tiền từ danh sách cố định để tránh nhập sai tên.
-- Bắt nhập Tên tài khoản.
-- Kiểm tra định dạng số tài khoản ngân hàng hoặc số điện thoại ví.
+- không có user-facing controller/handler đang gọi service này;
+- `services/ai-image` không triển khai `/api/planner/suggest`.
 
-Điều app chưa thể tự xác minh nếu chưa nối đối tác ngân hàng:
+Hai biến trên hiện không ảnh hưởng các luồng đang dùng. Chúng được giữ để mô tả
+đúng phần client scaffold còn tồn tại trong code.
 
-- Số tài khoản có tồn tại thật không.
-- Số tài khoản có đúng tên chủ tài khoản không.
+## 12. Admin Dashboard environment
 
-Muốn xác minh thật cần thêm API đối soát từ ngân hàng, NAPAS, VietQR Pro hoặc provider thanh toán được cấp quyền. Khi chọn provider cụ thể, mới nên thêm key riêng vào `.env.example`.
+Admin Node server đọc trực tiếp environment của process, không tự đọc `.env`
+gốc bằng `dotenv`.
+
+Các biến optional:
+
+```text
+IDENTITY_API_URL   default http://localhost:5127
+TRIP_API_URL       default http://localhost:5128
+EXPENSE_API_URL    default http://localhost:5129
+FRONTEND_ORIGIN    default http://localhost:5173
+PGHOST             default localhost
+PGPORT             default 5432
+PGUSER             default Miane
+PGPASSWORD         default Miane_password
+```
+
+Ví dụ:
+
+```bash
+cd admin-dashboard/server
+IDENTITY_API_URL=http://localhost:5127 \
+TRIP_API_URL=http://localhost:5128 \
+EXPENSE_API_URL=http://localhost:5129 \
+npm start
+```
+
+## 13. Khi thay đổi biến nào thì restart gì?
+
+| Nhóm biến | Lệnh áp dụng |
+|---|---|
+| `JWT_*`, DB, SMTP, Google backend | `docker compose up -d --force-recreate identity-api trip-api expense-api notification-api web-gateway` |
+| `OPENAI_*`, `AI_IMAGE_*`, Ollama | `docker compose up -d --force-recreate ai-image` |
+| VietQR | `docker compose up -d --force-recreate expense-api` |
+| `MOBILE_API_URL`, `MIANE_AI_IMAGE_URL` | `docker compose up -d --build mobile-client` |
+| Flutter native `--dart-define` | Dừng app và chạy lại `flutter run` |
+
+Nếu không chắc service nào dùng biến vừa đổi:
+
+```bash
+docker compose --env-file .env up -d --build --force-recreate
+```
+
+## 14. Chẩn đoán
+
+```bash
+docker compose ps
+docker compose logs -f identity-api
+docker compose logs -f expense-api
+docker compose logs -f ai-image
+```
+
+Kiểm tra Gateway và AI:
+
+```bash
+curl http://localhost:8080/
+curl http://localhost:8000/health
+```
+
+Các lỗi thường gặp:
+
+- App web vẫn gọi URL cũ: chưa rebuild `mobile-client`.
+- iPhone gọi `localhost`: phải đổi sang LAN IP.
+- AI trả URL xem được trên Mac nhưng không xem được trên iPhone:
+  `AI_IMAGE_PUBLIC_BASE_URL` vẫn là localhost.
+- OTP lỗi: SMTP App Password/FromEmail chưa đúng.
+- JWT 401 sau khi đổi key: token cũ không còn hợp lệ.
+- PostgreSQL mới vẫn có dữ liệu: Development seeders tự tạo lại demo data.
