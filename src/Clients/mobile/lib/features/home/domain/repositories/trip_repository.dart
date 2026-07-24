@@ -7,6 +7,11 @@ abstract class TripRepository {
   Future<Map<String, dynamic>> createTrip(
       String name, String? description, String? baseCurrency);
   Future<TripCreationResult> createTripDraft(TripCreationDraft draft);
+  Future<String> uploadTripCover(
+    String tripId, {
+    required List<int> fileBytes,
+    required String fileName,
+  });
   Future<Map<String, dynamic>> joinTrip(String inviteCode, String? nickName);
   Future<void> deleteTrip(String tripId);
   Future<void> leaveTrip(String tripId);

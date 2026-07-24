@@ -7,6 +7,7 @@ import '../../../auth/presentation/controllers/app_auth_provider.dart';
 import '../../data/repositories/trip_repository_impl.dart';
 import '../../domain/models/trip_leg_model.dart';
 import '../../domain/models/trip_models.dart';
+import '../../domain/repositories/trip_repository.dart';
 
 part 'trips_provider.g.dart';
 
@@ -42,7 +43,6 @@ class Trips extends _$Trips {
     final repo = ref.read(tripRepositoryProvider);
     final result = await repo.createTripDraft(draft);
     ref.invalidateSelf();
-    await future;
     return result;
   }
 
@@ -160,3 +160,57 @@ final tripCoverMemoryProvider =
     return TripCoverMemory();
   },
 );
+
+class TripCoverUploadStatus {
+  final bool isUploading;
+  final String? errorMessage;
+
+  const TripCoverUploadStatus({
+    required this.isUploading,
+    this.errorMessage,
+  });
+}
+
+class TripCoverUploads
+    extends StateNotifier<Map<String, TripCoverUploadStatus>> {
+  final TripRepository _repository;
+  final Ref _ref;
+
+  TripCoverUploads(this._repository, this._ref) : super(const {});
+
+  Future<void> upload({
+    required String tripId,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    state = {
+      ...state,
+      tripId: const TripCoverUploadStatus(isUploading: true),
+    };
+
+    try {
+      await _repository.uploadTripCover(
+        tripId,
+        fileBytes: bytes,
+        fileName: fileName,
+      );
+      final next = {...state}..remove(tripId);
+      state = next;
+      _ref.invalidate(tripsProvider);
+    } catch (error) {
+      state = {
+        ...state,
+        tripId: TripCoverUploadStatus(
+          isUploading: false,
+          errorMessage: error.toString().replaceAll('ApiException: ', ''),
+        ),
+      };
+    }
+  }
+}
+
+final tripCoverUploadProvider =
+    StateNotifierProvider<TripCoverUploads, Map<String, TripCoverUploadStatus>>(
+        (ref) {
+  return TripCoverUploads(ref.watch(tripRepositoryProvider), ref);
+});

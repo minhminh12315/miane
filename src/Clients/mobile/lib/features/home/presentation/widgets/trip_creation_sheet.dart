@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
 import '../../domain/models/trip_models.dart';
+import '../../domain/services/trip_creation_validator.dart';
 import '../controllers/trips_provider.dart';
 
 class TripCreationSheet extends ConsumerStatefulWidget {
@@ -24,6 +26,7 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
     'MIANE_AI_IMAGE_URL',
     defaultValue: 'http://localhost:8000/api/v1/image/generate-trip-thumbnail',
   );
+  static const _aiThumbnailTimeout = Duration(seconds: 120);
 
   final _nameController = TextEditingController();
   final _picker = ImagePicker();
@@ -34,7 +37,10 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
   _AiThumbnail? _aiThumbnail;
   _TripPlace? _selectedPlace;
   bool _isGeneratingCover = false;
+  bool _isPickingCover = false;
   bool _isSubmitting = false;
+  int _aiRequestGeneration = 0;
+  String _coverFileName = 'trip-cover.jpg';
   String? _coverError;
 
   @override
@@ -90,11 +96,12 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
                         coverUrl:
                             _coverBytes == null ? _aiThumbnail?.imageUrl : null,
                         onClose: () => Navigator.of(context).pop(),
-                        onSave: _isSubmitting ? null : _submit,
+                        onSave:
+                            _isSubmitting || _isPickingCover ? null : _submit,
                         onPickCover: _showCoverSourceSheet,
                       ),
                     ),
-                    if (!_isGeneratingCover) ...[
+                    ...[
                       const SizedBox(height: 20),
                       IosAnimatedEntry(
                         delay: 0.08,
@@ -122,7 +129,10 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
                           onTap: _openDateRangePicker,
                         ),
                       ),
-                      if (_coverBytes != null || _coverError != null) ...[
+                      if (_isGeneratingCover ||
+                          _isPickingCover ||
+                          _coverBytes != null ||
+                          _coverError != null) ...[
                         const SizedBox(height: 14),
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 280),
@@ -135,7 +145,8 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
                       IosPrimaryButton(
                         label: _isSubmitting ? 'Đang tạo...' : 'Tạo chuyến đi',
                         isLoading: _isSubmitting,
-                        onPressed: _isSubmitting ? null : _submit,
+                        onPressed:
+                            _isSubmitting || _isPickingCover ? null : _submit,
                       ),
                     ],
                   ],
@@ -143,14 +154,32 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
               ),
             ],
           ),
-          if (_isGeneratingCover)
-            const Positioned.fill(child: _AiCoverScreenLoading()),
         ],
       ),
     );
   }
 
   Widget _coverStateWidget(BuildContext context) {
+    if (_isPickingCover) {
+      return const _CoverInfoPanel(
+        key: ValueKey('cover-picking'),
+        icon: CupertinoIcons.photo_on_rectangle,
+        iconColor: AppTheme.iosBlue,
+        title: 'Đang tối ưu ảnh',
+        message: 'MIANE đang thu nhỏ ảnh để tải lên nhanh hơn.',
+      );
+    }
+
+    if (_isGeneratingCover) {
+      return const _CoverInfoPanel(
+        key: ValueKey('cover-generating'),
+        icon: CupertinoIcons.sparkles,
+        iconColor: AppTheme.iosGold,
+        title: 'Đang tạo ảnh AI trong nền',
+        message: 'Bạn vẫn có thể tiếp tục nhập thông tin chuyến đi.',
+      );
+    }
+
     if (_coverError != null) {
       return _CoverErrorPanel(
         key: const ValueKey('cover-error'),
@@ -196,18 +225,19 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
     });
 
     if (_coverBytes == null) {
-      await _generateAiCoverForPlace(place);
+      unawaited(_generateAiCoverForPlace(place));
     }
   }
 
   Future<void> _generateAiCoverForPlace(_TripPlace place) async {
+    final generation = ++_aiRequestGeneration;
     setState(() {
       _isGeneratingCover = true;
       _coverError = null;
     });
 
     final thumbnail = await _requestAiThumbnail(place);
-    if (!mounted) return;
+    if (!mounted || generation != _aiRequestGeneration) return;
 
     setState(() {
       _aiThumbnail = thumbnail;
@@ -233,7 +263,7 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
               'country': place.country,
             }),
           )
-          .timeout(const Duration(seconds: 24));
+          .timeout(_aiThumbnailTimeout);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return null;
@@ -304,17 +334,25 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
   }
 
   Future<void> _pickCover(ImageSource source) async {
+    setState(() {
+      _isPickingCover = true;
+      _coverError = null;
+    });
     try {
       final image = await _picker.pickImage(
         source: source,
-        maxWidth: 2400,
-        imageQuality: 88,
+        maxWidth: 1600,
+        imageQuality: 78,
       );
       if (image == null) return;
       final bytes = await image.readAsBytes();
       if (!mounted) return;
       setState(() {
+        _aiRequestGeneration++;
+        _isGeneratingCover = false;
         _coverBytes = bytes;
+        _coverFileName =
+            image.name.trim().isEmpty ? 'trip-cover.jpg' : image.name;
         _coverError = null;
       });
     } catch (e) {
@@ -324,6 +362,10 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
         message: 'Không thể chọn ảnh: $e',
         isError: true,
       );
+    } finally {
+      if (mounted) {
+        setState(() => _isPickingCover = false);
+      }
     }
   }
 
@@ -331,30 +373,42 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
     setState(() => _coverBytes = null);
     final place = _selectedPlace;
     if (place != null && _aiThumbnail == null) {
-      await _generateAiCoverForPlace(place);
+      unawaited(_generateAiCoverForPlace(place));
     }
   }
 
   Future<void> _submit() async {
     final name = _nameController.text.trim();
     final place = _selectedPlace;
-
-    if (name.isEmpty) {
+    final validation = TripCreationValidator.validate(
+      name: name,
+      destination: place?.name,
+      startDate: _startDate,
+      endDate: _endDate,
+    );
+    if (!validation.isValid) {
       await showIosMessage(
         context,
-        message: 'Vui lòng nhập tên chuyến đi.',
+        message: validation.errorMessage!,
         isError: true,
       );
       return;
     }
 
-    if (place == null) {
-      await showIosMessage(
+    if (validation.needsConfirmation) {
+      final confirmed = await _confirmUnusualDates(validation);
+      if (!confirmed || !mounted) return;
+    }
+
+    if (_isGeneratingCover && _coverBytes == null) {
+      final confirmed = await showIosConfirm(
         context,
-        message: 'Vui lòng chọn địa điểm cho chuyến đi.',
-        isError: true,
+        title: 'Ảnh bìa chưa hoàn tất',
+        message:
+            'Ảnh AI vẫn đang được tạo. Nếu tiếp tục ngay, chuyến đi sẽ được tạo mà chưa có ảnh bìa.',
+        confirmLabel: 'Tạo ngay',
       );
-      return;
+      if (!confirmed || !mounted) return;
     }
 
     setState(() => _isSubmitting = true);
@@ -362,7 +416,7 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
       final result = await ref.read(tripsProvider.notifier).createTripDraft(
             TripCreationDraft(
               name: name,
-              place: place.toTripPlaceData(),
+              place: place!.toTripPlaceData(),
               startDate: _startDate,
               endDate: _endDate,
               baseCurrency: 'VND',
@@ -376,9 +430,17 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
           );
 
       if (_coverBytes != null) {
+        final bytes = _coverBytes!;
         ref
             .read(tripCoverMemoryProvider.notifier)
-            .setCover(result.tripId, _coverBytes!);
+            .setCover(result.tripId, bytes);
+        unawaited(
+          ref.read(tripCoverUploadProvider.notifier).upload(
+                tripId: result.tripId,
+                bytes: bytes,
+                fileName: _coverFileName,
+              ),
+        );
       }
       if (mounted) Navigator.of(context).pop(result);
     } catch (e) {
@@ -393,6 +455,32 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  Future<bool> _confirmUnusualDates(
+    TripCreationValidation validation,
+  ) async {
+    final messages = <String>[];
+    if (validation.warnings.contains(TripCreationWarning.alreadyEnded)) {
+      messages.add(
+        'Toàn bộ thời gian của chuyến đi đã nằm trong quá khứ.',
+      );
+    } else if (validation.warnings
+        .contains(TripCreationWarning.alreadyStarted)) {
+      messages.add('Ngày bắt đầu của chuyến đi đã qua.');
+    }
+    if (validation.warnings.contains(TripCreationWarning.unusuallyLong)) {
+      messages.add(
+        'Chuyến đi kéo dài ${validation.durationDays} ngày, dài hơn mức thông thường.',
+      );
+    }
+
+    return showIosConfirm(
+      context,
+      title: 'Xác nhận thời gian',
+      message: '${messages.join('\n\n')}\n\nBạn vẫn muốn tạo chuyến đi này?',
+      confirmLabel: 'Vẫn tạo',
+    );
   }
 }
 
@@ -689,39 +777,6 @@ class _HeroCoverButton extends StatelessWidget {
   }
 }
 
-class _AiCoverScreenLoading extends StatelessWidget {
-  const _AiCoverScreenLoading();
-
-  @override
-  Widget build(BuildContext context) {
-    return AbsorbPointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: CupertinoColors.black.withValues(alpha: 0.72),
-        ),
-        child: Center(
-          child: ModernGlass(
-            radius: 26,
-            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CupertinoActivityIndicator(radius: 14),
-                const SizedBox(height: 12),
-                Text(
-                  'Đang tạo ảnh',
-                  style: AppTheme.titleSm(color: CupertinoColors.white)
-                      .copyWith(fontWeight: FontWeight.w800),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _TripNameField extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
@@ -766,6 +821,11 @@ class _TripNameField extends StatelessWidget {
             maxLines: 1,
             textInputAction: TextInputAction.done,
             clearButtonMode: OverlayVisibilityMode.editing,
+            inputFormatters: [
+              LengthLimitingTextInputFormatter(
+                TripCreationValidator.maxNameLength,
+              ),
+            ],
             onChanged: onChanged,
             padding: EdgeInsets.zero,
             style: const TextStyle(

@@ -79,7 +79,7 @@ OpenAI generation is configured with:
 - `OPENAI_API_KEY`
 - `OPENAI_IMAGE_MODEL=gpt-image-1.5`
 - `OPENAI_IMAGE_SIZE=1536x1024`
-- `OPENAI_IMAGE_QUALITY=high`
+- `OPENAI_IMAGE_QUALITY=medium` (recommended for responsive trip covers)
 - `OPENAI_IMAGE_FORMAT=jpeg`
 
 Optional landmark selection:

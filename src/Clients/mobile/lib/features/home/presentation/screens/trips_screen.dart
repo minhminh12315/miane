@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
 import '../../domain/models/trip_models.dart';
@@ -45,6 +46,7 @@ class TripsScreen extends ConsumerWidget {
                 ),
                 data: (trips) {
                   final covers = ref.watch(tripCoverMemoryProvider);
+                  final coverUploads = ref.watch(tripCoverUploadProvider);
                   final ongoingTrips = trips
                       .where(
                         (trip) =>
@@ -93,6 +95,7 @@ class TripsScreen extends ConsumerWidget {
                             title: 'Đang diễn ra',
                             trips: ongoingTrips,
                             covers: covers,
+                            coverUploads: coverUploads,
                             onDeleteTrip: (trip) =>
                                 _confirmDeleteTrip(context, ref, trip),
                           ),
@@ -101,6 +104,7 @@ class TripsScreen extends ConsumerWidget {
                             title: 'Sắp diễn ra',
                             trips: upcomingTrips,
                             covers: covers,
+                            coverUploads: coverUploads,
                             onDeleteTrip: (trip) =>
                                 _confirmDeleteTrip(context, ref, trip),
                           ),
@@ -109,6 +113,7 @@ class TripsScreen extends ConsumerWidget {
                             title: 'Đã đi',
                             trips: pastTrips,
                             covers: covers,
+                            coverUploads: coverUploads,
                             onDeleteTrip: (trip) =>
                                 _confirmDeleteTrip(context, ref, trip),
                           ),
@@ -233,12 +238,14 @@ class _TripGroup extends StatelessWidget {
   final String title;
   final List<TripModel> trips;
   final Map<String, Uint8List> covers;
+  final Map<String, TripCoverUploadStatus> coverUploads;
   final ValueChanged<TripModel> onDeleteTrip;
 
   const _TripGroup({
     required this.title,
     required this.trips,
     required this.covers,
+    required this.coverUploads,
     required this.onDeleteTrip,
   });
 
@@ -262,6 +269,7 @@ class _TripGroup extends StatelessWidget {
             _TripListCard(
               trip: trip,
               coverBytes: covers[trip.id],
+              coverUpload: coverUploads[trip.id],
               onDelete: trip.userRole == 0 ? () => onDeleteTrip(trip) : null,
             ),
         ],
@@ -273,11 +281,13 @@ class _TripGroup extends StatelessWidget {
 class _TripListCard extends StatelessWidget {
   final TripModel trip;
   final Uint8List? coverBytes;
+  final TripCoverUploadStatus? coverUpload;
   final VoidCallback? onDelete;
 
   const _TripListCard({
     required this.trip,
     this.coverBytes,
+    this.coverUpload,
     this.onDelete,
   });
 
@@ -323,7 +333,10 @@ class _TripListCard extends StatelessWidget {
                     if (coverBytes != null)
                       Image.memory(coverBytes!, fit: BoxFit.cover)
                     else if ((trip.coverImageUrl ?? '').isNotEmpty)
-                      Image.network(trip.coverImageUrl!, fit: BoxFit.cover)
+                      Image.network(
+                        ApiEndpoints.resolveUrl(trip.coverImageUrl!),
+                        fit: BoxFit.cover,
+                      )
                     else
                       CustomPaint(painter: _TripCoverPainter(trip.name)),
                     DecoratedBox(
@@ -338,6 +351,12 @@ class _TripListCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (coverUpload != null)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: _CoverUploadPill(status: coverUpload!),
+                      ),
                     Positioned(
                       left: 16,
                       right: 16,
@@ -500,6 +519,49 @@ class _TripListCard extends StatelessWidget {
     if (days <= 0) return 'Hôm nay';
     if (days < 30) return '$days ngày';
     return '${(days / 30).floor()} tháng';
+  }
+}
+
+class _CoverUploadPill extends StatelessWidget {
+  final TripCoverUploadStatus status;
+
+  const _CoverUploadPill({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final failed = status.errorMessage != null;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: CupertinoColors.black.withValues(alpha: 0.58),
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+        border: Border.all(
+          color: (failed ? AppTheme.iosRed : AppTheme.iosBlue)
+              .withValues(alpha: 0.55),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (status.isUploading)
+            const CupertinoActivityIndicator(
+              radius: 7,
+              color: CupertinoColors.white,
+            )
+          else
+            Icon(
+              CupertinoIcons.exclamationmark_triangle_fill,
+              size: 15,
+              color: failed ? AppTheme.iosRed : CupertinoColors.white,
+            ),
+          const SizedBox(width: 6),
+          Text(
+            status.isUploading ? 'Đang lưu ảnh' : 'Ảnh chưa được lưu',
+            style: AppTheme.labelSm(color: CupertinoColors.white),
+          ),
+        ],
+      ),
+    );
   }
 }
 

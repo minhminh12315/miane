@@ -22,7 +22,7 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("AI_IMAGE_LANDMARK_MODEL", "llama3.2:3b")
 OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
 OPENAI_IMAGE_SIZE = os.getenv("OPENAI_IMAGE_SIZE", "1536x1024")
-OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "high")
+OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "medium")
 OPENAI_IMAGE_FORMAT = os.getenv("OPENAI_IMAGE_FORMAT", "jpeg")
 TRIP_API_COVER_PROMPT_MAX_LENGTH = 1000
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -334,7 +334,7 @@ def _generate_with_openai(prompt: str, output_path: Path) -> None:
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=150) as response:
+        with urllib.request.urlopen(request, timeout=120) as response:
             body = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")

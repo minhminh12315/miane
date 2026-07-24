@@ -21,6 +21,7 @@ class ApiEndpoints {
   static const String joinTrip = '/trips/join';
   static String trip(String tripId) => '/trips/$tripId';
   static String leaveTrip(String tripId) => '/trips/$tripId/leave';
+  static String uploadTripCover(String tripId) => '/trips/$tripId/cover';
   static String tripFiles(String tripId) => '/trips/$tripId/files';
   static String uploadTripFile(String tripId) => '/trips/$tripId/files/upload';
   static String tripNotes(String tripId) => '/trips/$tripId/files/notes';
@@ -46,4 +47,12 @@ class ApiEndpoints {
       '/expenses/payment-methods/default-receive';
 
   static const String notifications = '/notifications';
+
+  static String resolveUrl(String url) {
+    final value = url.trim();
+    if (value.isEmpty) return value;
+    final uri = Uri.tryParse(value);
+    if (uri?.hasScheme ?? false) return value;
+    return '$baseUrl${value.startsWith('/') ? '' : '/'}$value';
+  }
 }

@@ -16,6 +16,7 @@ public sealed class CreateTripValidator : AbstractValidator<CreateTripCommand>
             .Length(3).WithMessage("Mã tiền tệ phải có đúng 3 ký tự, ví dụ VND hoặc USD.");
 
         RuleFor(x => x.Destination)
+            .NotEmpty().WithMessage("Vui lòng chọn địa điểm cho chuyến đi.")
             .MaximumLength(240).WithMessage("Điểm đến không được vượt quá 240 ký tự.");
 
         RuleFor(x => x.PlaceId)

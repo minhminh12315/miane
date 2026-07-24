@@ -52,6 +52,23 @@ class TripRepositoryImpl implements TripRepository {
   }
 
   @override
+  Future<String> uploadTripCover(
+    String tripId, {
+    required List<int> fileBytes,
+    required String fileName,
+  }) async {
+    final response = await _apiClient.postMultipart(
+      ApiEndpoints.uploadTripCover(tripId),
+      fileBytes: fileBytes,
+      fileName: fileName,
+    );
+    if (response is! Map<String, dynamic>) {
+      throw ApiException(500, 'Phản hồi tải ảnh bìa không hợp lệ.');
+    }
+    return (response['coverImageUrl'] ?? '').toString();
+  }
+
+  @override
   Future<Map<String, dynamic>> joinTrip(
     String inviteCode,
     String? nickName,

@@ -2652,7 +2652,6 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
       orElse: () => 'Thành viên',
     );
   }
-
 }
 
 const _documentFolders = <String>[
@@ -3666,7 +3665,7 @@ class _TripMapBackdrop extends StatelessWidget {
           Image.memory(coverBytes!, fit: BoxFit.cover)
         else if ((coverImageUrl ?? '').isNotEmpty)
           Image.network(
-            coverImageUrl!,
+            ApiEndpoints.resolveUrl(coverImageUrl!),
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) =>
                 CustomPaint(painter: _WorkspaceCoverPainter(seed)),
@@ -4016,7 +4015,7 @@ class _TripHeroWorkspaceCard extends StatelessWidget {
                 Image.memory(coverBytes!, fit: BoxFit.cover)
               else if ((coverImageUrl ?? '').isNotEmpty)
                 Image.network(
-                  coverImageUrl!,
+                  ApiEndpoints.resolveUrl(coverImageUrl!),
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) =>
                       CustomPaint(painter: _WorkspaceCoverPainter(tripName)),
