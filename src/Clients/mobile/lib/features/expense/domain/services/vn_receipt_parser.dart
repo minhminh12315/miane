@@ -1,5 +1,12 @@
 import '../models/scan_bill_result.dart';
 
+class _TransferAmountCandidate {
+  final double value;
+  final int score;
+
+  const _TransferAmountCandidate(this.value, this.score);
+}
+
 /// Rule-based parser turning raw OCR text lines from a Vietnamese receipt
 /// into a structured [ScanBillResult].
 ///
@@ -47,12 +54,13 @@ class VnReceiptParser {
     'lit',
   ];
 
-  /// Any monetary-looking number: dot-thousands ("1.250.000"), "K" shorthand
-  /// ("45K"), or a bare 4+ digit run. Matched anywhere on the line (not just
-  /// at the end), since a tabular row can have several — quantity, unit
-  /// price, and total — trailing after the item name.
+  /// Any monetary-looking number: dot/comma-thousands ("1.250.000" or
+  /// "8,700,000"), "K" shorthand ("45K"), or a bare 4+ digit run. Matched
+  /// anywhere on the line (not just at the end), since a tabular row can
+  /// have several — quantity, unit price, and total — trailing after the
+  /// item name.
   static final _moneyTokenRegex = RegExp(
-    r'\d{1,3}(?:\.\d{3})+|\d+[kK]|\d{4,}',
+    r'\d{1,3}(?:[.,]\d{3})+|\d+[kK]|\d{4,}',
   );
 
   /// A standalone 1-3 digit integer (a plausible "Số lượng" quantity or STT
@@ -79,70 +87,111 @@ class VnReceiptParser {
     'so tien',
     'so tien chuyen',
     'so tien giao dich',
+    'gia tri giao dich',
+    'tong tien',
+    'tong cong',
     'amount',
   ];
 
+  static const _transferSuccessKeywords = [
+    'chuyen khoan thanh cong',
+    'giao dich thanh cong',
+    'thanh toan thanh cong',
+    'transaction successful',
+    'successful transfer',
+  ];
+
+  static const _transferIdentifierKeywords = [
+    'tai khoan',
+    'so tai khoan',
+    'account number',
+    'account no',
+    'ma giao dich',
+    'chi tiet giao dich',
+    'transaction id',
+    'transaction code',
+    'ma tham chieu',
+    'so tham chieu',
+    'reference no',
+    'reference id',
+    'so dien thoai',
+    'dien thoai',
+    'sdt',
+    'phone',
+    'mobile',
+  ];
+
+  static const _transferNonAmountKeywords = [
+    'thoi gian',
+    'ngay giao dich',
+    'ngay thanh toan',
+    'date',
+    'time',
+    'phi giao dich',
+    'phi chuyen tien',
+    'fee',
+  ];
+
   static const _transferContentKeywords = [
-    'noi dung',
     'noi dung chuyen khoan',
+    'noi dung',
     'loi nhan',
     'dien giai',
+    'tin nhan',
     'message',
     'content',
     'description',
   ];
 
+  static const _transferRecipientKeywords = [
+    'ten nguoi thu huong',
+    'nguoi thu huong',
+    'nguoi nhan',
+    'beneficiary',
+    'recipient',
+    'den',
+  ];
+
+  static const _transferFieldKeywords = [
+    ..._transferAmountKeywords,
+    ..._transferContentKeywords,
+    ..._transferRecipientKeywords,
+    ..._transferIdentifierKeywords,
+    ..._transferNonAmountKeywords,
+    'ngan hang',
+    'ten danh ba',
+    'nguoi gui',
+    'loai giao dich',
+  ];
+
+  static final _vndMarkerRegex = RegExp(
+    r'(?:\bVND\b|VNĐ|₫|đ(?:\b|$)|\bdong\b)',
+    caseSensitive: false,
+  );
+
   /// Parses a bank-transfer slip (biên lai chuyển khoản) rather than an
   /// itemized bill. A transfer has a single amount and a free-text content
   /// line instead of line items, so this produces a one-item [ScanBillResult]:
-  ///   - amount: the value on a "Số tiền" line, else the largest money token
-  ///   - description: the "Nội dung" line, else the fallback, else "Chuyển khoản"
+  ///   - amount: the best money candidate based on labels/currency/context;
+  ///     account numbers, transaction IDs, phone numbers, dates and fees are
+  ///     explicitly excluded
+  ///   - description: transfer content, then recipient, then fallback
   ScanBillResult parseTransferSlip(List<String> lines,
       {String? fallbackDescription}) {
-    final normalized = lines
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
+    final normalized =
+        lines.map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
 
     final currency = _detectCurrency(normalized) ?? 'VND';
 
-    double? amount;
-    // 1) Prefer a line explicitly labelled as the amount.
-    for (final line in normalized) {
-      final key = _stripDiacritics(line.toLowerCase());
-      if (_transferAmountKeywords.any((kw) => key.contains(kw))) {
-        final matches = _moneyTokenRegex.allMatches(line).toList();
-        if (matches.isNotEmpty) {
-          final parsed = _parseAmount(matches.last.group(0)!);
-          if (parsed != null && parsed > 0) {
-            amount = parsed;
-            break;
-          }
-        }
-      }
-    }
-    // 2) Fallback: the largest money token anywhere on the slip.
-    amount ??= normalized
-        .expand((l) => _moneyTokenRegex.allMatches(l))
-        .map((m) => _parseAmount(m.group(0)!) ?? 0)
-        .fold<double>(0, (max, v) => v > max ? v : max);
+    final amount = _findTransferAmount(normalized);
 
-    // Description from a "Nội dung" line, else fallback.
-    String? description;
-    for (final line in normalized) {
-      final key = _stripDiacritics(line.toLowerCase());
-      final kw = _transferContentKeywords
-          .firstWhere((k) => key.contains(k), orElse: () => '');
-      if (kw.isNotEmpty) {
-        final idx = key.indexOf(kw) + kw.length;
-        final tail = line.substring(idx).replaceFirst(RegExp(r'^[:\s]+'), '');
-        if (tail.trim().isNotEmpty) {
-          description = tail.trim();
-          break;
-        }
-      }
-    }
-    description ??= fallbackDescription ?? 'Chuyển khoản';
+    final content = _extractTransferField(normalized, _transferContentKeywords);
+    final recipient =
+        _extractTransferField(normalized, _transferRecipientKeywords);
+    final description = content ??
+        (recipient == null ? null : 'Chuyển khoản đến $recipient') ??
+        fallbackDescription ??
+        'Chuyển khoản';
 
     final items = amount > 0
         ? [ScannedItem(name: description, unitPrice: amount, quantity: 1)]
@@ -156,11 +205,131 @@ class VnReceiptParser {
     );
   }
 
+  double _findTransferAmount(List<String> lines) {
+    _TransferAmountCandidate? best;
+
+    for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      final line = lines[lineIndex];
+      final key = _stripDiacritics(line.toLowerCase());
+      final previousKey = lineIndex == 0
+          ? ''
+          : _stripDiacritics(lines[lineIndex - 1].toLowerCase());
+
+      final isIdentifierContext =
+          _containsAny(key, _transferIdentifierKeywords) ||
+              _containsAny(previousKey, _transferIdentifierKeywords);
+      final isNonAmountContext =
+          _containsAny(key, _transferNonAmountKeywords) ||
+              _containsAny(previousKey, _transferNonAmountKeywords);
+      if (isIdentifierContext || isNonAmountContext) continue;
+
+      final hasAmountLabel = _containsAny(key, _transferAmountKeywords);
+      final followsAmountLabel =
+          _containsAny(previousKey, _transferAmountKeywords);
+      final hasCurrency = _vndMarkerRegex.hasMatch(line);
+      final followsSuccess =
+          _containsAny(previousKey, _transferSuccessKeywords);
+      final isSuccessLine = _containsAny(key, _transferSuccessKeywords);
+
+      for (final match in _moneyTokenRegex.allMatches(line)) {
+        final token = match.group(0)!;
+        final value = _parseAmount(token);
+        if (value == null || value <= 0) continue;
+
+        final grouped = token.contains('.') || token.contains(',');
+        final isKNotation = token.endsWith('k') || token.endsWith('K');
+        final digitCount = token.replaceAll(RegExp(r'[^0-9]'), '').length;
+
+        // Long, unformatted numbers without a currency/amount label are
+        // overwhelmingly account numbers, transaction IDs or phone numbers.
+        if (digitCount >= 9 &&
+            !grouped &&
+            !isKNotation &&
+            !hasCurrency &&
+            !hasAmountLabel &&
+            !followsAmountLabel) {
+          continue;
+        }
+
+        var score = 0;
+        if (hasAmountLabel) score += 120;
+        if (followsAmountLabel) score += 110;
+        if (hasCurrency) score += 70;
+        if (grouped || isKNotation) score += 45;
+        if (followsSuccess) score += 35;
+        if (isSuccessLine) score += 20;
+
+        final candidate = _TransferAmountCandidate(value, score);
+        if (best == null ||
+            candidate.score > best.score ||
+            (candidate.score == best.score && candidate.value > best.value)) {
+          best = candidate;
+        }
+      }
+    }
+
+    return best?.value ?? 0;
+  }
+
+  String? _extractTransferField(
+    List<String> lines,
+    List<String> keywords,
+  ) {
+    for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      final line = lines[lineIndex];
+      final key = _stripDiacritics(line.toLowerCase());
+      final keyword = keywords.firstWhere(
+        (candidate) => key.contains(candidate),
+        orElse: () => '',
+      );
+      if (keyword.isEmpty) continue;
+
+      final keywordEnd = key.indexOf(keyword) + keyword.length;
+      final sameLineValue = _cleanTransferFieldValue(
+        line.substring(keywordEnd),
+      );
+      if (_isMeaningfulTransferFieldValue(sameLineValue)) {
+        return sameLineValue;
+      }
+
+      // Vision commonly recognizes a label and its right-hand value as two
+      // consecutive rows. Only inspect the immediate next row so that an
+      // empty "Tin nhắn" field cannot consume unrelated footer text.
+      if (lineIndex + 1 < lines.length) {
+        final nextLine = lines[lineIndex + 1];
+        final nextKey = _stripDiacritics(nextLine.toLowerCase());
+        final nextIsAnotherField =
+            _containsAny(nextKey, _transferFieldKeywords);
+        final nextValue = _cleanTransferFieldValue(nextLine);
+        if (!nextIsAnotherField && _isMeaningfulTransferFieldValue(nextValue)) {
+          return nextValue;
+        }
+      }
+    }
+    return null;
+  }
+
+  String _cleanTransferFieldValue(String value) {
+    return value.replaceFirst(RegExp(r'^[\s:–—-]+'), '').trim();
+  }
+
+  bool _isMeaningfulTransferFieldValue(String value) {
+    if (value.length < 2) return false;
+    if (!RegExp(r'[A-Za-zÀ-ỹ0-9]').hasMatch(value)) return false;
+
+    final normalized = _stripDiacritics(value.toLowerCase()).trim();
+    return normalized != 'khong co' &&
+        normalized != 'none' &&
+        normalized != 'n/a';
+  }
+
+  bool _containsAny(String value, List<String> keywords) {
+    return keywords.any(value.contains);
+  }
+
   ScanBillResult parse(List<String> lines, {String? fallbackDescription}) {
-    final normalized = lines
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
+    final normalized =
+        lines.map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
 
     if (normalized.isEmpty) {
       return ScanBillResult(

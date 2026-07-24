@@ -102,7 +102,8 @@ void main() {
     expect(result.hasDiscrepancy, isTrue);
   });
 
-  test('low-quality OCR output with no readable prices returns empty items', () {
+  test('low-quality OCR output with no readable prices returns empty items',
+      () {
     final result = parser.parse([
       'a;lskdjf',
       '###',
@@ -145,7 +146,8 @@ void main() {
     expect(result.description, 'NHÀ THUỐC BỆNH VIỆN ĐK HẢI DƯƠNG');
     expect(result.items.length, 2);
 
-    final bestimac = result.items.firstWhere((i) => i.name.contains('Bestimac'));
+    final bestimac =
+        result.items.firstWhere((i) => i.name.contains('Bestimac'));
     expect(bestimac.quantity, 30);
     expect(bestimac.unitPrice, 4950);
     expect(bestimac.amount, 148500);
@@ -186,6 +188,59 @@ void main() {
 
     expect(result.totalAmount, 1200000);
     expect(result.description, 'Chuyến Sa Pa');
+  });
+
+  test('VCB transfer: ignores beneficiary account and transaction code', () {
+    final result = parser.parseTransferSlip([
+      'VCB Digibank',
+      'CHUYỂN KHOẢN THÀNH CÔNG',
+      '8,700,000 VND',
+      '10:30 Chủ Nhật 04/10/2020',
+      'Tên người thụ hưởng',
+      'VU THI HIEN',
+      'Tài khoản thụ hưởng',
+      '19033236897024',
+      'Ngân hàng thụ hưởng',
+      'KY THUONG VN (TECHCOMBANK)',
+      'Mã giao dịch',
+      '790921026',
+      'Nội dung',
+      'Duyen ck',
+    ], fallbackDescription: 'Phú Quốc');
+
+    expect(result.items, hasLength(1));
+    expect(result.totalAmount, 8700000);
+    expect(result.items.single.unitPrice, 8700000);
+    expect(result.description, 'Duyen ck');
+  });
+
+  test('transfer: ignores detail ID and phone, uses recipient as description',
+      () {
+    final result = parser.parseTransferSlip([
+      'Giao dịch thành công',
+      '100.000đ',
+      'Thời gian thanh toán',
+      '17:14 - 07/06/2023',
+      'Chi tiết giao dịch',
+      '40839544286',
+      'Người gửi',
+      'DANG DUY ANH',
+      'Người nhận',
+      'Trần Ngọc Anh Duy',
+      'Tên danh bạ',
+      'Lưu danh bạ',
+      'SDT',
+      '0326637783',
+      'Loại giao dịch',
+      'Chuyển tiền',
+      'Tin nhắn',
+      '..',
+    ], fallbackDescription: 'Phú Quốc');
+
+    expect(result.items, hasLength(1));
+    expect(result.totalAmount, 100000);
+    expect(result.items.single.unitPrice, 100000);
+    expect(result.description, 'Chuyển khoản đến Trần Ngọc Anh Duy');
   });
 
   test('foreign currency detection', () {
