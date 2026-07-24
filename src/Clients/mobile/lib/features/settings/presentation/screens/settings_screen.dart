@@ -14,8 +14,7 @@ import '../../../../core/ui/ios_ui.dart';
 import '../../../auth/data/repositories/auth_repository_impl.dart';
 import '../../../auth/domain/models/auth_models.dart';
 import '../../../auth/presentation/controllers/app_auth_provider.dart';
-import '../../../notification/data/services/push_notification_service.dart';
-import '../../../notification/presentation/controllers/push_notification_controller.dart';
+import '../../../notification/presentation/controllers/notification_controller.dart';
 import '../../../notification/presentation/screens/notification_history_screen.dart';
 import '../controllers/payment_account_provider.dart';
 
@@ -39,7 +38,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final destinationState = ref.watch(paymentDestinationsProvider);
     final tierState = ref.watch(currentUserTierProvider);
     final userState = ref.watch(currentUserProvider);
-    final pushNotificationState = ref.watch(pushNotificationSettingsProvider);
+    final unreadCount = ref.watch(notificationUnreadCountProvider);
     final user = userState.valueOrNull;
     final isPro = tierState.valueOrNull != null && tierState.valueOrNull! >= 1;
 
@@ -124,23 +123,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               header: 'Ứng dụng và hỗ trợ',
               children: [
                 IosListTile(
-                  icon: CupertinoIcons.bell,
-                  title: 'Thông báo đẩy',
-                  subtitle: _pushNotificationSubtitle(pushNotificationState),
-                  trailing: _PushNotificationSwitch(
-                    state: pushNotificationState,
-                    onChanged: _togglePushNotifications,
-                  ),
-                  onTap: pushNotificationState.valueOrNull?.canToggle == true
-                      ? () => _togglePushNotifications(
-                            !(pushNotificationState.valueOrNull?.enabled ??
-                                false),
-                          )
-                      : null,
-                ),
-                IosListTile(
                   icon: CupertinoIcons.bell_fill,
-                  title: 'Lịch sử thông báo',
+                  title: 'Thông báo',
+                  subtitle: 'Tự động cập nhật từ hệ thống',
+                  value: unreadCount > 0 ? '$unreadCount mới' : null,
                   onTap: () {
                     Navigator.of(context).push(
                       CupertinoPageRoute(
@@ -176,38 +162,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
-  }
-
-  String _pushNotificationSubtitle(
-    AsyncValue<PushNotificationPreference> state,
-  ) {
-    return state.when(
-      data: (preference) => preference.subtitle,
-      loading: () => 'Đang kiểm tra...',
-      error: (error, _) => error.toString(),
-    );
-  }
-
-  Future<void> _togglePushNotifications(bool enabled) async {
-    try {
-      await ref
-          .read(pushNotificationSettingsProvider.notifier)
-          .setEnabled(enabled);
-      if (!mounted) return;
-      await showIosMessage(
-        context,
-        message: enabled
-            ? 'Thông báo đẩy đã được bật.'
-            : 'Thông báo đẩy đã được tắt.',
-      );
-    } catch (error) {
-      if (!mounted) return;
-      await showIosMessage(
-        context,
-        message: error.toString(),
-        isError: true,
-      );
-    }
   }
 
   void _showChoiceSheet({
@@ -1091,39 +1045,6 @@ class _DestinationPickerButton extends StatelessWidget {
             Icon(CupertinoIcons.chevron_down, color: secondary, size: 16),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PushNotificationSwitch extends StatelessWidget {
-  final AsyncValue<PushNotificationPreference> state;
-  final ValueChanged<bool> onChanged;
-
-  const _PushNotificationSwitch({
-    required this.state,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return state.when(
-      data: (preference) {
-        if (preference.busy) {
-          return const CupertinoActivityIndicator(radius: 10);
-        }
-
-        return CupertinoSwitch(
-          value: preference.enabled,
-          activeTrackColor: AppTheme.iosGreen,
-          onChanged: preference.canToggle ? onChanged : null,
-        );
-      },
-      loading: () => const CupertinoActivityIndicator(radius: 10),
-      error: (_, __) => const CupertinoSwitch(
-        value: false,
-        activeTrackColor: AppTheme.iosGreen,
-        onChanged: null,
       ),
     );
   }

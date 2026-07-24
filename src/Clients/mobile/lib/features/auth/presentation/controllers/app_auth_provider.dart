@@ -4,7 +4,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/models/auth_models.dart';
-import '../../../notification/presentation/controllers/push_notification_controller.dart';
 
 part 'app_auth_provider.g.dart';
 
@@ -102,13 +101,6 @@ class AppAuth extends _$AppAuth {
 
   Future<void> logout() async {
     final repo = ref.read(authRepositoryProvider);
-    try {
-      await ref
-          .read(pushNotificationSettingsProvider.notifier)
-          .disableBestEffort();
-    } catch (_) {
-      // Push cleanup must never prevent auth cleanup.
-    }
     try {
       await GoogleSignIn().signOut();
     } catch (_) {

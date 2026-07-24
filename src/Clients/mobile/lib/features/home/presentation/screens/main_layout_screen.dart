@@ -1,19 +1,21 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/ui/ios_ui.dart';
+import '../../../notification/presentation/controllers/notification_controller.dart';
 import '../../../search/presentation/screens/search_screen.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
 import 'home_screen.dart';
 import 'trips_screen.dart';
 
-class MainLayoutScreen extends StatefulWidget {
+class MainLayoutScreen extends ConsumerStatefulWidget {
   const MainLayoutScreen({super.key});
 
   @override
-  State<MainLayoutScreen> createState() => _MainLayoutScreenState();
+  ConsumerState<MainLayoutScreen> createState() => _MainLayoutScreenState();
 }
 
-class _MainLayoutScreenState extends State<MainLayoutScreen> {
+class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
   int _currentIndex = 0;
 
   static const _screens = [
@@ -25,6 +27,8 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(notificationsProvider);
+
     return ModernPage(
       child: Stack(
         children: [

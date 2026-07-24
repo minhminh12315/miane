@@ -1,5 +1,6 @@
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
+import '../../domain/models/notification_feed.dart';
 import '../../domain/models/notification_model.dart';
 import '../../domain/repositories/notification_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,13 +11,21 @@ class NotificationRepositoryImpl implements NotificationRepository {
   NotificationRepositoryImpl(this._apiClient);
 
   @override
-  Future<List<NotificationModel>> getNotifications() async {
+  Future<NotificationFeed> getNotifications() async {
     final response = await _apiClient.get(ApiEndpoints.notifications);
     if (response is Map && response.containsKey('notifications')) {
       final list = response['notifications'] as List;
-      return list.map((json) => NotificationModel.fromJson(json)).toList();
+      final notifications =
+          list.map((json) => NotificationModel.fromJson(json)).toList();
+      final unreadCount = response['unreadCount'] is int
+          ? response['unreadCount'] as int
+          : int.tryParse(response['unreadCount']?.toString() ?? '') ?? 0;
+      return NotificationFeed(
+        notifications: notifications,
+        unreadCount: unreadCount,
+      );
     }
-    return [];
+    return const NotificationFeed(notifications: [], unreadCount: 0);
   }
 
   @override
@@ -27,25 +36,6 @@ class NotificationRepositoryImpl implements NotificationRepository {
   @override
   Future<void> markAllAsRead() async {
     await _apiClient.put('${ApiEndpoints.notifications}/read-all');
-  }
-
-  @override
-  Future<void> registerDevice({
-    required String fcmToken,
-    required String platform,
-  }) async {
-    await _apiClient.post(
-      ApiEndpoints.registerNotificationDevice,
-      body: {
-        'fcmToken': fcmToken,
-        'platform': platform,
-      },
-    );
-  }
-
-  @override
-  Future<void> unregisterDevice(String fcmToken) async {
-    await _apiClient.delete(ApiEndpoints.notificationDevice(fcmToken));
   }
 }
 

@@ -1,4 +1,3 @@
-using BuildingBlocks.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Notification.API.Data;
@@ -9,21 +8,18 @@ namespace Notification.API.EventHandlers;
 
 /// <summary>
 /// Base class for event handlers that processes integration events received
-/// via the events webhook endpoint. Looks up device tokens and dispatches FCM push notifications.
+/// via the events webhook endpoint and persists in-app notifications to the database.
 /// </summary>
 public abstract class BaseNotificationEventHandler
 {
     protected readonly NotificationDbContext DbContext;
-    protected readonly IFirebaseNotificationService FirebaseService;
     protected readonly ILogger Logger;
 
     protected BaseNotificationEventHandler(
         NotificationDbContext dbContext,
-        IFirebaseNotificationService firebaseService,
         ILogger logger)
     {
         DbContext = dbContext;
-        FirebaseService = firebaseService;
         Logger = logger;
     }
 
@@ -35,32 +31,45 @@ public abstract class BaseNotificationEventHandler
         Dictionary<string, string>? data = null,
         CancellationToken cancellationToken = default)
     {
-        var devices = await DbContext.DeviceRegistrations
-            .Where(d => userIds.Contains(d.UserId) && d.IsActive)
-            .ToListAsync(cancellationToken);
+        await PersistNotificationsAsync(
+            userIds,
+            title,
+            body,
+            eventType,
+            data,
+            cancellationToken);
+    }
 
-        foreach (var device in devices)
+    protected async Task SendToUserAsync(
+        Guid userId,
+        string title,
+        string body,
+        string eventType,
+        Dictionary<string, string>? data = null,
+        CancellationToken cancellationToken = default)
+    {
+        await SendToTripMembersAsync(
+            new List<Guid> { userId },
+            title,
+            body,
+            eventType,
+            data,
+            cancellationToken);
+    }
+
+    private async Task PersistNotificationsAsync(
+        IReadOnlyCollection<Guid> userIds,
+        string title,
+        string body,
+        string eventType,
+        Dictionary<string, string>? data,
+        CancellationToken cancellationToken)
+    {
+        if (userIds.Count == 0)
         {
-            try
-            {
-                await FirebaseService.SendAsync(new FirebaseNotificationRequest
-                {
-                    Token = device.FcmToken,
-                    Platform = device.DevicePlatform,
-                    Title = title,
-                    Body = body,
-                    Data = data ?? new()
-                }, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex,
-                    "[Notification] Failed to send FCM to token {Token} for user {UserId}",
-                    device.FcmToken[..Math.Min(10, device.FcmToken.Length)] + "...", device.UserId);
-            }
+            return;
         }
 
-        // Log notifications
         var logs = userIds.Select(uid => new NotificationLog
         {
             UserId = uid,
@@ -73,16 +82,10 @@ public abstract class BaseNotificationEventHandler
 
         await DbContext.NotificationLogs.AddRangeAsync(logs, cancellationToken);
         await DbContext.SaveChangesAsync(cancellationToken);
-    }
 
-    protected async Task SendToUserAsync(
-        Guid userId,
-        string title,
-        string body,
-        string eventType,
-        Dictionary<string, string>? data = null,
-        CancellationToken cancellationToken = default)
-    {
-        await SendToTripMembersAsync(new List<Guid> { userId }, title, body, eventType, data, cancellationToken);
+        Logger.LogInformation(
+            "[Notification] Stored {Count} in-app notification(s) for event {EventType}",
+            logs.Count,
+            eventType);
     }
 }

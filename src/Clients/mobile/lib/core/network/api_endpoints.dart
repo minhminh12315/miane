@@ -46,9 +46,4 @@ class ApiEndpoints {
       '/expenses/payment-methods/default-receive';
 
   static const String notifications = '/notifications';
-  static const String notificationDevices = '/notifications/devices';
-  static const String registerNotificationDevice =
-      '$notificationDevices/register';
-  static String notificationDevice(String token) =>
-      '$notificationDevices/${Uri.encodeComponent(token)}';
 }

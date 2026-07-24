@@ -1,4 +1,3 @@
-using BuildingBlocks.Notifications;
 using Microsoft.Extensions.Logging;
 using Notification.API.Data;
 
@@ -11,16 +10,13 @@ namespace Notification.API.EventHandlers;
 public sealed class NotificationEventProcessor
 {
     private readonly NotificationDbContext _dbContext;
-    private readonly IFirebaseNotificationService _firebaseService;
     private readonly ILogger<NotificationEventProcessor> _logger;
 
     public NotificationEventProcessor(
         NotificationDbContext dbContext,
-        IFirebaseNotificationService firebaseService,
         ILogger<NotificationEventProcessor> logger)
     {
         _dbContext = dbContext;
-        _firebaseService = firebaseService;
         _logger = logger;
     }
 
@@ -50,25 +46,25 @@ public sealed class NotificationEventProcessor
 
     private async Task HandleExpenseCreatedAsync(IntegrationEventPayload payload, CancellationToken ct)
     {
-        var handler = new ExpenseCreatedHandler(_dbContext, _firebaseService, _logger);
+        var handler = new ExpenseCreatedHandler(_dbContext, _logger);
         await handler.HandleAsync(payload, ct);
     }
 
     private async Task HandleDebtSettledAsync(IntegrationEventPayload payload, CancellationToken ct)
     {
-        var handler = new DebtSettledHandler(_dbContext, _firebaseService, _logger);
+        var handler = new DebtSettledHandler(_dbContext, _logger);
         await handler.HandleAsync(payload, ct);
     }
 
     private async Task HandleMemberJoinedAsync(IntegrationEventPayload payload, CancellationToken ct)
     {
-        var handler = new MemberJoinedHandler(_dbContext, _firebaseService, _logger);
+        var handler = new MemberJoinedHandler(_dbContext, _logger);
         await handler.HandleAsync(payload, ct);
     }
 
     private async Task HandleTripLimitReachedAsync(IntegrationEventPayload payload, CancellationToken ct)
     {
-        var handler = new TripLimitReachedHandler(_dbContext, _firebaseService, _logger);
+        var handler = new TripLimitReachedHandler(_dbContext, _logger);
         await handler.HandleAsync(payload, ct);
     }
 }
@@ -132,8 +128,8 @@ public sealed class IntegrationEventPayload
 
 public sealed class ExpenseCreatedHandler : BaseNotificationEventHandler
 {
-    public ExpenseCreatedHandler(NotificationDbContext db, IFirebaseNotificationService fb, ILogger logger)
-        : base(db, fb, logger) { }
+    public ExpenseCreatedHandler(NotificationDbContext db, ILogger logger)
+        : base(db, logger) { }
 
     public async Task HandleAsync(IntegrationEventPayload payload, CancellationToken ct)
     {
@@ -161,8 +157,8 @@ public sealed class ExpenseCreatedHandler : BaseNotificationEventHandler
 
 public sealed class DebtSettledHandler : BaseNotificationEventHandler
 {
-    public DebtSettledHandler(NotificationDbContext db, IFirebaseNotificationService fb, ILogger logger)
-        : base(db, fb, logger) { }
+    public DebtSettledHandler(NotificationDbContext db, ILogger logger)
+        : base(db, logger) { }
 
     public async Task HandleAsync(IntegrationEventPayload payload, CancellationToken ct)
     {
@@ -193,8 +189,8 @@ public sealed class DebtSettledHandler : BaseNotificationEventHandler
 
 public sealed class MemberJoinedHandler : BaseNotificationEventHandler
 {
-    public MemberJoinedHandler(NotificationDbContext db, IFirebaseNotificationService fb, ILogger logger)
-        : base(db, fb, logger) { }
+    public MemberJoinedHandler(NotificationDbContext db, ILogger logger)
+        : base(db, logger) { }
 
     public async Task HandleAsync(IntegrationEventPayload payload, CancellationToken ct)
     {
@@ -217,8 +213,8 @@ public sealed class MemberJoinedHandler : BaseNotificationEventHandler
 
 public sealed class TripLimitReachedHandler : BaseNotificationEventHandler
 {
-    public TripLimitReachedHandler(NotificationDbContext db, IFirebaseNotificationService fb, ILogger logger)
-        : base(db, fb, logger) { }
+    public TripLimitReachedHandler(NotificationDbContext db, ILogger logger)
+        : base(db, logger) { }
 
     public async Task HandleAsync(IntegrationEventPayload payload, CancellationToken ct)
     {

@@ -1,6 +1,5 @@
 using BuildingBlocks.Extensions;
 using BuildingBlocks.Middleware;
-using BuildingBlocks.Notifications;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -61,9 +60,6 @@ builder.Services.AddDbContext<NotificationDbContext>(options =>
 
 // BuildingBlocks
 builder.Services.AddBuildingBlocks(typeof(Program).Assembly);
-
-// Firebase
-builder.Services.AddFirebaseNotifications(builder.Configuration);
 
 // Event processing
 builder.Services.AddScoped<NotificationEventProcessor>();

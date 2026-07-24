@@ -50,7 +50,8 @@ class NotificationHistoryScreen extends ConsumerWidget {
                 message: err.toString(),
               ),
             ),
-            data: (notifications) {
+            data: (feed) {
+              final notifications = feed.notifications;
               if (notifications.isEmpty) {
                 return const SliverFillRemaining(
                   child: IosEmptyState(
