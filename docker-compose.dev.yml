@@ -111,6 +111,8 @@ services:
       - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
       - Jwt__Issuer=MianeIdentityService
       - Jwt__Audience=MianeClients
+      - Services__Notification__BaseUrl=http://notification-api:5130/
+      - Services__Notification__ApiKey=${INTERNAL_API_KEY:-Miane_Dev_Internal_Api_Key_Change_Me}
       # dotnet watch configuration for Docker
       - ASPNETCORE_USE_POLLING_FILE_WATCHER=1
       - DOTNET_USE_POLLING_FILE_WATCHER=1
@@ -119,6 +121,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      notification-api:
+        condition: service_started
     ports:
       - "5128:5128"
     volumes:
@@ -152,6 +156,10 @@ services:
       - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
       - Jwt__Issuer=MianeIdentityService
       - Jwt__Audience=MianeClients
+      - Services__Trip__BaseUrl=http://trip-api:5128/
+      - Services__Notification__BaseUrl=http://notification-api:5130/
+      - Services__Notification__ApiKey=${INTERNAL_API_KEY:-Miane_Dev_Internal_Api_Key_Change_Me}
+      - ExchangeRates__AllowStatic=true
       # dotnet watch configuration for Docker
       - ASPNETCORE_USE_POLLING_FILE_WATCHER=1
       - DOTNET_USE_POLLING_FILE_WATCHER=1
@@ -160,6 +168,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      trip-api:
+        condition: service_started
+      notification-api:
+        condition: service_started
     ports:
       - "5129:5129"
     volumes:
@@ -188,6 +200,7 @@ services:
       - Jwt__Key=${JWT_SIGNING_KEY:-Miane_Development_Jwt_Signing_Key_Change_In_Production_2026!@#}
       - Jwt__Issuer=MianeIdentityService
       - Jwt__Audience=MianeClients
+      - Internal__ApiKey=${INTERNAL_API_KEY:-Miane_Dev_Internal_Api_Key_Change_Me}
       # dotnet watch configuration for Docker
       - ASPNETCORE_USE_POLLING_FILE_WATCHER=1
       - DOTNET_USE_POLLING_FILE_WATCHER=1

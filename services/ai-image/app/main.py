@@ -10,7 +10,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -24,17 +24,36 @@ OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
 OPENAI_IMAGE_SIZE = os.getenv("OPENAI_IMAGE_SIZE", "1536x1024")
 OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "medium")
 OPENAI_IMAGE_FORMAT = os.getenv("OPENAI_IMAGE_FORMAT", "jpeg")
+AI_IMAGE_API_KEY = os.getenv("AI_IMAGE_API_KEY", "").strip()
+_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "AI_IMAGE_CORS_ORIGINS",
+        "http://localhost:5173,http://localhost:3000,http://localhost:8080",
+    ).split(",")
+    if origin.strip()
+]
 TRIP_API_COVER_PROMPT_MAX_LENGTH = 1000
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="MIANE AI Image Service", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=_CORS_ORIGINS or ["http://localhost:5173"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 app.mount("/static/cache", StaticFiles(directory=str(CACHE_DIR)), name="cache")
+
+
+def require_api_key(x_api_key: str | None = Header(default=None, alias="X-Api-Key")) -> None:
+    if not AI_IMAGE_API_KEY:
+        # Fail closed when key is unset outside explicit local override.
+        if os.getenv("AI_IMAGE_ALLOW_UNAUTHENTICATED", "").lower() in {"1", "true", "yes"}:
+            return
+        raise HTTPException(status_code=503, detail="AI_IMAGE_API_KEY is not configured")
+    if not x_api_key or x_api_key != AI_IMAGE_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 class GenerateTripImageRequest(BaseModel):
@@ -72,8 +91,9 @@ def health() -> dict[str, str]:
 @app.post("/api/generate-trip-image", response_model=GenerateTripImageResponse)
 def generate_trip_image(
     request: GenerateTripImageRequest,
+    _: None = Depends(require_api_key),
 ) -> GenerateTripImageResponse:
-    thumbnail = generate_trip_thumbnail(
+    thumbnail = _generate_trip_thumbnail_core(
         GenerateTripThumbnailRequest(placeName=request.destination),
     )
     return GenerateTripImageResponse(
@@ -87,6 +107,13 @@ def generate_trip_image(
     response_model=GenerateTripThumbnailResponse,
 )
 def generate_trip_thumbnail(
+    request: GenerateTripThumbnailRequest,
+    _: None = Depends(require_api_key),
+) -> GenerateTripThumbnailResponse:
+    return _generate_trip_thumbnail_core(request)
+
+
+def _generate_trip_thumbnail_core(
     request: GenerateTripThumbnailRequest,
 ) -> GenerateTripThumbnailResponse:
     place_name = _normalize_text(request.placeName)

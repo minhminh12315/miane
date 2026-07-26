@@ -2,6 +2,7 @@ using BuildingBlocks.CQRS;
 using BuildingBlocks.EventBus;
 using BuildingBlocks.Exceptions;
 using Expense.API.Data;
+using Expense.API.Domain.Enums;
 using Expense.API.IntegrationEvents;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,34 +23,72 @@ public sealed class SettleDebtHandler : ICommandHandler<SettleDebtCommand>
 
     public async Task<MediatR.Unit> Handle(SettleDebtCommand request, CancellationToken cancellationToken)
     {
-        var debt = await _dbContext.DebtRecords
+        var legacy = await _dbContext.DebtRecords
+            .FirstOrDefaultAsync(d => d.Id == request.DebtRecordId, cancellationToken);
+
+        if (legacy is not null)
+        {
+            if (legacy.IsSettled)
+            {
+                throw new ConflictException("Khoản nợ này đã được tất toán.");
+            }
+
+            // Only the creditor can finalize settlement after payment.
+            if (legacy.ToUserId != request.SettledByUserId)
+            {
+                throw new ForbiddenAccessException(
+                    "Chỉ người nhận tiền (chủ nợ) mới có thể xác nhận đã nhận thanh toán.");
+            }
+
+            legacy.IsSettled = true;
+            legacy.SettledAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            await _eventBus.PublishAsync(new DebtSettledEvent
+            {
+                DebtRecordId = legacy.Id,
+                TripId = legacy.TripId,
+                FromUserId = legacy.FromUserId,
+                ToUserId = legacy.ToUserId,
+                Amount = legacy.Amount,
+                Currency = legacy.Currency
+            }, cancellationToken);
+
+            return MediatR.Unit.Value;
+        }
+
+        var v2 = await _dbContext.Debts
             .FirstOrDefaultAsync(d => d.Id == request.DebtRecordId, cancellationToken)
             ?? throw new NotFoundException("khoản nợ", request.DebtRecordId);
 
-        if (debt.IsSettled)
+        if (v2.Status == DebtStatus.Settled)
         {
             throw new ConflictException("Khoản nợ này đã được tất toán.");
         }
 
-        // Only the debtor (FromUserId) or the creditor (ToUserId) can settle
-        if (debt.FromUserId != request.SettledByUserId && debt.ToUserId != request.SettledByUserId)
+        if (v2.Status == DebtStatus.Superseded)
         {
-            throw new ForbiddenAccessException("Chỉ người nợ hoặc người cho nợ mới có thể tất toán khoản nợ này.");
+            throw new ConflictException("Khoản nợ này đã bị thay thế bởi lần tính toán mới.");
         }
 
-        debt.IsSettled = true;
-        debt.SettledAt = DateTime.UtcNow;
+        if (v2.ToUserId != request.SettledByUserId)
+        {
+            throw new ForbiddenAccessException(
+                "Chỉ người nhận tiền (chủ nợ) mới có thể xác nhận đã nhận thanh toán.");
+        }
 
+        v2.Status = DebtStatus.Settled;
+        v2.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _eventBus.PublishAsync(new DebtSettledEvent
         {
-            DebtRecordId = debt.Id,
-            TripId = debt.TripId,
-            FromUserId = debt.FromUserId,
-            ToUserId = debt.ToUserId,
-            Amount = debt.Amount,
-            Currency = debt.Currency
+            DebtRecordId = v2.Id,
+            TripId = v2.TripId,
+            FromUserId = v2.FromUserId,
+            ToUserId = v2.ToUserId,
+            Amount = v2.Amount,
+            Currency = v2.Currency
         }, cancellationToken);
 
         return MediatR.Unit.Value;

@@ -14,7 +14,12 @@ abstract class AuthRepository {
     required String newPassword,
   });
   Future<void> logout();
-  Future<AuthResponseModel> upgradeToPro();
+  Future<AuthResponseModel> upgradeToPro({
+    required String platform,
+    required String receiptData,
+    String? productId,
+    String? transactionId,
+  });
   Future<AuthResponseModel> loginWithGoogle(String idToken);
   Future<bool> restoreSession();
   Future<UserModel?> getMe();

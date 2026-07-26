@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
+import '../../../../core/network/api_client.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/models/auth_models.dart';
 
@@ -11,7 +12,6 @@ enum AppAuthStatus {
   initializing,
   welcome,
   unauthenticated,
-  needsSetup,
   authenticated,
 }
 
@@ -23,6 +23,14 @@ final authSessionRevisionProvider = StateProvider<int>((ref) => 0);
 class AppAuth extends _$AppAuth {
   @override
   AppAuthStatus build() {
+    final client = ref.read(apiClientProvider);
+    client.onSessionInvalidated = () {
+      Future.microtask(markSessionExpired);
+    };
+    ref.onDispose(() {
+      client.onSessionInvalidated = null;
+    });
+
     _checkInitialState();
     return AppAuthStatus.initializing;
   }
@@ -95,8 +103,13 @@ class AppAuth extends _$AppAuth {
     );
   }
 
-  void completeSetup() {
-    state = AppAuthStatus.authenticated;
+  /// Clears local auth UI state after ApiClient drops tokens (failed refresh).
+  void markSessionExpired() {
+    if (state == AppAuthStatus.authenticated ||
+        state == AppAuthStatus.initializing) {
+      _advanceSessionRevision();
+      state = AppAuthStatus.unauthenticated;
+    }
   }
 
   Future<void> logout() async {

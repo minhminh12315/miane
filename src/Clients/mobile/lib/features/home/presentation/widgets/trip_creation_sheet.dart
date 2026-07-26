@@ -26,6 +26,10 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
     'MIANE_AI_IMAGE_URL',
     defaultValue: 'http://localhost:8000/api/v1/image/generate-trip-thumbnail',
   );
+  static const _aiImageApiKey = String.fromEnvironment(
+    'MIANE_AI_IMAGE_API_KEY',
+    defaultValue: '',
+  );
   static const _aiThumbnailTimeout = Duration(seconds: 120);
 
   final _nameController = TextEditingController();
@@ -248,10 +252,17 @@ class _TripCreationSheetState extends ConsumerState<TripCreationSheet> {
 
   Future<_AiThumbnail?> _requestAiThumbnail(_TripPlace place) async {
     try {
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+      };
+      if (_aiImageApiKey.isNotEmpty) {
+        headers['X-Api-Key'] = _aiImageApiKey;
+      }
+
       final response = await http
           .post(
             Uri.parse(_aiThumbnailEndpoint),
-            headers: const {'Content-Type': 'application/json'},
+            headers: headers,
             body: jsonEncode({
               'placeId': place.placeId,
               'placeName': place.name,

@@ -4,6 +4,7 @@ using BuildingBlocks.Data;
 using BuildingBlocks.EventBus;
 using FluentValidation;
 using MediatR;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BuildingBlocks.Extensions;
@@ -33,8 +34,48 @@ public static class ServiceCollectionExtensions
         // FluentValidation — scan the same assembly for validators
         services.AddValidatorsFromAssembly(handlerAssembly);
 
-        // EventBus — in-process implementation using MediatR
-        services.AddScoped<IEventBus, InProcessEventBus>();
+        // EventBus — in-process + optional HTTP forward to Notification.API
+        services.AddScoped<InProcessEventBus>();
+        services.AddScoped<IEventBus>(sp =>
+        {
+            var inProcess = sp.GetRequiredService<InProcessEventBus>();
+            var http = sp.GetService<HttpNotificationEventBus>();
+            return http is null
+                ? inProcess
+                : new CompositeEventBus(inProcess, http);
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers HTTP forwarding of integration events to Notification.API
+    /// when <c>Services:Notification:BaseUrl</c> and <c>ApiKey</c> are set.
+    /// </summary>
+    public static IServiceCollection AddNotificationEventForwarding(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.Configure<NotificationEventBusOptions>(
+            configuration.GetSection(NotificationEventBusOptions.SectionName));
+
+        var options = configuration
+            .GetSection(NotificationEventBusOptions.SectionName)
+            .Get<NotificationEventBusOptions>();
+
+        if (options is null || !options.IsConfigured)
+        {
+            return services;
+        }
+
+        services.AddHttpClient<HttpNotificationEventBus>((_, client) =>
+        {
+            var baseUrl = options.BaseUrl!.EndsWith('/')
+                ? options.BaseUrl
+                : $"{options.BaseUrl}/";
+            client.BaseAddress = new Uri(baseUrl);
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
 
         return services;
     }

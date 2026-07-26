@@ -1,11 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:jwt_decoder/jwt_decoder.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'api_endpoints.dart';
+import 'token_store.dart';
 
 class ApiException implements Exception {
   final int statusCode;
@@ -21,6 +23,9 @@ class ApiClient {
   final http.Client _client;
   Future<bool>? _refreshInFlight;
 
+  /// Invoked after stored tokens are cleared because refresh/session failed.
+  void Function()? onSessionInvalidated;
+
   ApiClient({http.Client? client}) : _client = client ?? http.Client();
 
   Future<Map<String, String>> _getHeaders({bool authenticated = true}) async {
@@ -30,16 +35,15 @@ class ApiClient {
     };
 
     if (authenticated) {
-      final prefs = await SharedPreferences.getInstance();
-      var token = prefs.getString('access_token');
+      var token = await TokenStore.getAccessToken();
       if (token != null && token.isNotEmpty) {
         try {
           if (JwtDecoder.isExpired(token)) {
             final refreshed = await refreshSession();
-            token = refreshed ? prefs.getString('access_token') : null;
+            token = refreshed ? await TokenStore.getAccessToken() : null;
           }
         } catch (_) {
-          await _clearStoredTokens(prefs);
+          await _clearStoredTokens();
           token = null;
         }
       }
@@ -58,9 +62,8 @@ class ApiClient {
   }
 
   Future<bool> _refreshSessionOnce() async {
-    final prefs = await SharedPreferences.getInstance();
-    final accessToken = prefs.getString('access_token');
-    final refreshToken = prefs.getString('refresh_token');
+    final accessToken = await TokenStore.getAccessToken();
+    final refreshToken = await TokenStore.getRefreshToken();
     if (accessToken == null ||
         accessToken.isEmpty ||
         refreshToken == null ||
@@ -75,7 +78,7 @@ class ApiClient {
           decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier']
               ?.toString();
       if (userId == null || userId.isEmpty) {
-        await _clearStoredTokens(prefs);
+        await _clearStoredTokens();
         return false;
       }
 
@@ -92,41 +95,64 @@ class ApiClient {
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        await _clearStoredTokens(prefs);
+        await _clearStoredTokens();
         return false;
       }
 
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) {
-        await _clearStoredTokens(prefs);
+        await _clearStoredTokens();
         return false;
       }
       final nextAccessToken = body['accessToken'] as String? ?? '';
       final nextRefreshToken = body['refreshToken'] as String? ?? '';
       if (nextAccessToken.isEmpty || nextRefreshToken.isEmpty) {
-        await _clearStoredTokens(prefs);
+        await _clearStoredTokens();
         return false;
       }
 
-      await prefs.setString('access_token', nextAccessToken);
-      await prefs.setString('refresh_token', nextRefreshToken);
+      await TokenStore.save(nextAccessToken, nextRefreshToken);
       return true;
     } catch (_) {
-      await _clearStoredTokens(prefs);
+      await _clearStoredTokens();
       return false;
     }
   }
 
-  Future<void> _clearStoredTokens(SharedPreferences prefs) async {
-    await prefs.remove('access_token');
-    await prefs.remove('refresh_token');
+  Future<void> _clearStoredTokens() async {
+    final hadSession =
+        ((await TokenStore.getAccessToken())?.isNotEmpty ?? false) ||
+            ((await TokenStore.getRefreshToken())?.isNotEmpty ?? false);
+    await TokenStore.clear();
+    if (hadSession) {
+      onSessionInvalidated?.call();
+    }
+  }
+
+  Future<http.Response> _sendWithAuthRetry(
+    Future<http.Response> Function(Map<String, String> headers) send, {
+    required bool authenticated,
+  }) async {
+    var headers = await _getHeaders(authenticated: authenticated);
+    var response = await send(headers);
+
+    if (authenticated && response.statusCode == 401) {
+      final refreshed = await refreshSession();
+      if (refreshed) {
+        headers = await _getHeaders(authenticated: true);
+        response = await send(headers);
+      }
+    }
+
+    return response;
   }
 
   Future<dynamic> get(String endpoint, {bool authenticated = true}) async {
     final uri = Uri.parse('${ApiEndpoints.baseUrl}$endpoint');
-    final headers = await _getHeaders(authenticated: authenticated);
-
-    final response = await _client.get(uri, headers: headers);
+    final response = await _sendWithAuthRetry(
+      (headers) => _client.get(uri, headers: headers),
+      authenticated: authenticated,
+    );
     return _processResponse(response);
   }
 
@@ -135,11 +161,15 @@ class ApiClient {
     final uri = endpoint.startsWith('http')
         ? Uri.parse(endpoint)
         : Uri.parse('${ApiEndpoints.baseUrl}$endpoint');
-    final headers = await _getHeaders(authenticated: authenticated)
-      ..remove('Accept')
-      ..remove('Content-Type');
-
-    final response = await _client.get(uri, headers: headers);
+    final response = await _sendWithAuthRetry(
+      (headers) {
+        final h = Map<String, String>.from(headers)
+          ..remove('Accept')
+          ..remove('Content-Type');
+        return _client.get(uri, headers: h);
+      },
+      authenticated: authenticated,
+    );
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return response.bodyBytes;
     }
@@ -151,11 +181,11 @@ class ApiClient {
   Future<dynamic> post(String endpoint,
       {dynamic body, bool authenticated = true}) async {
     final uri = Uri.parse('${ApiEndpoints.baseUrl}$endpoint');
-    final headers = await _getHeaders(authenticated: authenticated);
     final encodedBody = body != null ? jsonEncode(body) : null;
-
-    final response =
-        await _client.post(uri, headers: headers, body: encodedBody);
+    final response = await _sendWithAuthRetry(
+      (headers) => _client.post(uri, headers: headers, body: encodedBody),
+      authenticated: authenticated,
+    );
     return _processResponse(response);
   }
 
@@ -169,53 +199,56 @@ class ApiClient {
     bool authenticated = true,
   }) async {
     final uri = Uri.parse('${ApiEndpoints.baseUrl}$endpoint');
-    final headers = await _getHeaders(authenticated: authenticated)
-      ..remove('Content-Type');
 
-    final request = http.MultipartRequest('POST', uri)
-      ..headers.addAll(headers)
-      ..fields.addAll(fields ?? const {});
-    if (fileBytes != null) {
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          fileField,
-          fileBytes,
-          filename: fileName,
-        ),
-      );
-    } else if (filePath != null && filePath.isNotEmpty) {
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          fileField,
-          filePath,
-          filename: fileName,
-        ),
-      );
-    } else {
-      throw ArgumentError('Either fileBytes or filePath is required.');
+    Future<http.Response> send(Map<String, String> headers) async {
+      final request = http.MultipartRequest('POST', uri)
+        ..headers.addAll(Map<String, String>.from(headers)..remove('Content-Type'))
+        ..fields.addAll(fields ?? const {});
+      if (fileBytes != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            fileField,
+            fileBytes,
+            filename: fileName,
+          ),
+        );
+      } else if (filePath != null && filePath.isNotEmpty) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            fileField,
+            filePath,
+            filename: fileName,
+          ),
+        );
+      } else {
+        throw ArgumentError('Either fileBytes or filePath is required.');
+      }
+
+      final streamedResponse = await _client.send(request);
+      return http.Response.fromStream(streamedResponse);
     }
 
-    final streamedResponse = await _client.send(request);
-    final response = await http.Response.fromStream(streamedResponse);
+    final response = await _sendWithAuthRetry(send, authenticated: authenticated);
     return _processResponse(response);
   }
 
   Future<dynamic> put(String endpoint,
       {dynamic body, bool authenticated = true}) async {
     final uri = Uri.parse('${ApiEndpoints.baseUrl}$endpoint');
-    final headers = await _getHeaders(authenticated: authenticated);
     final encodedBody = body != null ? jsonEncode(body) : null;
-
-    final response =
-        await _client.put(uri, headers: headers, body: encodedBody);
+    final response = await _sendWithAuthRetry(
+      (headers) => _client.put(uri, headers: headers, body: encodedBody),
+      authenticated: authenticated,
+    );
     return _processResponse(response);
   }
 
   Future<dynamic> delete(String endpoint, {bool authenticated = true}) async {
     final uri = Uri.parse('${ApiEndpoints.baseUrl}$endpoint');
-    final headers = await _getHeaders(authenticated: authenticated);
-
-    final response = await _client.delete(uri, headers: headers);
+    final response = await _sendWithAuthRetry(
+      (headers) => _client.delete(uri, headers: headers),
+      authenticated: authenticated,
+    );
     return _processResponse(response);
   }
 
@@ -232,7 +265,6 @@ class ApiClient {
         responseBody = jsonDecode(response.body);
       }
     } catch (_) {
-      // Body is not JSON
       responseBody = response.body;
     }
 
@@ -242,10 +274,6 @@ class ApiClient {
 
     String errorMessage = 'Đã xảy ra lỗi.';
     if (responseBody is Map) {
-      // FluentValidation errors arrive as {message: "One or more validation
-      // errors occurred.", errors: [{field, error}, ...]} — the generic
-      // top-level `message` is useless; the field-level `error` (e.g. the
-      // Basic-tier trip/member limit copy) is what's actually worth showing.
       final errors = responseBody['errors'];
       if (errors is List && errors.isNotEmpty) {
         final first = errors.first;

@@ -10,6 +10,7 @@ public static class IdentitySeeder
         var userManager = services.GetRequiredService<UserManager<User>>();
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
         var environment = services.GetRequiredService<IHostEnvironment>();
+        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("IdentitySeeder");
 
         var roles = new[] { "Admin", "Employee" };
         foreach (var role in roles)
@@ -20,60 +21,80 @@ public static class IdentitySeeder
             }
         }
 
-        var adminEmail = "admin@Miane.local";
-        var employeeEmail = "staff@Miane.local";
-
-        if (await userManager.FindByEmailAsync(adminEmail) is null)
-        {
-            var admin = new User
-            {
-                UserName = adminEmail,
-                Email = adminEmail,
-                FullName = "System Admin",
-                IsEmployee = true,
-                EmployeeId = "EMP0001",
-                EmailConfirmed = true,
-                IsActive = true
-            };
-
-            var result = await userManager.CreateAsync(admin, "Admin@123");
-            if (result.Succeeded)
-            {
-                await userManager.AddToRoleAsync(admin, "Admin");
-                await userManager.AddClaimsAsync(admin, new[]
-                {
-                    new System.Security.Claims.Claim("Permission", "users.read"),
-                    new System.Security.Claims.Claim("Permission", "users.write"),
-                    new System.Security.Claims.Claim("Permission", "dashboard.view")
-                });
-            }
-        }
-
-        if (await userManager.FindByEmailAsync(employeeEmail) is null)
-        {
-            var staff = new User
-            {
-                UserName = employeeEmail,
-                Email = employeeEmail,
-                FullName = "Demo Staff",
-                IsEmployee = true,
-                EmployeeId = "EMP0002",
-                EmailConfirmed = true,
-                IsActive = true
-            };
-
-            var result = await userManager.CreateAsync(staff, "Staff@123");
-            if (result.Succeeded)
-            {
-                await userManager.AddToRoleAsync(staff, "Employee");
-                await userManager.AddClaimAsync(staff,
-                    new System.Security.Claims.Claim("Permission", "dashboard.view"));
-            }
-        }
-
+        // Hardcoded demo admin/staff passwords only in Development.
+        // Production: set ADMIN_BOOTSTRAP_PASSWORD (and optional ADMIN_BOOTSTRAP_EMAIL)
+        // on first deploy to create a single admin, then rotate.
         if (environment.IsDevelopment())
         {
+            await SeedLocalAdminAsync(userManager, "admin@Miane.local", "System Admin", "EMP0001", "Admin", "Admin@123",
+                new[] { "users.read", "users.write", "dashboard.view" });
+            await SeedLocalAdminAsync(userManager, "staff@Miane.local", "Demo Staff", "EMP0002", "Employee", "Staff@123",
+                new[] { "dashboard.view" });
             await SeedDemoTripUsersAsync(userManager);
+        }
+        else
+        {
+            var bootstrapPassword = Environment.GetEnvironmentVariable("ADMIN_BOOTSTRAP_PASSWORD");
+            if (!string.IsNullOrWhiteSpace(bootstrapPassword))
+            {
+                var bootstrapEmail = Environment.GetEnvironmentVariable("ADMIN_BOOTSTRAP_EMAIL")
+                    ?? "admin@Miane.local";
+                await SeedLocalAdminAsync(
+                    userManager,
+                    bootstrapEmail,
+                    "System Admin",
+                    "EMP0001",
+                    "Admin",
+                    bootstrapPassword,
+                    new[] { "users.read", "users.write", "dashboard.view" });
+                logger.LogWarning(
+                    "Seeded bootstrap admin {Email} from ADMIN_BOOTSTRAP_PASSWORD. Rotate this password immediately.",
+                    bootstrapEmail);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Skipping admin seed outside Development (set ADMIN_BOOTSTRAP_PASSWORD to bootstrap once).");
+            }
+        }
+    }
+
+    private static async Task SeedLocalAdminAsync(
+        UserManager<User> userManager,
+        string email,
+        string fullName,
+        string employeeId,
+        string role,
+        string password,
+        IEnumerable<string> permissions)
+    {
+        if (await userManager.FindByEmailAsync(email) is not null)
+        {
+            return;
+        }
+
+        var user = new User
+        {
+            UserName = email,
+            Email = email,
+            FullName = fullName,
+            IsEmployee = true,
+            EmployeeId = employeeId,
+            EmailConfirmed = true,
+            IsActive = true
+        };
+
+        var result = await userManager.CreateAsync(user, password);
+        if (!result.Succeeded)
+        {
+            return;
+        }
+
+        await userManager.AddToRoleAsync(user, role);
+        foreach (var permission in permissions)
+        {
+            await userManager.AddClaimAsync(user,
+                new System.Security.Claims.Claim("Permission", permission));
         }
     }
 

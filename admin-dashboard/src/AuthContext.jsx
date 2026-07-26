@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { api } from './api'
+import { api, setUnauthorizedHandler } from './api'
 
 const AuthContext = createContext(null)
 
@@ -8,10 +8,13 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null))
     api.me()
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setLoading(false))
+
+    return () => setUnauthorizedHandler(null)
   }, [])
 
   async function login(email, password) {

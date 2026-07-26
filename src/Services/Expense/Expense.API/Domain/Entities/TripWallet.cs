@@ -52,6 +52,7 @@ public class TripWallet : AggregateRoot
 
         transaction.BalanceAfter = CurrentBalance;
         transaction.Status = WalletTransactionStatus.Posted;
+        Version++;
         _transactions.Add(transaction);
     }
 }

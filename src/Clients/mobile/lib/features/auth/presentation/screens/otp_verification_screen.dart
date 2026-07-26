@@ -8,17 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
 import '../controllers/app_auth_provider.dart';
+import '../controllers/registration_draft_provider.dart';
 
 class OtpVerificationScreen extends ConsumerStatefulWidget {
   final String email;
-  final String password;
-  final String fullName;
 
   const OtpVerificationScreen({
     super.key,
     required this.email,
-    required this.password,
-    required this.fullName,
   });
 
   @override
@@ -94,6 +91,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
       await ref
           .read(appAuthProvider.notifier)
           .verifyRegistrationOtp(widget.email, code);
+      ref.read(registrationDraftProvider.notifier).state = null;
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
       if (mounted) {
@@ -118,12 +116,23 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
   Future<void> _resendOtp() async {
     if (_resendCooldown > 0 || _isResending) return;
 
+    final draft = ref.read(registrationDraftProvider);
+    if (draft == null || draft.email != widget.email) {
+      await showIosMessage(
+        context,
+        message:
+            'Phiên đăng ký đã hết. Vui lòng quay lại và nhập lại mật khẩu.',
+        isError: true,
+      );
+      return;
+    }
+
     setState(() => _isResending = true);
     try {
       await ref.read(appAuthProvider.notifier).sendRegistrationOtp(
-            widget.email,
-            widget.password,
-            widget.fullName,
+            draft.email,
+            draft.password,
+            draft.fullName,
           );
       _startResendCooldown();
       if (mounted) {

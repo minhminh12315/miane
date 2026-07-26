@@ -123,6 +123,19 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
       return;
     }
 
+    if (newPassword.length < 8 ||
+        !RegExp(r'[a-z]').hasMatch(newPassword) ||
+        !RegExp(r'[A-Z]').hasMatch(newPassword) ||
+        !RegExp(r'\d').hasMatch(newPassword)) {
+      await showIosMessage(
+        context,
+        message:
+            'Mật khẩu mới cần tối thiểu 8 ký tự, gồm chữ hoa, chữ thường và số.',
+        isError: true,
+      );
+      return;
+    }
+
     if (newPassword != confirmPassword) {
       await showIosMessage(
         context,

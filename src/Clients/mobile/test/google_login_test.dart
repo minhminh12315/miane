@@ -55,7 +55,12 @@ class MockAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<AuthResponseModel> upgradeToPro() async {
+  Future<AuthResponseModel> upgradeToPro({
+    required String platform,
+    required String receiptData,
+    String? productId,
+    String? transactionId,
+  }) async {
     throw UnimplementedError();
   }
 

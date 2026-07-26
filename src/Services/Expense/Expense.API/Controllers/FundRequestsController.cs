@@ -5,6 +5,7 @@ using Expense.API.Domain.Enums;
 using Expense.API.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Expense.API.Controllers;
 
@@ -14,11 +15,16 @@ public class FundRequestsController : ControllerBase
 {
     private readonly ExpenseDbContext _dbContext;
     private readonly WalletLedgerService _walletLedger;
+    private readonly WalletAuthorizationService _authz;
 
-    public FundRequestsController(ExpenseDbContext dbContext, WalletLedgerService walletLedger)
+    public FundRequestsController(
+        ExpenseDbContext dbContext,
+        WalletLedgerService walletLedger,
+        WalletAuthorizationService authz)
     {
         _dbContext = dbContext;
         _walletLedger = walletLedger;
+        _authz = authz;
     }
 
     private Guid GetUserId() =>
@@ -28,6 +34,9 @@ public class FundRequestsController : ControllerBase
     [HttpPost("wallets/{walletId:guid}/fund-requests")]
     public async Task<IActionResult> CreateFundRequest(Guid walletId, [FromBody] CreateFundRequestRequest request, CancellationToken ct)
     {
+        var callerId = GetUserId();
+        await _authz.EnsureCurrentCustodianAsync(walletId, callerId, ct);
+
         var wallet = await _dbContext.TripWallets
             .FirstOrDefaultAsync(w => w.Id == walletId, ct)
             ?? throw new NotFoundException("ví chung", walletId);
@@ -51,7 +60,7 @@ public class FundRequestsController : ControllerBase
             AllocationType = request.AllocationType,
             DueAt = request.DueAt,
             Status = FundRequestStatus.Open,
-            CreatedByUserId = GetUserId(),
+            CreatedByUserId = callerId,
             Note = request.Note
         };
 
@@ -96,12 +105,26 @@ public class FundRequestsController : ControllerBase
             .FirstOrDefaultAsync(c => c.Id == contributionId, ct)
             ?? throw new NotFoundException("khoản đóng góp", contributionId);
 
+        if (contribution.Status == FundContributionStatus.Confirmed)
+        {
+            throw new DomainException("Khoản đóng góp này đã được xác nhận đủ.", "CONTRIBUTION_ALREADY_CONFIRMED");
+        }
+
+        var callerId = GetUserId();
+        await _authz.EnsureCurrentCustodianAsync(contribution.TripWalletId, callerId, ct);
+
         contribution.Amount += request.Amount;
-        contribution.ConfirmedByUserId = GetUserId();
+        contribution.ConfirmedByUserId = callerId;
         contribution.ConfirmedAt = request.ReceivedAt ?? DateTime.UtcNow;
         contribution.Status = contribution.Amount >= contribution.ExpectedAmount
             ? FundContributionStatus.Confirmed
             : FundContributionStatus.Partial;
+
+        var metadata = JsonSerializer.Serialize(new
+        {
+            paymentReference = request.PaymentReference,
+            proofFileId = request.ProofFileId
+        });
 
         var walletTransaction = await _walletLedger.PostAsync(new WalletPostRequest(
             contribution.TripWalletId,
@@ -109,12 +132,12 @@ public class FundRequestsController : ControllerBase
             TransactionDirection.Credit,
             request.Amount,
             contribution.Currency,
-            GetUserId(),
+            callerId,
             contribution.UserId,
             FundContributionId: contribution.Id,
             PaymentId: contribution.PaymentId,
             OccurredAt: request.ReceivedAt,
-            MetadataJson: $$"""{"paymentReference":"{{request.PaymentReference}}","proofFileId":"{{request.ProofFileId}}"}"""), ct);
+            MetadataJson: metadata), ct);
 
         contribution.WalletTransactionId = walletTransaction.Id;
         await _dbContext.SaveChangesAsync(ct);

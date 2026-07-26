@@ -6,10 +6,30 @@ const { Pool } = require('pg')
 
 const PGHOST = process.env.PGHOST || 'localhost'
 const PGPORT = process.env.PGPORT || 5432
-const PGUSER = process.env.PGUSER || 'Miane'
-const PGPASSWORD = process.env.PGPASSWORD || 'Miane_password'
+const PGUSER = process.env.PGUSER
+const PGPASSWORD = process.env.PGPASSWORD
 
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173'
+if (!PGUSER || !PGPASSWORD) {
+  console.error(
+    'Fatal: PGUSER and PGPASSWORD environment variables are required. ' +
+      'Do not rely on hardcoded database credentials.',
+  )
+  process.exit(1)
+}
+
+const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173,http://127.0.0.1:5173')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean)
+
+function clientError(res, status, message) {
+  return res.status(status).json({ error: message })
+}
+
+function serverError(res, err, fallback = 'Internal server error') {
+  console.error(err)
+  return res.status(500).json({ error: fallback })
+}
 
 // Business data (users, trips, expenses) goes through each service's real
 // admin endpoints (all protected by the "Admin" role — see UsersController,
@@ -69,12 +89,17 @@ async function listTables(pool) {
 
   const result = []
   for (const { table_name } of tables) {
+    if (!/^[a-zA-Z0-9_]+$/.test(table_name)) {
+      continue
+    }
     const { rows: cols } = await pool.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = $1
       ORDER BY ordinal_position
     `, [table_name])
-    const { rows: countRows } = await pool.query(`SELECT COUNT(*) FROM "${table_name}"`)
+    const { rows: countRows } = await pool.query(
+      `SELECT COUNT(*)::bigint AS count FROM ${quoteIdent(table_name)}`,
+    )
     result.push({
       name: table_name,
       rows: Number(countRows[0].count),
@@ -84,8 +109,21 @@ async function listTables(pool) {
   return result
 }
 
+function quoteIdent(ident) {
+  return `"${String(ident).replace(/"/g, '""')}"`
+}
+
 const app = express()
-app.use(cors({ origin: FRONTEND_ORIGIN, credentials: true }))
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || FRONTEND_ORIGINS.includes(origin)) {
+      callback(null, true)
+      return
+    }
+    callback(new Error(`Origin ${origin} not allowed by CORS`))
+  },
+  credentials: true,
+}))
 app.use(express.json())
 app.use(cookieParser())
 
@@ -94,25 +132,37 @@ app.use(cookieParser())
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body
-    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' })
+    if (!email || !password) return clientError(res, 400, 'Email and password are required')
 
     const loginRes = await fetch(`${IDENTITY_API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     })
-    if (loginRes.status === 401) return res.status(401).json({ error: 'Email or password is incorrect' })
-    if (!loginRes.ok) return res.status(502).json({ error: 'Identity.API login failed' })
+    if (loginRes.status === 401) return clientError(res, 401, 'Email or password is incorrect')
+    if (!loginRes.ok) return clientError(res, 502, 'Identity.API login failed')
 
     const data = await loginRes.json()
     if (!data.roles?.includes('Admin')) {
-      return res.status(403).json({ error: 'This account does not have Admin access' })
+      return clientError(res, 403, 'This account does not have Admin access')
+    }
+
+    const expiresAt = new Date(data.expiresIn).getTime()
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      return clientError(res, 502, 'Identity.API returned an invalid token expiry')
+    }
+
+    // Revoke any prior sessions for this admin on re-login.
+    for (const [id, session] of sessions.entries()) {
+      if (session.email === data.user.email || (data.user?.id && session.userId === data.user.id)) {
+        sessions.delete(id)
+      }
     }
 
     const sessionId = randomUUID()
-    const expiresAt = new Date(data.expiresIn).getTime()
     sessions.set(sessionId, {
       accessToken: data.accessToken,
+      userId: data.user?.id,
       email: data.user.email,
       fullName: data.user.fullName,
       roles: data.roles,
@@ -122,18 +172,23 @@ app.post('/api/auth/login', async (req, res) => {
     res.cookie(SESSION_COOKIE, sessionId, {
       httpOnly: true,
       sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
       maxAge: expiresAt - Date.now(),
     })
     res.json({ email: data.user.email, fullName: data.user.fullName, roles: data.roles })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
 app.post('/api/auth/logout', (req, res) => {
   const sessionId = req.cookies[SESSION_COOKIE]
   if (sessionId) sessions.delete(sessionId)
-  res.clearCookie(SESSION_COOKIE)
+  res.clearCookie(SESSION_COOKIE, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  })
   res.json({ ok: true })
 })
 
@@ -152,7 +207,7 @@ app.get('/api/databases', async (req, res) => {
     }
     res.json(result)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -170,7 +225,7 @@ app.get('/api/stats', async (req, res) => {
       expenses: expenses.length,
     })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err, 'Failed to load stats')
   }
 })
 
@@ -183,16 +238,17 @@ app.get('/api/activity', async (req, res) => {
       adminFetch(EXPENSE_API_URL, '/expenses/admin', token),
     ])
     const events = [
-      ...users.map((u) => ({ text: `New user registered: ${u.fullName}`, at: u.createAt })),
-      ...trips.map((t) => ({ text: `Trip created: ${t.name}`, at: t.createdAt })),
-      ...expenses.map((e) => ({ text: `Expense added: ${e.description}`, at: e.createdAt })),
+      ...users.map((u) => ({ text: `New user registered: ${u.fullName || 'Unknown'}`, at: u.createAt })),
+      ...trips.map((t) => ({ text: `Trip created: ${t.name || 'Untitled'}`, at: t.createdAt })),
+      ...expenses.map((e) => ({ text: `Expense added: ${e.description || 'Untitled'}`, at: e.createdAt })),
     ]
     const combined = events
+      .filter((r) => r.at && !Number.isNaN(new Date(r.at).getTime()))
       .sort((a, b) => new Date(b.at) - new Date(a.at))
       .map((r, i) => ({ id: i, text: r.text, time: r.at }))
     res.json(combined)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err, 'Failed to load activity')
   }
 })
 
@@ -212,14 +268,14 @@ app.get('/api/users', async (req, res) => {
     const users = await adminFetch(IDENTITY_API_URL, '/users', req.session.accessToken)
     res.json(users.map(toDashboardUser))
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err, 'Failed to load users')
   }
 })
 
 app.post('/api/users', async (req, res) => {
   try {
     const { fullName, email, tier, active, isAdmin } = req.body
-    if (!fullName || !email) return res.status(400).json({ error: 'fullName and email are required' })
+    if (!fullName || !email) return clientError(res, 400, 'fullName and email are required')
 
     const created = await adminFetch(IDENTITY_API_URL, '/users', req.session.accessToken, {
       method: 'POST',
@@ -237,7 +293,7 @@ app.post('/api/users', async (req, res) => {
       tempPassword: created.tempPassword,
     })
   } catch (err) {
-    res.status(400).json({ error: err.message })
+    clientError(res, 400, err.message || 'Failed to create user')
   }
 })
 
@@ -250,20 +306,31 @@ app.put('/api/users/:id', async (req, res) => {
     })
     res.json(toDashboardUser(updated))
   } catch (err) {
-    res.status(400).json({ error: err.message })
+    clientError(res, 400, err.message || 'Failed to update user')
   }
 })
 
 app.put('/api/users/:id/status', async (req, res) => {
   try {
     const { active } = req.body
+    if (typeof active !== 'boolean') {
+      return clientError(res, 400, 'active must be a boolean')
+    }
+    if (
+      active === false &&
+      req.session.userId &&
+      String(req.session.userId) === String(req.params.id)
+    ) {
+      return clientError(res, 400, 'You cannot deactivate your own account')
+    }
+
     await adminFetch(IDENTITY_API_URL, `/users/${req.params.id}/status`, req.session.accessToken, {
       method: 'PUT',
       body: JSON.stringify({ isActive: active }),
     })
     res.json({ ok: true, active })
   } catch (err) {
-    res.status(400).json({ error: err.message })
+    clientError(res, 400, err.message || 'Failed to update user status')
   }
 })
 

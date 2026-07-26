@@ -78,14 +78,22 @@ public sealed class TripCoversController : ControllerBase
             });
         }
 
-        var storageName = $"{Guid.NewGuid():N}{extension}";
+        await using var uploadStream = file.OpenReadStream();
+        if (!BuildingBlocks.Validation.ImageMagicBytes.TryGetExtension(uploadStream, out var detectedExtension)
+            || !AllowedExtensions.Contains(detectedExtension))
+        {
+            return BadRequest(new { message = "Nội dung tệp không phải ảnh hợp lệ." });
+        }
+
+        var storageName = $"{Guid.NewGuid():N}{detectedExtension}";
         var uploadDirectory = GetCoverDirectory(tripId);
         Directory.CreateDirectory(uploadDirectory);
         var absolutePath = Path.Combine(uploadDirectory, storageName);
 
         await using (var stream = System.IO.File.Create(absolutePath))
         {
-            await file.CopyToAsync(stream, ct);
+            uploadStream.Position = 0;
+            await uploadStream.CopyToAsync(stream, ct);
         }
 
         var previousCoverUrl = trip.CoverImageUrl;

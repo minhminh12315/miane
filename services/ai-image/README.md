@@ -7,8 +7,18 @@ FastAPI service for generating and caching destination cover images.
 ```bash
 pip install -r requirements.txt
 export OPENAI_API_KEY="sk-..."
+export AI_IMAGE_API_KEY="dev-local-key"
 uvicorn app.main:app --reload --port 8000
 ```
+
+For local unauthenticated use only (not for shared/prod hosts):
+
+```bash
+export AI_IMAGE_ALLOW_UNAUTHENTICATED=true
+```
+
+Clients must send header `X-Api-Key: <AI_IMAGE_API_KEY>` on generate endpoints.
+CORS origins are limited via `AI_IMAGE_CORS_ORIGINS` (comma-separated).
 
 On Windows PowerShell:
 

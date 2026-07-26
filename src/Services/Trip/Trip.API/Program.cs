@@ -1,6 +1,7 @@
 using BuildingBlocks.Caching;
 using BuildingBlocks.Extensions;
 using BuildingBlocks.Middleware;
+using BuildingBlocks.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -14,32 +15,29 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
-// JWT auth — only used by admin-only endpoints (regular endpoints still
-// trust the X-User-Id/X-User-Tier headers the Gateway forwards).
-var jwtKey = builder.Configuration["Jwt:Key"];
-if (!string.IsNullOrEmpty(jwtKey))
+// JWT required — TrustedUserHeadersMiddleware re-derives X-User-* from claims only.
+var jwtKey = JwtSigningKeyGuard.RequireConfiguredKey(
+    builder.Configuration["Jwt:Key"], builder.Environment);
+builder.Services.AddAuthentication(options =>
 {
-    builder.Services.AddAuthentication(options =>
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ClockSkew = TimeSpan.Zero
-        };
-    });
-    builder.Services.AddAuthorization();
-}
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+        ClockSkew = TimeSpan.Zero
+    };
+});
+builder.Services.AddAuthorization();
 
 // CORS
 var frontendOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
@@ -70,6 +68,7 @@ builder.Services.AddSingleton<ICacheService, RedisCacheService>();
 
 // BuildingBlocks: MediatR, FluentValidation, EventBus, Pipeline Behaviors
 builder.Services.AddBuildingBlocks(typeof(Program).Assembly);
+builder.Services.AddNotificationEventForwarding(builder.Configuration);
 builder.Services.AddOutboxProcessor<TripDbContext>();
 
 // Repositories
@@ -106,11 +105,9 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseCors("AllowFrontend");
-if (!string.IsNullOrEmpty(jwtKey))
-{
-    app.UseAuthentication();
-    app.UseAuthorization();
-}
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseMiddleware<TrustedUserHeadersMiddleware>();
 app.MapControllers();
 
 app.Run();

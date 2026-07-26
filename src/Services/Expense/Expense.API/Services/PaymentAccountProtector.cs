@@ -14,20 +14,26 @@ public sealed class PaymentAccountProtector
 
     public string Protect(string value) => _protector.Protect(value);
 
+    /// <summary>
+    /// Decrypts a protected account number. Throws when the payload is missing
+    /// or Data Protection keys cannot unprotect it (do not treat as empty account).
+    /// </summary>
     public string Unprotect(string? protectedValue)
     {
         if (string.IsNullOrWhiteSpace(protectedValue))
         {
-            return string.Empty;
+            throw new InvalidOperationException("Missing encrypted payment account value.");
         }
 
         try
         {
             return _protector.Unprotect(protectedValue);
         }
-        catch (CryptographicException)
+        catch (CryptographicException ex)
         {
-            return string.Empty;
+            throw new InvalidOperationException(
+                "Unable to decrypt payment account. Data protection keys may have rotated or been lost.",
+                ex);
         }
     }
 }

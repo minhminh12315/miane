@@ -407,14 +407,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       try {
         destinations = await ref.read(paymentDestinationsProvider.future);
       } catch (_) {
-        destinations = supportedPaymentDestinations;
+        destinations = supportedPaymentDestinations
+            .where((d) => !d.isWallet)
+            .toList();
       }
       if (!mounted) return;
     } else {
       destinations = loadedDestinations;
     }
-    destinations =
-        destinations.isEmpty ? supportedPaymentDestinations : destinations;
+    destinations = destinations.isEmpty
+        ? supportedPaymentDestinations.where((d) => !d.isWallet).toList()
+        : destinations.where((d) => !d.isWallet).toList();
     var selectedDestination =
         current.resolveDestination(destinations) ?? destinations.first;
     PaymentAccountValidationResult? validation = current.isConfigured

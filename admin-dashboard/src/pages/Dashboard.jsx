@@ -10,12 +10,19 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    let cancelled = false
     Promise.all([api.getStats(), api.getActivity()])
       .then(([s, a]) => {
+        if (cancelled) return
         setStats(s)
         setActivity(a)
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   if (error) {

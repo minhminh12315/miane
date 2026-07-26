@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Users from './pages/Users'
+import Databases from './pages/Databases'
 
 export default function App() {
   const { user, loading } = useAuth()
@@ -23,6 +24,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/users" element={<Users />} />
+          <Route path="/databases" element={<Databases />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

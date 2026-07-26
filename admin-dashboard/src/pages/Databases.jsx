@@ -7,13 +7,20 @@ export default function Databases() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    let cancelled = false
     api
       .getDatabases()
       .then((data) => {
+        if (cancelled) return
         setDatabases(data)
         setOpenDb(data[0]?.name ?? null)
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   if (error) {

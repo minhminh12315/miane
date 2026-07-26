@@ -6,9 +6,11 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Yarp.ReverseProxy.Transforms;
 using BuildingBlocks.Middleware;
+using BuildingBlocks.Security;
 
 var builder = WebApplication.CreateBuilder(args);
-var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is not configured");
+var jwtKey = JwtSigningKeyGuard.RequireConfiguredKey(
+    builder.Configuration["Jwt:Key"], builder.Environment);
 // ... Rest of configuration ...
 var frontendOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? new[] { "http://localhost:5173", "http://localhost:3000" };
@@ -69,19 +71,19 @@ builder.Services.AddReverseProxy()
     {
         transformBuilderContext.AddRequestTransform(transformContext =>
         {
+            // Always strip client-supplied identity headers so callers cannot
+            // forge X-User-* through the gateway on unauthenticated routes.
+            transformContext.ProxyRequest.Headers.Remove("X-User-Id");
+            transformContext.ProxyRequest.Headers.Remove("X-User-Tier");
+
             var user = transformContext.HttpContext.User;
             if (user.Identity?.IsAuthenticated == true)
             {
-                // Propagate UserId from JWT sub claim
                 var userId = user.FindFirstValue("sub")
                     ?? user.FindFirstValue(ClaimTypes.NameIdentifier)
                     ?? string.Empty;
-
-                // Propagate UserTier from custom claim
                 var userTier = user.FindFirstValue("UserTier") ?? "0";
 
-                transformContext.ProxyRequest.Headers.Remove("X-User-Id");
-                transformContext.ProxyRequest.Headers.Remove("X-User-Tier");
                 transformContext.ProxyRequest.Headers.Add("X-User-Id", userId);
                 transformContext.ProxyRequest.Headers.Add("X-User-Tier", userTier);
             }

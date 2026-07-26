@@ -25,8 +25,11 @@ Simple React admin dashboard for the MIANE system. No mock data.
    ```bash
    cd server
    npm install
+   set PGUSER=Miane
+   set PGPASSWORD=Miane_password
    npm start   # http://localhost:4000
    ```
+   On PowerShell: `$env:PGUSER="Miane"; $env:PGPASSWORD="Miane_password"; npm start`
 3. Start the frontend:
    ```bash
    npm install
@@ -45,11 +48,12 @@ From `IdentitySeeder.cs`, created on first Identity.API startup:
 
 Change these passwords (or deactivate the accounts) before this ever runs anywhere but your own machine.
 
-## Config (env vars, all optional)
+## Config (env vars)
 
 - `IDENTITY_API_URL` / `TRIP_API_URL` / `EXPENSE_API_URL` (default `http://localhost:5127` / `5128` / `5129`) — where admin API calls go
 - `FRONTEND_ORIGIN` (default `http://localhost:5173`) — allowed CORS origin for the session cookie
-- `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` (default `localhost` / `5432` / `Miane` / `Miane_password`) — direct Postgres access for the schema browser only
+- `PGHOST` / `PGPORT` (default `localhost` / `5432`) — optional
+- `PGUSER` / `PGPASSWORD` — **required**; no hardcoded defaults. Example for local docker: `PGUSER=Miane` `PGPASSWORD=Miane_password`
 
 ## Luồng hoạt động & danh sách file (ghi chú để học)
 

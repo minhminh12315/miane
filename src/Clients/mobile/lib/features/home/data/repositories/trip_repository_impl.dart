@@ -13,16 +13,20 @@ class TripRepositoryImpl implements TripRepository {
   @override
   Future<List<TripModel>> getTrips() async {
     final response = await _apiClient.get(ApiEndpoints.trips);
-    if (response is List) {
-      return response.map((json) => TripModel.fromJson(json)).toList();
-    }
-    return [];
+    if (response is! List) return [];
+    return response
+        .whereType<Map>()
+        .map((json) => TripModel.fromJson(Map<String, dynamic>.from(json)))
+        .toList();
   }
 
   @override
   Future<TripDetailModel> getTrip(String id) async {
     final response = await _apiClient.get('${ApiEndpoints.trips}/$id');
-    return TripDetailModel.fromJson(response);
+    if (response is! Map) {
+      throw const FormatException('Unexpected trip payload.');
+    }
+    return TripDetailModel.fromJson(Map<String, dynamic>.from(response));
   }
 
   @override
@@ -39,7 +43,10 @@ class TripRepositoryImpl implements TripRepository {
         'baseCurrency': baseCurrency ?? 'VND',
       },
     );
-    return response as Map<String, dynamic>;
+    if (response is! Map) {
+      throw const FormatException('Unexpected create-trip payload.');
+    }
+    return Map<String, dynamic>.from(response);
   }
 
   @override
@@ -48,7 +55,10 @@ class TripRepositoryImpl implements TripRepository {
       ApiEndpoints.trips,
       body: draft.toApiJson(),
     );
-    return TripCreationResult.fromJson(response as Map<String, dynamic>);
+    if (response is! Map) {
+      throw const FormatException('Unexpected create-trip draft payload.');
+    }
+    return TripCreationResult.fromJson(Map<String, dynamic>.from(response));
   }
 
   @override
@@ -80,7 +90,10 @@ class TripRepositoryImpl implements TripRepository {
         'nickName': nickName,
       },
     );
-    return response as Map<String, dynamic>;
+    if (response is! Map) {
+      throw const FormatException('Unexpected join-trip payload.');
+    }
+    return Map<String, dynamic>.from(response);
   }
 
   @override

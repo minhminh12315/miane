@@ -1,5 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using BuildingBlocks.Exceptions;
+using Trip.API.Data.Repositories;
 using Trip.API.Features.CreateTrip;
 using Trip.API.Features.DeleteTrip;
 using Trip.API.Features.GetTrip;
@@ -120,6 +122,26 @@ public class TripsController : ControllerBase
     {
         await _mediator.Send(new LeaveTripCommand(id, GetUserId()), ct);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Returns 200 when the caller is a member of the trip; 403 otherwise.
+    /// Used by Expense.API (and other services) to authorize trip-scoped finance ops.
+    /// </summary>
+    [HttpGet("{id:guid}/membership")]
+    public async Task<IActionResult> CheckMembership(
+        Guid id,
+        [FromServices] ITripRepository trips,
+        CancellationToken ct)
+    {
+        var userId = GetUserId();
+        var isMember = await trips.IsUserMemberOfTripAsync(id, userId, ct);
+        if (!isMember)
+        {
+            throw new ForbiddenAccessException("Bạn không phải là thành viên của chuyến đi này.");
+        }
+
+        return Ok(new { tripId = id, userId, isMember = true });
     }
 }
 

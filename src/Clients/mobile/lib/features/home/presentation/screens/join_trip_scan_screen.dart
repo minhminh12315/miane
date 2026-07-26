@@ -145,20 +145,27 @@ class _JoinTripScanScreenState extends State<JoinTripScanScreen> {
 
   /// Pulls the invite code out of a scanned payload. Accepts:
   /// - a share URL: `https://miane.app/trip/ABC123` -> `ABC123`
-  /// - a raw code: `ABC123` -> `ABC123`
+  /// - a raw code matching the server alphabet/length
+  static final RegExp _inviteCodePattern =
+      RegExp(r'^[A-HJ-NP-Z2-9]{6,12}$', caseSensitive: false);
+
   static String? _extractInviteCode(String raw) {
     final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+
     final uri = Uri.tryParse(trimmed);
     if (uri != null && uri.hasScheme && uri.pathSegments.isNotEmpty) {
-      final segments = uri.pathSegments;
+      final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
       final tripIdx = segments.indexOf('trip');
       if (tripIdx != -1 && tripIdx + 1 < segments.length) {
-        return segments[tripIdx + 1];
+        final code = segments[tripIdx + 1].toUpperCase();
+        return _inviteCodePattern.hasMatch(code) ? code : null;
       }
-      // Fallback: last non-empty path segment.
-      return segments.last;
+      return null;
     }
-    return trimmed;
+
+    final code = trimmed.toUpperCase();
+    return _inviteCodePattern.hasMatch(code) ? code : null;
   }
 
   @override

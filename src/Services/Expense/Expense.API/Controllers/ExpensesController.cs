@@ -2,6 +2,7 @@ using Expense.API.Features.CreateExpense;
 using Expense.API.Features.GetTripBalances;
 using Expense.API.Features.GetTripExpenses;
 using Expense.API.Features.SettleDebt;
+using Expense.API.Services;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,10 +13,12 @@ namespace Expense.API.Controllers;
 public class ExpensesController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly ITripMembershipClient _tripMembership;
 
-    public ExpensesController(IMediator mediator)
+    public ExpensesController(IMediator mediator, ITripMembershipClient tripMembership)
     {
         _mediator = mediator;
+        _tripMembership = tripMembership;
     }
 
     private Guid GetUserId() =>
@@ -25,6 +28,8 @@ public class ExpensesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateExpense([FromBody] CreateExpenseRequest request, CancellationToken ct)
     {
+        await _tripMembership.EnsureMemberAsync(request.TripId, ct);
+
         var result = await _mediator.Send(new CreateExpenseCommand(
             request.TripId,
             request.Description,
@@ -45,6 +50,7 @@ public class ExpensesController : ControllerBase
     [HttpGet("trip/{tripId:guid}")]
     public async Task<IActionResult> GetTripExpenses(Guid tripId, CancellationToken ct)
     {
+        await _tripMembership.EnsureMemberAsync(tripId, ct);
         var result = await _mediator.Send(new GetTripExpensesQuery(tripId), ct);
         return Ok(result);
     }
@@ -52,6 +58,7 @@ public class ExpensesController : ControllerBase
     [HttpGet("trip/{tripId:guid}/balances")]
     public async Task<IActionResult> GetTripBalances(Guid tripId, CancellationToken ct)
     {
+        await _tripMembership.EnsureMemberAsync(tripId, ct);
         var result = await _mediator.Send(new GetTripBalancesQuery(tripId), ct);
         return Ok(result);
     }

@@ -139,7 +139,15 @@ public class PaymentMethodsController : ControllerBase
     private PaymentMethodResponse ToResponse(PaymentMethod method)
     {
         var capabilities = ReadCapabilities(method.CapabilitiesJson);
-        var accountNumber = _protector.Unprotect(method.BankAccountNoEncrypted);
+        string maskedAccount;
+        try
+        {
+            maskedAccount = MaskAccountNumber(_protector.Unprotect(method.BankAccountNoEncrypted));
+        }
+        catch (InvalidOperationException)
+        {
+            maskedAccount = "****";
+        }
 
         return new PaymentMethodResponse(
             method.Id,
@@ -151,10 +159,26 @@ public class PaymentMethodsController : ControllerBase
             capabilities?.BankName ?? string.Empty,
             capabilities?.BankShortName ?? method.DisplayName,
             capabilities?.BankLogoUrl ?? string.Empty,
-            accountNumber,
+            maskedAccount,
             method.BankAccountName ?? string.Empty,
             method.IsDefaultReceive,
             method.Status.ToString());
+    }
+
+    private static string MaskAccountNumber(string accountNumber)
+    {
+        if (string.IsNullOrWhiteSpace(accountNumber))
+        {
+            return "****";
+        }
+
+        var digits = accountNumber.Trim();
+        if (digits.Length <= 4)
+        {
+            return new string('*', digits.Length);
+        }
+
+        return new string('*', digits.Length - 4) + digits[^4..];
     }
 
     internal static PaymentMethodCapabilities? ReadCapabilities(string? json)

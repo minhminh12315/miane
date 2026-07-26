@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { useAuth } from '../AuthContext'
 
 const emptyForm = { fullName: '', email: '', tier: 'Basic', active: true, isAdmin: false }
 
 export default function Users() {
+  const { user: currentUser } = useAuth()
   const [users, setUsers] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
@@ -14,7 +16,19 @@ export default function Users() {
     api.getUsers().then(setUsers).catch((err) => setError(err.message))
   }
 
-  useEffect(loadUsers, [])
+  useEffect(() => {
+    let cancelled = false
+    api.getUsers()
+      .then((data) => {
+        if (!cancelled) setUsers(data)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function handleChange(e) {
     const { name, value, type, checked } = e.target
@@ -49,6 +63,10 @@ export default function Users() {
 
   async function handleToggleActive(user) {
     setError(null)
+    if (currentUser?.email && user.email === currentUser.email) {
+      setError('You cannot deactivate your own account.')
+      return
+    }
     try {
       await api.setUserActive(user.id, !user.active)
       loadUsers()

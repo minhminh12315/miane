@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Identity; 
 using Identity.API.Data;
@@ -25,20 +26,33 @@ namespace Identity.API.Services
         private readonly ICacheService _cacheService;
         private readonly IConfiguration _config;
         private readonly IEmailService _emailService;
-
+        private readonly IHostEnvironment _environment;
         private readonly ILogger<AuthService> _logger;
 
-        public AuthService(UserManager<User> userManager, ICacheService cacheService, IConfiguration config, IEmailService emailService, ILogger<AuthService> logger)
+        public AuthService(
+            UserManager<User> userManager,
+            ICacheService cacheService,
+            IConfiguration config,
+            IEmailService emailService,
+            IHostEnvironment environment,
+            ILogger<AuthService> logger)
         {
             _userManager = userManager;
             _cacheService = cacheService;
             _config = config;
             _emailService = emailService;
+            _environment = environment;
             _logger = logger;
         }
 
         public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
         {
+            if (!_environment.IsDevelopment())
+            {
+                throw new InvalidOperationException(
+                    "Đăng ký trực tiếp đã bị tắt. Vui lòng dùng luồng xác minh OTP.");
+            }
+
             var existingUser = await _userManager.FindByEmailAsync(request.Email);
             if (existingUser is not null)
             {
@@ -94,15 +108,17 @@ namespace Identity.API.Services
             var otpCode = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
             _logger.LogInformation("[SendOtp] Generated OTP for {Email}", request.Email);
 
-            // Store OTP + registration data in Redis with 5-minute TTL
+            // Store OTP + hashed password (never plaintext) in Redis with 5-minute TTL
+            var passwordHasher = new PasswordHasher<User>();
             var cacheKey = $"reg_otp_{request.Email.ToLowerInvariant()}";
             var cacheData = new RegistrationOtpData
             {
                 OtpCode = otpCode,
                 Email = request.Email,
-                Password = request.Password,
+                PasswordHash = passwordHasher.HashPassword(tempUser, request.Password),
                 FullName = request.FullName,
                 AvatarUrl = request.AvatarUrl,
+                FailedAttempts = 0,
                 CreatedAt = DateTime.UtcNow
             };
             
@@ -133,6 +149,7 @@ namespace Identity.API.Services
 
         public async Task<AuthResponse> VerifyRegistrationOtpAsync(string email, string otpCode)
         {
+            const int maxOtpAttempts = 5;
             var cacheKey = $"reg_otp_{email.ToLowerInvariant()}";
             var cachedData = await _cacheService.GetAsync<RegistrationOtpData>(cacheKey);
 
@@ -141,16 +158,42 @@ namespace Identity.API.Services
                 throw new InvalidOperationException("Mã OTP đã hết hạn hoặc không tồn tại. Vui lòng yêu cầu mã mới.");
             }
 
-            if (cachedData.OtpCode != otpCode)
+            if (cachedData.FailedAttempts >= maxOtpAttempts)
             {
+                await _cacheService.RemoveAsync(cacheKey);
+                throw new InvalidOperationException("Đã nhập sai OTP quá nhiều lần. Vui lòng yêu cầu mã mới.");
+            }
+
+            if (!SecureEquals(cachedData.OtpCode, otpCode))
+            {
+                cachedData.FailedAttempts++;
+                if (cachedData.FailedAttempts >= maxOtpAttempts)
+                {
+                    await _cacheService.RemoveAsync(cacheKey);
+                    throw new InvalidOperationException("Đã nhập sai OTP quá nhiều lần. Vui lòng yêu cầu mã mới.");
+                }
+
+                var remainingTtl = TimeSpan.FromMinutes(5) - (DateTime.UtcNow - cachedData.CreatedAt);
+                if (remainingTtl < TimeSpan.FromSeconds(30))
+                {
+                    remainingTtl = TimeSpan.FromSeconds(30);
+                }
+
+                await _cacheService.SetAsync(cacheKey, cachedData, remainingTtl);
                 throw new InvalidOperationException("Mã OTP không chính xác.");
             }
 
-            // OTP is valid — create the user
+            // OTP is valid — create the user with the pre-hashed password
             var existingUser = await _userManager.FindByEmailAsync(cachedData.Email);
             if (existingUser is not null)
             {
                 throw new InvalidOperationException("Email này đã được đăng ký.");
+            }
+
+            if (string.IsNullOrWhiteSpace(cachedData.PasswordHash))
+            {
+                await _cacheService.RemoveAsync(cacheKey);
+                throw new InvalidOperationException("Phiên đăng ký không hợp lệ. Vui lòng yêu cầu mã mới.");
             }
 
             var user = new User
@@ -164,13 +207,15 @@ namespace Identity.API.Services
                 IsEmployee = false
             };
 
-            var result = await _userManager.CreateAsync(user, cachedData.Password);
+            var result = await _userManager.CreateAsync(user);
             if (!result.Succeeded)
             {
                 throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => e.Description)));
             }
 
-            // Remove OTP from cache
+            user.PasswordHash = cachedData.PasswordHash;
+            await _userManager.UpdateAsync(user);
+
             await _cacheService.RemoveAsync(cacheKey);
 
             return await CreateAuthResponseAsync(user);
@@ -219,6 +264,20 @@ namespace Identity.API.Services
 
             if (!SecureEquals(cachedData.OtpCode, request.OtpCode))
             {
+                cachedData.FailedAttempts++;
+                if (cachedData.FailedAttempts >= 5)
+                {
+                    await _cacheService.RemoveAsync(cacheKey);
+                    throw new InvalidOperationException("Đã nhập sai mã quá nhiều lần. Vui lòng yêu cầu mã mới.");
+                }
+
+                var remainingTtl = TimeSpan.FromMinutes(5) - (DateTime.UtcNow - cachedData.CreatedAt);
+                if (remainingTtl < TimeSpan.FromSeconds(30))
+                {
+                    remainingTtl = TimeSpan.FromSeconds(30);
+                }
+
+                await _cacheService.SetAsync(cacheKey, cachedData, remainingTtl);
                 throw new InvalidOperationException("Mã đặt lại mật khẩu không chính xác.");
             }
 
@@ -243,14 +302,23 @@ namespace Identity.API.Services
 
         public async Task<AuthResponse?> LoginAsync(LoginRequest request) 
         {
-            // 1. Find User by Email and check if active
             var user = await _userManager.FindByEmailAsync(request.Email);
-            if(user == null || !user.IsActive) return null;
+            if (user == null || !user.IsActive) return null;
 
-            // 2. Validate password
+            if (await _userManager.IsLockedOutAsync(user))
+            {
+                _logger.LogWarning("Login blocked for locked-out user {Email}", request.Email);
+                return null;
+            }
+
             var isPasswordValid = await _userManager.CheckPasswordAsync(user, request.Password);
-            if (!isPasswordValid) return null;
+            if (!isPasswordValid)
+            {
+                await _userManager.AccessFailedAsync(user);
+                return null;
+            }
 
+            await _userManager.ResetAccessFailedCountAsync(user);
             return await CreateAuthResponseAsync(user);
         }
 
@@ -260,7 +328,14 @@ namespace Identity.API.Services
             string fullName = string.Empty;
             string? avatarUrl = null;
 
-            if (request.IdToken == "mock_google_token")
+            // Mock Google login is Development-only and requires an explicit
+            // mock token or Google:BypassValidation=true. Never match "mock"
+            // as a substring of arbitrary tokens.
+            var allowDevMock = _environment.IsDevelopment()
+                && (request.IdToken == "mock_google_token"
+                    || _config.GetValue<bool>("Google:BypassValidation", false));
+
+            if (allowDevMock && request.IdToken == "mock_google_token")
             {
                 email = "google_test@miane.com";
                 fullName = "Google Tester";
@@ -284,16 +359,19 @@ namespace Identity.API.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to validate Google ID Token. Falling back to Mock for debugging if token contains mock or bypass config is active.");
-                    if (_config.GetValue<bool>("Google:BypassValidation", false) || (request.IdToken != null && request.IdToken.Contains("mock")))
+                    if (allowDevMock && _config.GetValue<bool>("Google:BypassValidation", false))
                     {
+                        _logger.LogWarning(ex,
+                            "Google token validation failed; using Development BypassValidation mock user.");
                         email = "google_test@miane.com";
                         fullName = "Google Tester";
                         avatarUrl = "https://lh3.googleusercontent.com/a/mock-avatar-url";
                     }
                     else
                     {
-                        throw new InvalidOperationException("Xác thực tài khoản Google không hợp lệ hoặc đã hết hạn.", ex);
+                        _logger.LogError(ex, "Failed to validate Google ID Token.");
+                        throw new InvalidOperationException(
+                            "Xác thực tài khoản Google không hợp lệ hoặc đã hết hạn.", ex);
                     }
                 }
             }
@@ -355,6 +433,7 @@ namespace Identity.API.Services
             var refreshToken = Guid.NewGuid().ToString(); 
 
             await _cacheService.SetAsync($"session_{user.Id}", refreshToken, TimeSpan.FromDays(7));
+            await _cacheService.SetAsync($"refresh_{refreshToken}", user.Id.ToString(), TimeSpan.FromDays(7));
 
             return new AuthResponse
             {
@@ -420,8 +499,10 @@ namespace Identity.API.Services
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        public async Task<AuthResponse> UpgradeToProAsync(Guid userId)
+        public async Task<AuthResponse> UpgradeToProAsync(Guid userId, UpgradeProRequest? purchase = null)
         {
+            ValidateProPurchaseEvidence(purchase);
+
             var user = await _userManager.FindByIdAsync(userId.ToString())
                 ?? throw new InvalidOperationException("Không tìm thấy người dùng.");
 
@@ -437,16 +518,77 @@ namespace Identity.API.Services
             return await CreateAuthResponseAsync(user);
         }
 
+        private void ValidateProPurchaseEvidence(UpgradeProRequest? purchase)
+        {
+            // Development may upgrade without a receipt for StoreKit Testing /
+            // simulator flows. Outside Development a non-empty store receipt is
+            // required. Full App Store Server API / Play Developer API verify
+            // should replace this gate before public billing ships.
+            if (_environment.IsDevelopment())
+            {
+                return;
+            }
+
+            if (purchase is null
+                || string.IsNullOrWhiteSpace(purchase.ReceiptData)
+                || string.IsNullOrWhiteSpace(purchase.Platform))
+            {
+                throw new InvalidOperationException(
+                    "Nâng cấp Pro yêu cầu bằng chứng mua hàng từ App Store / Play (receipt).");
+            }
+
+            var platform = purchase.Platform.Trim().ToLowerInvariant();
+            if (platform is not ("ios" or "android"))
+            {
+                throw new InvalidOperationException("Platform mua hàng không hợp lệ.");
+            }
+
+            if (purchase.ReceiptData.Contains("mock", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Receipt mock không được chấp nhận ngoài Development.");
+            }
+
+            _logger.LogInformation(
+                "Pro upgrade receipt accepted for verification pipeline: platform={Platform}, product={ProductId}, tx={TransactionId}, receiptLength={Length}",
+                platform,
+                purchase.ProductId,
+                purchase.TransactionId,
+                purchase.ReceiptData.Length);
+        }
+
         public async Task LogoutAsync(string userId)
         {
+            var existingRefresh = await _cacheService.GetAsync<string>($"session_{userId}");
             await _cacheService.RemoveAsync($"session_{userId}");
+            if (!string.IsNullOrWhiteSpace(existingRefresh))
+            {
+                await _cacheService.RemoveAsync($"refresh_{existingRefresh}");
+            }
         }
 
         public async Task<AuthResponse?> RefreshAsync(RefreshTokenRequest request)
         {
-            var cachedToken = await _cacheService.GetAsync<string>($"session_{request.UserId}");
-            if (string.IsNullOrWhiteSpace(cachedToken) ||
-                string.IsNullOrWhiteSpace(request.RefreshToken))
+            if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                return null;
+            }
+
+            Guid userId;
+            if (request.UserId is Guid explicitUserId && explicitUserId != Guid.Empty)
+            {
+                userId = explicitUserId;
+            }
+            else
+            {
+                var mappedUserId = await _cacheService.GetAsync<string>($"refresh_{request.RefreshToken}");
+                if (string.IsNullOrWhiteSpace(mappedUserId) || !Guid.TryParse(mappedUserId, out userId))
+                {
+                    return null;
+                }
+            }
+
+            var cachedToken = await _cacheService.GetAsync<string>($"session_{userId}");
+            if (string.IsNullOrWhiteSpace(cachedToken))
             {
                 return null;
             }
@@ -459,15 +601,15 @@ namespace Identity.API.Services
                 return null;
             }
 
-            var user = await _userManager.FindByIdAsync(request.UserId.ToString());
+            var user = await _userManager.FindByIdAsync(userId.ToString());
             if (user is null || !user.IsActive)
             {
-                await _cacheService.RemoveAsync($"session_{request.UserId}");
+                await LogoutAsync(userId.ToString());
                 return null;
             }
 
-            // CreateAuthResponseAsync rotates the refresh token and replaces
-            // the cached session, preventing reuse of the previous token.
+            // Rotate: drop old refresh index before issuing a new pair.
+            await _cacheService.RemoveAsync($"refresh_{request.RefreshToken}");
             return await CreateAuthResponseAsync(user);
         }
 
@@ -493,9 +635,11 @@ namespace Identity.API.Services
     {
         public string OtpCode { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
-        public string Password { get; set; } = string.Empty;
+        /// <summary>ASP.NET Identity password hash — never store plaintext.</summary>
+        public string PasswordHash { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
         public string? AvatarUrl { get; set; }
+        public int FailedAttempts { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 
@@ -505,6 +649,7 @@ namespace Identity.API.Services
         public string Email { get; set; } = string.Empty;
         public string OtpCode { get; set; } = string.Empty;
         public string ResetToken { get; set; } = string.Empty;
+        public int FailedAttempts { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 }

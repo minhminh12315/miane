@@ -1,6 +1,12 @@
-const BASE_URL = 'http://localhost:4000/api'
+const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 class AuthError extends Error {}
+
+let onUnauthorized = null
+
+export function setUnauthorizedHandler(handler) {
+  onUnauthorized = handler
+}
 
 async function request(path, options) {
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -10,7 +16,11 @@ async function request(path, options) {
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    if (res.status === 401) throw new AuthError(body.error || 'Not authenticated')
+    if (res.status === 401) {
+      const err = new AuthError(body.error || 'Not authenticated')
+      if (onUnauthorized) onUnauthorized()
+      throw err
+    }
     throw new Error(body.error || `Request failed: ${res.status}`)
   }
   return res.json()

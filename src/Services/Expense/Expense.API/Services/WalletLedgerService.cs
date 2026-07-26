@@ -60,62 +60,106 @@ public sealed class WalletLedgerService
 
     public async Task<WalletTransaction> PostAsync(
         WalletPostRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool manageTransaction = true)
     {
         if (request.Amount < 0)
         {
             throw new DomainException("Số tiền giao dịch ví không được là số âm.", "INVALID_WALLET_TRANSACTION_AMOUNT");
         }
 
-        await using var dbTransaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-        var wallet = await _dbContext.TripWallets
-            .FirstOrDefaultAsync(w => w.Id == request.WalletId, cancellationToken)
-            ?? throw new NotFoundException("ví chung", request.WalletId);
-
-        if (!string.Equals(wallet.Currency, request.Currency, StringComparison.OrdinalIgnoreCase))
+        async Task<WalletTransaction> ExecuteCoreAsync()
         {
-            throw new DomainException("Đơn vị tiền tệ của giao dịch phải khớp với đơn vị tiền tệ của ví.", "WALLET_CURRENCY_MISMATCH");
+            const int maxAttempts = 3;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                try
+                {
+                    var wallet = await _dbContext.TripWallets
+                        .FirstOrDefaultAsync(w => w.Id == request.WalletId, cancellationToken)
+                        ?? throw new NotFoundException("ví chung", request.WalletId);
+
+                    if (!string.Equals(wallet.Currency, request.Currency, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new DomainException("Đơn vị tiền tệ của giao dịch phải khớp với đơn vị tiền tệ của ví.", "WALLET_CURRENCY_MISMATCH");
+                    }
+
+                    var walletTransaction = new WalletTransaction
+                    {
+                        TripWalletId = wallet.Id,
+                        TransactionNo = await GenerateTransactionNoAsync(wallet.TripId, cancellationToken),
+                        Type = request.Type,
+                        Direction = request.Direction,
+                        Amount = request.Amount,
+                        Currency = request.Currency.ToUpperInvariant(),
+                        ActorUserId = request.ActorUserId,
+                        CounterpartyUserId = request.CounterpartyUserId,
+                        ExpenseId = request.ExpenseId,
+                        FundContributionId = request.FundContributionId,
+                        PaymentId = request.PaymentId,
+                        ReversesTransactionId = request.ReversesTransactionId,
+                        OccurredAt = request.OccurredAt ?? DateTime.UtcNow,
+                        MetadataJson = request.MetadataJson
+                    };
+
+                    wallet.ApplyPostedTransaction(walletTransaction);
+                    await _dbContext.WalletTransactions.AddAsync(walletTransaction, cancellationToken);
+
+                    _dbContext.TransactionHistories.Add(new TransactionHistory
+                    {
+                        TripId = wallet.TripId,
+                        ActorUserId = request.ActorUserId,
+                        EntityType = "wallet_transaction",
+                        EntityId = walletTransaction.Id,
+                        Action = "posted",
+                        Amount = request.Amount,
+                        Currency = request.Currency.ToUpperInvariant(),
+                        Title = BuildHistoryTitle(request.Type, request.Amount, request.Currency),
+                        OccurredAt = walletTransaction.OccurredAt,
+                        MetadataJson = request.MetadataJson
+                    });
+
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    return walletTransaction;
+                }
+                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+                {
+                    foreach (var entry in _dbContext.ChangeTracker.Entries().ToList())
+                    {
+                        if (entry.Entity is WalletTransaction or TransactionHistory)
+                        {
+                            entry.State = EntityState.Detached;
+                        }
+                        else if (entry.Entity is TripWallet)
+                        {
+                            await entry.ReloadAsync(cancellationToken);
+                        }
+                    }
+                }
+            }
+
+            throw new DomainException(
+                "Ví đang được cập nhật bởi giao dịch khác. Vui lòng thử lại.",
+                "WALLET_CONCURRENCY_CONFLICT");
         }
 
-        var walletTransaction = new WalletTransaction
+        if (!manageTransaction)
         {
-            TripWalletId = wallet.Id,
-            TransactionNo = await GenerateTransactionNoAsync(wallet.TripId, cancellationToken),
-            Type = request.Type,
-            Direction = request.Direction,
-            Amount = request.Amount,
-            Currency = request.Currency.ToUpperInvariant(),
-            ActorUserId = request.ActorUserId,
-            CounterpartyUserId = request.CounterpartyUserId,
-            ExpenseId = request.ExpenseId,
-            FundContributionId = request.FundContributionId,
-            PaymentId = request.PaymentId,
-            ReversesTransactionId = request.ReversesTransactionId,
-            OccurredAt = request.OccurredAt ?? DateTime.UtcNow,
-            MetadataJson = request.MetadataJson
-        };
+            return await ExecuteCoreAsync();
+        }
 
-        wallet.ApplyPostedTransaction(walletTransaction);
-        await _dbContext.WalletTransactions.AddAsync(walletTransaction, cancellationToken);
-
-        _dbContext.TransactionHistories.Add(new TransactionHistory
+        await using var dbTransaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            TripId = wallet.TripId,
-            ActorUserId = request.ActorUserId,
-            EntityType = "wallet_transaction",
-            EntityId = walletTransaction.Id,
-            Action = "posted",
-            Amount = request.Amount,
-            Currency = request.Currency.ToUpperInvariant(),
-            Title = BuildHistoryTitle(request.Type, request.Amount, request.Currency),
-            OccurredAt = walletTransaction.OccurredAt,
-            MetadataJson = request.MetadataJson
-        });
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await dbTransaction.CommitAsync(cancellationToken);
-        return walletTransaction;
+            var result = await ExecuteCoreAsync();
+            await dbTransaction.CommitAsync(cancellationToken);
+            return result;
+        }
+        catch
+        {
+            await dbTransaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task<decimal> RebuildBalanceAsync(Guid walletId, CancellationToken cancellationToken = default)

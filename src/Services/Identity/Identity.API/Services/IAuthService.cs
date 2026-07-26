@@ -15,7 +15,7 @@ namespace Identity.API.Services
         Task<AuthResponse> VerifyRegistrationOtpAsync(string email, string otpCode);
         Task SendPasswordResetOtpAsync(ForgotPasswordRequest request);
         Task ResetPasswordAsync(ResetPasswordRequest request);
-        Task<AuthResponse> UpgradeToProAsync(Guid userId);
+        Task<AuthResponse> UpgradeToProAsync(Guid userId, UpgradeProRequest? purchase = null);
         Task<AuthResponse> LoginGoogleAsync(GoogleLoginRequest request);
     }
 }

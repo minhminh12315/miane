@@ -14,9 +14,14 @@ class NotificationRepositoryImpl implements NotificationRepository {
   Future<NotificationFeed> getNotifications() async {
     final response = await _apiClient.get(ApiEndpoints.notifications);
     if (response is Map && response.containsKey('notifications')) {
-      final list = response['notifications'] as List;
-      final notifications =
-          list.map((json) => NotificationModel.fromJson(json)).toList();
+      final list = response['notifications'];
+      if (list is! List) {
+        return const NotificationFeed(notifications: [], unreadCount: 0);
+      }
+      final notifications = list
+          .whereType<Map>()
+          .map((json) => NotificationModel.fromJson(Map<String, dynamic>.from(json)))
+          .toList();
       final unreadCount = response['unreadCount'] is int
           ? response['unreadCount'] as int
           : int.tryParse(response['unreadCount']?.toString() ?? '') ?? 0;

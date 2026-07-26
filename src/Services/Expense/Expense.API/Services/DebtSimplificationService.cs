@@ -1,5 +1,6 @@
 using Expense.API.Data;
 using Expense.API.Domain.Entities;
+using Expense.API.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -38,7 +39,7 @@ public sealed class DebtSimplificationService
         // Step 1: Calculate net balances from all non-pool expenses
         var expenses = await _dbContext.Expenses
             .Include(e => e.Splits)
-            .Where(e => e.TripId == tripId && !e.IsPaidFromPool)
+            .Where(e => e.TripId == tripId && !e.IsPaidFromPool && e.Status != ExpenseStatus.Voided)
             .ToListAsync(cancellationToken);
 
         var netBalances = new Dictionary<Guid, decimal>();

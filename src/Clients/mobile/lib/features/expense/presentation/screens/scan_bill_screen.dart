@@ -60,7 +60,11 @@ class _ScanBillScreenState extends ConsumerState<ScanBillScreen> {
     }
     if (picked == null) return;
 
-    _navigated = false;
+    final current = ref.read(scanBillControllerProvider);
+    if (current.status == ScanBillStatus.recognizing || _navigated) {
+      return;
+    }
+
     await ref.read(scanBillControllerProvider.notifier).scanReceipt(
           File(picked.path),
           fallbackDescription: widget.destination,
@@ -119,6 +123,7 @@ class _ScanBillScreenState extends ConsumerState<ScanBillScreen> {
           ),
         )
             .then((_) {
+          _navigated = false;
           ref.read(scanBillControllerProvider.notifier).reset();
         });
       }

@@ -8,15 +8,20 @@ namespace Expense.API.Controllers;
 public class DebtsV2Controller : ControllerBase
 {
     private readonly DebtOptimizationServiceV2 _debtOptimization;
+    private readonly ITripMembershipClient _tripMembership;
 
-    public DebtsV2Controller(DebtOptimizationServiceV2 debtOptimization)
+    public DebtsV2Controller(
+        DebtOptimizationServiceV2 debtOptimization,
+        ITripMembershipClient tripMembership)
     {
         _debtOptimization = debtOptimization;
+        _tripMembership = tripMembership;
     }
 
     [HttpPost("recalculate")]
     public async Task<IActionResult> Recalculate(Guid tripId, [FromBody] RecalculateDebtsRequest? request, CancellationToken ct)
     {
+        await _tripMembership.EnsureMemberAsync(tripId, ct);
         var debts = await _debtOptimization.RecalculateAsync(tripId, request?.Currency ?? "VND", ct);
 
         return Ok(new RecalculateDebtsResponse(

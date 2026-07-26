@@ -47,9 +47,14 @@ class AuthResponseModel {
 
   factory AuthResponseModel.fromJson(Map<String, dynamic> json) {
     final userJson = json['user'] as Map<String, dynamic>? ?? {};
+    final accessToken = json['accessToken'] as String? ?? '';
+    final refreshToken = json['refreshToken'] as String? ?? '';
+    if (accessToken.isEmpty || refreshToken.isEmpty) {
+      throw FormatException('Auth response missing accessToken or refreshToken.');
+    }
     return AuthResponseModel(
-      accessToken: json['accessToken'] as String? ?? '',
-      refreshToken: json['refreshToken'] as String? ?? '',
+      accessToken: accessToken,
+      refreshToken: refreshToken,
       user: UserModel.fromJson(userJson),
     );
   }

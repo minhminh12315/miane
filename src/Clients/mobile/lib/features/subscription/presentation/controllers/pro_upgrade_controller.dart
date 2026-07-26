@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -116,19 +117,34 @@ class ProUpgradeController extends _$ProUpgradeController {
 
   Future<void> _confirmWithBackend(PurchaseDetails purchase) async {
     try {
-      // DEV NOTE: trusts the local purchase result — no server-side receipt
-      // verification yet. See AuthController.UpgradeToPro remarks.
-      await ref.read(authRepositoryProvider).upgradeToPro();
+      final platform = Platform.isIOS
+          ? 'ios'
+          : Platform.isAndroid
+              ? 'android'
+              : 'dev';
+      final receipt = purchase.verificationData.serverVerificationData;
+      if (receipt.isEmpty) {
+        throw StateError('Thiếu receipt từ cửa hàng ứng dụng.');
+      }
+
+      await ref.read(authRepositoryProvider).upgradeToPro(
+            platform: platform,
+            receiptData: receipt,
+            productId: purchase.productID,
+            transactionId: purchase.purchaseID,
+          );
       ref.invalidate(currentUserTierProvider);
+      ref.read(authSessionRevisionProvider.notifier).state++;
       state = state.copyWith(status: ProUpgradeStatus.success);
+      // Only finish the store transaction after backend upgrade succeeds so
+      // a failed confirm can be retried from the purchase stream.
+      await _iapService.completePurchase(purchase);
     } catch (e) {
       state = state.copyWith(
         status: ProUpgradeStatus.error,
         errorMessage:
             'Thanh toán thành công nhưng không thể nâng cấp tài khoản: $e',
       );
-    } finally {
-      await _iapService.completePurchase(purchase);
     }
   }
 }

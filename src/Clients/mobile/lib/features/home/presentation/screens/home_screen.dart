@@ -123,84 +123,89 @@ class HomeScreen extends ConsumerWidget {
     final codeController = TextEditingController();
     final nickController = TextEditingController();
 
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('Tham gia chuyến đi'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 14),
-          child: Column(
-            children: [
-              IosTextField(
-                controller: codeController,
-                placeholder: 'Mã mời',
-                prefixIcon: CupertinoIcons.number,
-              ),
-              const SizedBox(height: 10),
-              IosTextField(
-                controller: nickController,
-                placeholder: 'Biệt danh của bạn',
-                prefixIcon: CupertinoIcons.person,
-              ),
-              const SizedBox(height: 6),
-              CupertinoButton(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                onPressed: () async {
-                  final scanned = await Navigator.of(context).push<String>(
-                    CupertinoPageRoute(
-                      builder: (_) => const JoinTripScanScreen(),
-                    ),
-                  );
-                  if (scanned != null && scanned.isNotEmpty) {
-                    codeController.text = scanned;
-                  }
-                },
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(CupertinoIcons.qrcode_viewfinder, size: 20),
-                    SizedBox(width: 6),
-                    Text('Quét mã QR'),
-                  ],
+    try {
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: const Text('Tham gia chuyến đi'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Column(
+              children: [
+                IosTextField(
+                  controller: codeController,
+                  placeholder: 'Mã mời',
+                  prefixIcon: CupertinoIcons.number,
                 ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Hủy'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () async {
-              final code = codeController.text.trim();
-              final nick = nickController.text.trim();
-              if (code.isEmpty) return;
-
-              try {
-                await ref.read(tripsProvider.notifier).joinTrip(
-                      code,
-                      nick.isEmpty ? null : nick,
+                const SizedBox(height: 10),
+                IosTextField(
+                  controller: nickController,
+                  placeholder: 'Biệt danh của bạn',
+                  prefixIcon: CupertinoIcons.person,
+                ),
+                const SizedBox(height: 6),
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  onPressed: () async {
+                    final scanned = await Navigator.of(context).push<String>(
+                      CupertinoPageRoute(
+                        builder: (_) => const JoinTripScanScreen(),
+                      ),
                     );
-                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-              } catch (e) {
-                if (context.mounted) {
-                  await showIosMessage(
-                    context,
-                    message:
-                        'Không thể tham gia: ${e.toString().replaceAll('ApiException: ', '')}',
-                    isError: true,
-                  );
-                }
-              }
-            },
-            child: const Text('Tham gia'),
+                    if (scanned != null && scanned.isNotEmpty) {
+                      codeController.text = scanned;
+                    }
+                  },
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(CupertinoIcons.qrcode_viewfinder, size: 20),
+                      SizedBox(width: 6),
+                      Text('Quét mã QR'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
-    );
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Hủy'),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () async {
+                final code = codeController.text.trim();
+                final nick = nickController.text.trim();
+                if (code.isEmpty) return;
+
+                try {
+                  await ref.read(tripsProvider.notifier).joinTrip(
+                        code,
+                        nick.isEmpty ? null : nick,
+                      );
+                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                } catch (e) {
+                  if (context.mounted) {
+                    await showIosMessage(
+                      context,
+                      message:
+                          'Không thể tham gia: ${e.toString().replaceAll('ApiException: ', '')}',
+                      isError: true,
+                    );
+                  }
+                }
+              },
+              child: const Text('Tham gia'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      codeController.dispose();
+      nickController.dispose();
+    }
   }
 
   Future<bool> _ensurePaymentAccountConfigured(

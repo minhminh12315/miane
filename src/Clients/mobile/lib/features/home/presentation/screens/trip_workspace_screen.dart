@@ -19,10 +19,12 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
 import '../../../auth/presentation/controllers/app_auth_provider.dart';
 import '../../../expense/domain/models/expense_models.dart';
+import '../../../expense/domain/models/scan_bill_result.dart';
 import '../../../expense/presentation/controllers/expense_controller.dart';
 import '../../../expense/presentation/controllers/pool_controller.dart';
 import '../../../expense/presentation/controllers/scan_bill_controller.dart';
 import '../../../expense/presentation/screens/scan_bill_screen.dart';
+import '../../../expense/presentation/screens/scan_result_review_screen.dart';
 import '../../data/repositories/trip_repository_impl.dart';
 import '../../domain/models/trip_leg_model.dart';
 import '../../domain/models/trip_models.dart';
@@ -356,7 +358,14 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                                   _showDebtPaymentDialog(debt, detailsState),
                               child: const Text('Trả'),
                             )
-                          : null,
+                          : debt.toUserId.toLowerCase() == currentUserId
+                              ? CupertinoButton(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                  onPressed: () => _confirmDebtReceived(debt),
+                                  child: const Text('Xác nhận'),
+                                )
+                              : null,
                     );
                   }).toList(),
                 ),
@@ -2165,7 +2174,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
         qr: qr,
         recipientLabel: toName,
         confirmLabel: 'Đã chuyển',
-        onConfirmed: () => _confirmDebtPaid(debt),
+        onConfirmed: () => _markDebtTransferSent(debt),
       );
     } catch (e) {
       if (mounted) {
@@ -2179,6 +2188,50 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     }
   }
 
+  Future<void> _markDebtTransferSent(DebtModel debt) async {
+    if (!mounted) return;
+    await showIosMessage(
+      context,
+      title: 'Đã báo chuyển tiền',
+      message:
+          'Khoản nợ sẽ được đóng khi người nhận xác nhận đã nhận tiền.',
+    );
+  }
+
+  Future<void> _confirmDebtReceived(DebtModel debt) async {
+    final confirmed = await showIosConfirm(
+      context,
+      title: 'Xác nhận đã nhận?',
+      message:
+          'Chỉ xác nhận khi bạn đã nhận đủ tiền chuyển khoản từ người nợ.',
+      confirmLabel: 'Đã nhận',
+    );
+    if (!confirmed) return;
+
+    try {
+      await ref
+          .read(tripBalancesProvider(widget.tripId).notifier)
+          .settle(debt.debtRecordId);
+      if (mounted) {
+        await showIosMessage(
+          context,
+          title: 'Đã tất toán',
+          message: 'Khoản nợ đã được xác nhận và đóng.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        await showIosMessage(
+          context,
+          message:
+              'Không thể xác nhận: ${e.toString().replaceAll('ApiException: ', '')}',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  // ignore: unused_element
   Future<void> _confirmDebtPaid(DebtModel debt) async {
     try {
       await ref
@@ -2542,11 +2595,7 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
     }
   }
 
-  /// Expense creation is scan-only (no manual entry): the user picks whether
-  /// they're scanning an itemized bill or a bank-transfer slip, and both go
-  /// through the on-device OCR + review flow (ScanBillScreen ->
-  /// ScanResultReviewScreen). The review screen still allows editing every
-  /// field before saving, keeping a human in the loop.
+  /// Expense creation: scan (OCR) or manual entry via the same review screen.
   void _showAddExpenseSheet(
     BuildContext context,
     AsyncValue<TripDetailModel> detailsState,
@@ -2571,12 +2620,33 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
           );
         }
 
+        void openManualEntry() {
+          Navigator.of(context).push(
+            CupertinoPageRoute(
+              builder: (_) => ScanResultReviewScreen(
+                tripId: widget.tripId,
+                baseCurrency: widget.baseCurrency,
+                members: details.members,
+                initialResult: ScanBillResult(
+                  description: '',
+                  items: const [
+                    ScannedItem(name: '', unitPrice: 0, quantity: 1),
+                  ],
+                  totalAmount: 0,
+                  currency: widget.baseCurrency,
+                ),
+              ),
+            ),
+          );
+        }
+
         showCupertinoModalPopup<void>(
           context: context,
           builder: (actionContext) => CupertinoActionSheet(
             title: const Text('Thêm chi phí'),
             message: const Text(
-                'Quét hình ảnh để tự động điền — không cần nhập tay.'),
+              'Quét hóa đơn để điền tự động, hoặc nhập tay nếu không có ảnh.',
+            ),
             actions: [
               CupertinoActionSheetAction(
                 onPressed: () {
@@ -2591,6 +2661,13 @@ class _TripWorkspaceScreenState extends ConsumerState<TripWorkspaceScreen>
                   openScanner(ScanMode.transfer);
                 },
                 child: const Text('Quét biên lai chuyển khoản'),
+              ),
+              CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(actionContext).pop();
+                  openManualEntry();
+                },
+                child: const Text('Nhập tay'),
               ),
             ],
             cancelButton: CupertinoActionSheetAction(

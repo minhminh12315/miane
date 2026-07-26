@@ -1,5 +1,6 @@
 using Expense.API.Features.ContributeToPool;
 using Expense.API.Features.GetTripPool;
+using Expense.API.Services;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,10 +11,12 @@ namespace Expense.API.Controllers;
 public class TripPoolController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly ITripMembershipClient _tripMembership;
 
-    public TripPoolController(IMediator mediator)
+    public TripPoolController(IMediator mediator, ITripMembershipClient tripMembership)
     {
         _mediator = mediator;
+        _tripMembership = tripMembership;
     }
 
     private Guid GetUserId() =>
@@ -23,6 +26,7 @@ public class TripPoolController : ControllerBase
     [HttpPost("contribute")]
     public async Task<IActionResult> Contribute([FromBody] ContributeRequest request, CancellationToken ct)
     {
+        await _tripMembership.EnsureMemberAsync(request.TripId, ct);
         var result = await _mediator.Send(new ContributeToPoolCommand(
             request.TripId, GetUserId(), request.Amount, request.Currency ?? "VND"), ct);
 
@@ -32,6 +36,7 @@ public class TripPoolController : ControllerBase
     [HttpGet("{tripId:guid}")]
     public async Task<IActionResult> GetPool(Guid tripId, CancellationToken ct)
     {
+        await _tripMembership.EnsureMemberAsync(tripId, ct);
         var result = await _mediator.Send(new GetTripPoolQuery(tripId), ct);
         return result is not null ? Ok(result) : NotFound(new { message = "Chuyến đi này chưa có quỹ nhóm." });
     }

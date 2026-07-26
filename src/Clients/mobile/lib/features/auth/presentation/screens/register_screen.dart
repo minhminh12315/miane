@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/ios_ui.dart';
 import '../controllers/app_auth_provider.dart';
+import '../controllers/registration_draft_provider.dart';
 import 'otp_verification_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -29,15 +30,37 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     super.dispose();
   }
 
+  String? _validatePassword(String password) {
+    if (password.length < 8) {
+      return 'Mật khẩu phải có ít nhất 8 ký tự.';
+    }
+    if (!RegExp(r'[a-z]').hasMatch(password)) {
+      return 'Mật khẩu phải có ít nhất một chữ thường.';
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(password)) {
+      return 'Mật khẩu phải có ít nhất một chữ hoa.';
+    }
+    if (!RegExp(r'\d').hasMatch(password)) {
+      return 'Mật khẩu phải có ít nhất một chữ số.';
+    }
+    return null;
+  }
+
   Future<void> _register() async {
     final fullName = _nameController.text.trim();
     final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-    final confirmPassword = _confirmPasswordController.text.trim();
+    final password = _passwordController.text;
+    final confirmPassword = _confirmPasswordController.text;
 
     if (fullName.isEmpty || email.isEmpty || password.isEmpty) {
       await showIosMessage(context,
           message: 'Vui lòng điền đầy đủ thông tin.', isError: true);
+      return;
+    }
+
+    final passwordError = _validatePassword(password);
+    if (passwordError != null) {
+      await showIosMessage(context, message: passwordError, isError: true);
       return;
     }
 
@@ -55,13 +78,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             fullName,
           );
       if (mounted) {
+        ref.read(registrationDraftProvider.notifier).state = RegistrationDraft(
+          email: email,
+          password: password,
+          fullName: fullName,
+        );
         Navigator.of(context).push(
           CupertinoPageRoute(
-            builder: (_) => OtpVerificationScreen(
-              email: email,
-              password: password,
-              fullName: fullName,
-            ),
+            builder: (_) => OtpVerificationScreen(email: email),
           ),
         );
       }
@@ -134,7 +158,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               child: IosTextField(
                 controller: _passwordController,
                 label: 'Mật khẩu',
-                placeholder: 'Mật khẩu',
+                placeholder: 'Tối thiểu 8 ký tự, có hoa/thường/số',
                 prefixIcon: CupertinoIcons.lock,
                 obscureText: true,
               ),

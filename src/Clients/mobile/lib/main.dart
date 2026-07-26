@@ -7,7 +7,6 @@ import 'features/auth/presentation/controllers/app_auth_provider.dart';
 import 'features/auth/presentation/screens/auth_gate_screen.dart';
 import 'features/auth/presentation/screens/welcome_flow_screen.dart';
 import 'features/home/presentation/screens/main_layout_screen.dart';
-import 'features/user_profile/presentation/screens/initial_setup_screen.dart';
 
 void main() {
   runApp(const MianeApp());
@@ -50,8 +49,6 @@ class MianeApp extends StatelessWidget {
                 return const WelcomeFlowScreen();
               case AppAuthStatus.unauthenticated:
                 return const AuthGateScreen();
-              case AppAuthStatus.needsSetup:
-                return const InitialSetupScreen();
               case AppAuthStatus.authenticated:
                 return const MainLayoutScreen();
             }

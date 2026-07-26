@@ -1,7 +1,7 @@
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
+import '../../../../core/network/token_store.dart';
 import '../../domain/models/auth_models.dart';
 import '../../domain/repositories/auth_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -97,8 +97,21 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<AuthResponseModel> upgradeToPro() async {
-    final response = await _apiClient.post(ApiEndpoints.upgradePro);
+  Future<AuthResponseModel> upgradeToPro({
+    required String platform,
+    required String receiptData,
+    String? productId,
+    String? transactionId,
+  }) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.upgradePro,
+      body: {
+        'platform': platform,
+        'receiptData': receiptData,
+        'productId': productId,
+        'transactionId': transactionId,
+      },
+    );
     final authResponse = AuthResponseModel.fromJson(response);
     await saveToken(authResponse.accessToken, authResponse.refreshToken);
     return authResponse;
@@ -181,22 +194,20 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> saveToken(String accessToken, String refreshToken) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('access_token', accessToken);
-    await prefs.setString('refresh_token', refreshToken);
+    if (accessToken.isEmpty || refreshToken.isEmpty) {
+      throw StateError('Cannot save empty auth tokens.');
+    }
+    await TokenStore.save(accessToken, refreshToken);
   }
 
   @override
   Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('access_token');
+    return TokenStore.getAccessToken();
   }
 
   @override
   Future<void> clearSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('access_token');
-    await prefs.remove('refresh_token');
+    await TokenStore.clear();
   }
 }
 

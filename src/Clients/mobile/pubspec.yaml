@@ -46,6 +46,7 @@ dependencies:
   mobile_scanner: ^7.0.0
   share_plus: ^10.1.4
   shared_preferences: ^2.3.2
+  flutter_secure_storage: ^9.2.4
   jwt_decoder: ^2.0.1
   google_sign_in: ^6.2.2
   file_picker: ^11.0.2

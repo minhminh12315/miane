@@ -2,6 +2,7 @@ using BuildingBlocks.CQRS;
 using BuildingBlocks.EventBus;
 using BuildingBlocks.Exceptions;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Trip.API.Data.Repositories;
 using Trip.API.Domain.Entities;
 using Trip.API.Domain.Enums;
@@ -56,7 +57,14 @@ public sealed class JoinTripHandler : ICommandHandler<JoinTripCommand, JoinTripR
 
         trip.AddMember(member);
         await _tripRepository.AddMemberAsync(member, cancellationToken);
-        await _tripRepository.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _tripRepository.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueMembershipViolation(ex))
+        {
+            throw new ConflictException("Bạn đã là thành viên của chuyến đi này.");
+        }
 
         var newMemberCount = currentMemberCount + 1;
 
@@ -107,5 +115,13 @@ public sealed class JoinTripHandler : ICommandHandler<JoinTripCommand, JoinTripR
                 currentCount: currentMemberCount,
                 maxAllowed: BasicMaxMembers);
         }
+    }
+
+    private static bool IsUniqueMembershipViolation(DbUpdateException ex)
+    {
+        var message = ex.InnerException?.Message ?? ex.Message;
+        return message.Contains("IX_TripMembers_TripId_UserId", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("unique constraint", StringComparison.OrdinalIgnoreCase);
     }
 }

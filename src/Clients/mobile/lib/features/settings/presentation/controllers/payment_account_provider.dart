@@ -567,17 +567,17 @@ final paymentDestinationsProvider =
           .where((bank) => bank.bin.isNotEmpty && bank.transferSupported)
           .toList();
       if (banks.isNotEmpty) {
-        final wallets = supportedPaymentDestinations
-            .where((destination) => destination.isWallet)
-            .toList();
-        return [...banks, ...wallets];
+        // Bank destinations only until wallet payout APIs are supported.
+        return banks;
       }
     }
   } catch (_) {
     // Fallback below keeps settings usable while offline.
   }
 
-  return supportedPaymentDestinations;
+  return supportedPaymentDestinations
+      .where((destination) => !destination.isWallet)
+      .toList();
 });
 
 final paymentAccountProvider =

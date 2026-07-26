@@ -38,6 +38,14 @@ namespace Identity.API.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
+            if (!_env.IsDevelopment())
+            {
+                return StatusCode(StatusCodes.Status410Gone, new
+                {
+                    message = "Đăng ký trực tiếp đã bị tắt. Vui lòng dùng /auth/register/send-otp và /auth/register/verify-otp."
+                });
+            }
+
             try
             {
                 var response = await _authService.RegisterAsync(request);
@@ -187,6 +195,7 @@ namespace Identity.API.Controllers
             }
         }
 
+        [Authorize]
         [HttpPost("logout")]
         public async Task<IActionResult> Logout()
         {
@@ -238,15 +247,13 @@ namespace Identity.API.Controllers
         /// StoreKit/Play Billing purchase completes.
         /// </summary>
         /// <remarks>
-        /// DEV/TESTING NOTE: this trusts the client purchase result as-is —
-        /// there is no server-side App Store/Play receipt verification here.
-        /// Fine for StoreKit Testing in Simulator; before shipping this must
-        /// validate the receipt via the App Store Server API (iOS) / Play
-        /// Developer API (Android) before flipping UserTier.
+        /// Outside Development, <paramref name="request"/> must include platform
+        /// and receipt data. Full App Store / Play server verification should be
+        /// wired before public billing; until then empty/mock receipts are rejected.
         /// </remarks>
         [Authorize]
         [HttpPost("upgrade-pro")]
-        public async Task<IActionResult> UpgradeToPro()
+        public async Task<IActionResult> UpgradeToPro([FromBody] UpgradeProRequest? request)
         {
             var userId = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var parsedUserId))
@@ -254,27 +261,34 @@ namespace Identity.API.Controllers
                 return Unauthorized(new { message = "Token không hợp lệ." });
             }
 
-            var response = await _authService.UpgradeToProAsync(parsedUserId);
-
-            var accessCookieOptions = new CookieOptions
+            try
             {
-                HttpOnly = true,
-                Secure = !_env.IsDevelopment(),
-                SameSite = SameSiteMode.Strict,
-                Expires = response.ExpiresIn
-            };
+                var response = await _authService.UpgradeToProAsync(parsedUserId, request);
 
-            var refreshCookieOptions = new CookieOptions
+                var accessCookieOptions = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = !_env.IsDevelopment(),
+                    SameSite = SameSiteMode.Strict,
+                    Expires = response.ExpiresIn
+                };
+
+                var refreshCookieOptions = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = !_env.IsDevelopment(),
+                    SameSite = SameSiteMode.Strict,
+                    Expires = DateTime.UtcNow.AddDays(7)
+                };
+
+                Response.Cookies.Append("access_token", response.AccessToken, accessCookieOptions);
+                Response.Cookies.Append("refresh_token", response.RefreshToken, refreshCookieOptions);
+                return Ok(response);
+            }
+            catch (InvalidOperationException ex)
             {
-                HttpOnly = true,
-                Secure = !_env.IsDevelopment(),
-                SameSite = SameSiteMode.Strict,
-                Expires = DateTime.UtcNow.AddDays(7)
-            };
-
-            Response.Cookies.Append("access_token", response.AccessToken, accessCookieOptions);
-            Response.Cookies.Append("refresh_token", response.RefreshToken, refreshCookieOptions);
-            return Ok(response);
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [Authorize]
@@ -428,14 +442,22 @@ namespace Identity.API.Controllers
                 return BadRequest(new { message = "Định dạng ảnh đại diện không được hỗ trợ." });
             }
 
-            var storageName = $"{parsedUserId:N}-{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
+            await using var uploadStream = file.OpenReadStream();
+            if (!BuildingBlocks.Validation.ImageMagicBytes.TryGetExtension(uploadStream, out var detectedExtension)
+                || !AllowedAvatarExtensions.Contains(detectedExtension))
+            {
+                return BadRequest(new { message = "Nội dung tệp không phải ảnh hợp lệ." });
+            }
+
+            var storageName = $"{parsedUserId:N}-{Guid.NewGuid():N}{detectedExtension}";
             var uploadDirectory = GetAvatarUploadDirectory();
             Directory.CreateDirectory(uploadDirectory);
 
             var absolutePath = Path.Combine(uploadDirectory, storageName);
             await using (var stream = System.IO.File.Create(absolutePath))
             {
-                await file.CopyToAsync(stream, ct);
+                uploadStream.Position = 0;
+                await uploadStream.CopyToAsync(stream, ct);
             }
 
             var previousAvatarUrl = user.AvatarUrl;

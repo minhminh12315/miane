@@ -102,6 +102,7 @@ public class ExpenseDbContext : BaseDbContext
             entity.Property(e => e.TotalContributed).HasPrecision(18, 4);
             entity.Property(e => e.TotalSpent).HasPrecision(18, 4);
             entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.Version).IsConcurrencyToken();
             entity.HasIndex(e => e.TripId).IsUnique().HasDatabaseName("IX_TripWallets_TripId");
             entity.HasMany(e => e.Members).WithOne(m => m.TripWallet).HasForeignKey(m => m.TripWalletId).OnDelete(DeleteBehavior.Cascade);
             entity.HasMany(e => e.Transactions).WithOne(t => t.TripWallet).HasForeignKey(t => t.TripWalletId).OnDelete(DeleteBehavior.Cascade);

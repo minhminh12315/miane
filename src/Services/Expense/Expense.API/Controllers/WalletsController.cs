@@ -1,9 +1,11 @@
+using BuildingBlocks.Exceptions;
 using Expense.API.Data;
 using Expense.API.Domain.Entities;
 using Expense.API.Domain.Enums;
 using Expense.API.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Expense.API.Controllers;
 
@@ -13,11 +15,16 @@ public class WalletsController : ControllerBase
 {
     private readonly ExpenseDbContext _dbContext;
     private readonly WalletLedgerService _walletLedger;
+    private readonly WalletAuthorizationService _authz;
 
-    public WalletsController(ExpenseDbContext dbContext, WalletLedgerService walletLedger)
+    public WalletsController(
+        ExpenseDbContext dbContext,
+        WalletLedgerService walletLedger,
+        WalletAuthorizationService authz)
     {
         _dbContext = dbContext;
         _walletLedger = walletLedger;
+        _authz = authz;
     }
 
     private Guid GetUserId() =>
@@ -28,6 +35,8 @@ public class WalletsController : ControllerBase
     public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request, CancellationToken ct)
     {
         var userId = GetUserId();
+        await _authz.EnsureTripMemberAsync(request.TripId, ct);
+
         var existing = await _dbContext.TripWallets
             .FirstOrDefaultAsync(w => w.TripId == request.TripId, ct);
 
@@ -59,6 +68,8 @@ public class WalletsController : ControllerBase
     [HttpGet("trip/{tripId:guid}")]
     public async Task<IActionResult> GetByTrip(Guid tripId, CancellationToken ct)
     {
+        await _authz.EnsureTripMemberAsync(tripId, ct);
+
         var wallet = await _dbContext.TripWallets
             .AsNoTracking()
             .FirstOrDefaultAsync(w => w.TripId == tripId, ct);
@@ -91,6 +102,8 @@ public class WalletsController : ControllerBase
     [HttpGet("{walletId:guid}/transactions")]
     public async Task<IActionResult> GetTransactions(Guid walletId, [FromQuery] int limit = 50, CancellationToken ct = default)
     {
+        await _authz.EnsureWalletTripMemberAsync(walletId, ct);
+
         var transactions = await _dbContext.WalletTransactions
             .AsNoTracking()
             .Where(t => t.TripWalletId == walletId)
@@ -116,34 +129,50 @@ public class WalletsController : ControllerBase
     [HttpPatch("{walletId:guid}/custodian")]
     public async Task<IActionResult> TransferCustodian(Guid walletId, [FromBody] TransferCustodianRequest request, CancellationToken ct)
     {
-        var wallet = await _dbContext.TripWallets
-            .FirstOrDefaultAsync(w => w.Id == walletId, ct);
+        var callerId = GetUserId();
+        await _authz.EnsureCurrentCustodianAsync(walletId, callerId, ct);
 
-        if (wallet is null)
+        var wallet = await _dbContext.TripWallets
+            .FirstOrDefaultAsync(w => w.Id == walletId, ct)
+            ?? throw new NotFoundException("ví chung", walletId);
+
+        await _authz.EnsureTripMemberAsync(wallet.TripId, ct);
+        // New custodian must also be a trip member — checked via Trip service for that user
+        // by requiring they already appear as a wallet member or we verify trip membership
+        // for the new id through a second call with the caller's token can't prove that.
+        // Require new custodian already in WalletMembers or same trip: use membership endpoint
+        // only for caller. Enforce new custodian is an existing WalletMember or the trip
+        // has them as wallet participant after create. Practical rule: new custodian must
+        // already be a WalletMember of this wallet.
+        var newMember = await _dbContext.WalletMembers
+            .FirstOrDefaultAsync(m => m.TripWalletId == walletId && m.UserId == request.NewCustodianUserId, ct);
+        if (newMember is null || !newMember.IsActive)
         {
-            return NotFound(new { message = "Không tìm thấy ví chung." });
+            throw new ForbiddenAccessException(
+                "Người nhận quyền giữ ví phải là thành viên ví hiện tại.");
         }
 
         var previousCustodian = wallet.CurrentCustodianUserId;
         wallet.CurrentCustodianUserId = request.NewCustodianUserId;
+        newMember.Role = WalletMemberRole.Custodian;
+        newMember.IsActive = true;
 
-        var member = await _dbContext.WalletMembers
-            .FirstOrDefaultAsync(m => m.TripWalletId == walletId && m.UserId == request.NewCustodianUserId, ct);
-
-        if (member is null)
+        if (previousCustodian is Guid prev && prev != request.NewCustodianUserId)
         {
-            await _dbContext.WalletMembers.AddAsync(new WalletMember
+            var previousMember = await _dbContext.WalletMembers
+                .FirstOrDefaultAsync(m => m.TripWalletId == walletId && m.UserId == prev, ct);
+            if (previousMember is not null)
             {
-                TripWalletId = walletId,
-                UserId = request.NewCustodianUserId,
-                Role = WalletMemberRole.Custodian
-            }, ct);
+                previousMember.Role = WalletMemberRole.Member;
+            }
         }
-        else
+
+        var metadata = JsonSerializer.Serialize(new
         {
-            member.Role = WalletMemberRole.Custodian;
-            member.IsActive = true;
-        }
+            previousCustodianUserId = previousCustodian,
+            newCustodianUserId = request.NewCustodianUserId,
+            note = request.Note
+        });
 
         await _walletLedger.PostAsync(new WalletPostRequest(
             walletId,
@@ -151,9 +180,9 @@ public class WalletsController : ControllerBase
             TransactionDirection.Credit,
             0m,
             wallet.Currency,
-            GetUserId(),
+            callerId,
             request.NewCustodianUserId,
-            MetadataJson: $$"""{"previousCustodianUserId":"{{previousCustodian}}","newCustodianUserId":"{{request.NewCustodianUserId}}","note":"{{request.Note}}"}"""), ct);
+            MetadataJson: metadata), ct);
 
         return Ok(WalletResponse.From(wallet));
     }

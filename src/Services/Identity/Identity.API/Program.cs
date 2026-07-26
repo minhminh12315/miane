@@ -1,5 +1,6 @@
 using BuildingBlocks.Caching;
 using BuildingBlocks.Middleware;
+using BuildingBlocks.Security;
 using Identity.API.Data;
 using Identity.API.Models;
 using Identity.API.Services;
@@ -13,7 +14,7 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 var jwtSettings = builder.Configuration.GetSection("Jwt");
-var key = jwtSettings["Key"] ?? throw new InvalidOperationException("Jwt:Key is not configured");
+var key = JwtSigningKeyGuard.RequireConfiguredKey(jwtSettings["Key"], builder.Environment);
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IEmailService, EmailService>();
@@ -45,11 +46,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Setup Identity Framework
 builder.Services.AddIdentity<User, IdentityRole<Guid>>(options =>
 {
-    // password policy 
+    // password policy
     options.Password.RequireDigit = true;
-    options.Password.RequiredLength = 6;
+    options.Password.RequiredLength = 8;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
     options.Password.RequireNonAlphanumeric = false;
-    options.Password.RequireUppercase = false;
 
     // Setting Lockout (lock account if type wrong > 5 times)
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
@@ -81,7 +83,7 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         ValidAudience = builder.Configuration["Jwt:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)),
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
         // Default .NET add 5 mins clock skew, set to zero for exact expiration time
         ClockSkew = TimeSpan.Zero
     };
